@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useParams } from "next/navigation"
 import { Mail, Phone, Calendar, Edit, Download, Share2, MoreVertical, Music, GraduationCap, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -14,15 +15,13 @@ import { createClient } from "@/lib/supabase/client"
 import { VAT_STATUS_LABELS, type Actor } from "@/lib/types"
 import { AppHeader } from "@/components/app-header"
 
-export default function ActorProfile({ params }: { params: Promise<{ id: string }> }) {
+export default function ActorProfile() {
+  const params = useParams()
+  const actorId = params?.id as string
+
   const [isEditing, setIsEditing] = useState(false)
   const [actor, setActor] = useState<Actor | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actorId, setActorId] = useState<string>("")
-
-  useEffect(() => {
-    params.then((p) => setActorId(p.id))
-  }, [params])
 
   useEffect(() => {
     if (!actorId) return

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Briefcase, FolderOpen, Menu } from "lucide-react"
+import { Briefcase, FolderOpen, Menu, Inbox } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import Image from "next/image"
 
@@ -35,6 +35,12 @@ export function AppHeader() {
                 תיקיות
               </Link>
             </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin">
+                <Inbox className="h-4 w-4 ml-2" />
+                ניהול בקשות
+              </Link>
+            </Button>
           </nav>
 
           {/* תפריט המבורגר למובייל */}
@@ -62,6 +68,12 @@ export function AppHeader() {
                   <Link href="/folders">
                     <FolderOpen className="h-4 w-4 ml-2" />
                     תיקיות
+                  </Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link href="/admin">
+                    <Inbox className="h-4 w-4 ml-2" />
+                    ניהול בקשות
                   </Link>
                 </Button>
               </nav>

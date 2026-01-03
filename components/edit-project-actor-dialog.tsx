@@ -31,8 +31,9 @@ export function EditProjectActorDialog({
   })
   const [loading, setLoading] = useState(false)
 
+  const actorId = projectActor?.id
   useEffect(() => {
-    if (projectActor) {
+    if (open && projectActor) {
       setFormData({
         role_name: projectActor.role_name || "",
         replicas_planned: projectActor.replicas_planned?.toString() || "",
@@ -40,7 +41,7 @@ export function EditProjectActorDialog({
         notes: projectActor.notes || "",
       })
     }
-  }, [projectActor])
+  }, [open, actorId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +64,7 @@ export function EditProjectActorDialog({
       onActorUpdated()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Error updating project actor:", error)
+      console.error("Error updating project actor:", error)
       alert("שגיאה בעדכון פרטי שחקן")
     } finally {
       setLoading(false)
@@ -74,47 +75,56 @@ export function EditProjectActorDialog({
 
   const actor = projectActor.actors
 
+  const getGenderStyle = (gender: string) => {
+    if (gender === "male") {
+      return { bg: "bg-blue-100", text: "text-blue-600", symbol: "♂" }
+    } else if (gender === "female") {
+      return { bg: "bg-pink-100", text: "text-pink-600", symbol: "♀" }
+    }
+    return { bg: "bg-gray-100", text: "text-gray-600", symbol: "?" }
+  }
+
+  const genderStyle = getGenderStyle(actor?.gender)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" dir="rtl">
         <DialogHeader>
           <DialogTitle>ערוך פרטי שחקן בפרויקט</DialogTitle>
         </DialogHeader>
 
         <div className="mb-4 flex items-center gap-3 p-3 bg-muted rounded-lg">
           <div className="w-12 h-12 rounded-lg overflow-hidden bg-background flex-shrink-0">
-            {actor?.photo_url ? (
+            {actor?.image_url ? (
               <img
-                src={actor.photo_url || "/placeholder.svg"}
+                src={actor.image_url || "/placeholder.svg"}
                 alt={actor.full_name}
                 className="w-full h-full object-cover"
               />
             ) : (
               <div
-                className={`w-full h-full flex items-center justify-center text-xl ${
-                  actor?.gender === "זכר" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
-                }`}
+                className={`w-full h-full flex items-center justify-center text-xl ${genderStyle.bg} ${genderStyle.text}`}
               >
-                {actor?.gender === "זכר" ? "♂" : "♀"}
+                {genderStyle.symbol}
               </div>
             )}
           </div>
           <div>
             <p className="font-medium">{actor?.full_name}</p>
-            <p className="text-sm text-muted-foreground">{actor?.gender}</p>
+            <p className="text-sm text-muted-foreground">
+              {actor?.gender === "male" ? "זכר" : actor?.gender === "female" ? "נקבה" : actor?.gender}
+            </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="role_name">שם התפקיד *</Label>
+            <Label htmlFor="role_name">שם התפקיד</Label>
             <Input
               id="role_name"
               value={formData.role_name}
               onChange={(e) => setFormData({ ...formData, role_name: e.target.value })}
               placeholder="למשל: דמות ראשית, קריין"
-              required
-              dir="rtl"
             />
           </div>
 
@@ -156,7 +166,6 @@ export function EditProjectActorDialog({
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="הערות נוספות על תפקיד השחקן בפרויקט..."
               className="min-h-[80px]"
-              dir="rtl"
             />
           </div>
 

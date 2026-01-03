@@ -33,14 +33,25 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
 
   async function loadActors() {
     try {
+      setLoading(true)
       const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("actors").select("*").order("full_name")
 
-      if (error) throw error
+      const [actorsResult, folderActorsResult] = await Promise.all([
+        supabase.from("actors").select("*").order("full_name"),
+        supabase.from("folder_actors").select("actor_id").eq("folder_id", folderId),
+      ])
 
-      setActors(data || [])
+      if (actorsResult.error) throw actorsResult.error
+
+      const existingActorIds = new Set(folderActorsResult.data?.map((fa) => fa.actor_id) || [])
+
+      const availableActors = (actorsResult.data || []).filter((actor) => !existingActorIds.has(actor.id))
+
+      setActors(availableActors)
     } catch (error) {
       console.error("[v0] Error loading actors:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -51,8 +62,22 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
     try {
       const supabase = createBrowserClient()
 
-      // יצירת רשומות folder_actors עבור כל שחקן נבחר
-      const folderActors = selectedActors.map((actorId) => ({
+      const { data: existingAssignments } = await supabase
+        .from("folder_actors")
+        .select("actor_id")
+        .eq("folder_id", folderId)
+        .in("actor_id", selectedActors)
+
+      const existingActorIds = new Set(existingAssignments?.map((a) => a.actor_id) || [])
+      const newActorIds = selectedActors.filter((id) => !existingActorIds.has(id))
+
+      if (newActorIds.length === 0) {
+        alert("כל השחקנים שנבחרו כבר נמצאים בתיקייה")
+        setLoading(false)
+        return
+      }
+
+      const folderActors = newActorIds.map((actorId) => ({
         folder_id: folderId,
         actor_id: actorId,
       }))
@@ -67,7 +92,7 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
       setSearchQuery("")
     } catch (error) {
       console.error("[v0] Error adding actors to folder:", error)
-      alert("שגיאה בהוספת שחקנים לתיקייה")
+      alert("שגיאה בהוספת שחקנים לתיקייה: " + (error as any).message)
     } finally {
       setLoading(false)
     }

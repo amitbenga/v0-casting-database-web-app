@@ -1,19 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import {
-  ArrowLeft,
-  Plus,
-  Edit,
-  MoreVertical,
-  Users,
-  Calendar,
-  Film,
-  UserCircle,
-  Trash2,
-  Clapperboard,
-} from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter, useParams } from "next/navigation"
+import { ArrowLeft, Plus, Edit, MoreVertical, Users, Calendar, Film, UserCircle, Clapperboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -27,8 +16,11 @@ import { EditProjectActorDialog } from "@/components/edit-project-actor-dialog"
 import { CreateRoleDialog } from "@/components/create-role-dialog"
 import Link from "next/link"
 
-export default function ProjectDetailPage({ params }: { params: { id: string } }) {
+export default function ProjectDetailPage() {
   const router = useRouter()
+  const params = useParams()
+  const projectId = typeof params?.id === "string" ? params.id : null
+
   const [project, setProject] = useState<any>(null)
   const [projectActors, setProjectActors] = useState<any[]>([])
   const [projectRoles, setProjectRoles] = useState<any[]>([])
@@ -38,97 +30,77 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [showEditActorDialog, setShowEditActorDialog] = useState(false)
   const [showCreateRoleDialog, setShowCreateRoleDialog] = useState(false)
   const [selectedProjectActor, setSelectedProjectActor] = useState<any>(null)
-  const isInitialLoad = useRef(true)
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isInitialLoad.current) return
-    isInitialLoad.current = false
+    if (!projectId || projectId === loadedProjectId) return
 
     async function loadData() {
+      setLoading(true)
       try {
         const supabase = createBrowserClient()
 
-        // טוען פרטי פרויקט
         const { data: projectData, error: projectError } = await supabase
           .from("casting_projects")
           .select("*")
-          .eq("id", params.id)
+          .eq("id", projectId)
           .single()
 
         if (projectError) throw projectError
         setProject(projectData)
 
-        // טוען תפקידים
-        const { data: rolesData, error: rolesError } = await supabase
+        const { data: rolesData } = await supabase
           .from("project_roles")
           .select("*")
-          .eq("project_id", params.id)
+          .eq("project_id", projectId)
           .order("created_at")
 
-        if (!rolesError) {
-          setProjectRoles(rolesData || [])
-        }
+        setProjectRoles(rolesData || [])
 
-        // טוען שחקני פרויקט
-        const { data: actorsData, error: actorsError } = await supabase
+        const { data: actorsData } = await supabase
           .from("project_actors")
-          .select(`
-            *,
-            actors (*)
-          `)
-          .eq("project_id", params.id)
+          .select(`*, actors (*)`)
+          .eq("project_id", projectId)
 
-        if (actorsError) throw actorsError
         setProjectActors(actorsData || [])
+        setLoadedProjectId(projectId)
       } catch (error) {
-        console.error("[v0] Error loading project data:", error)
+        console.error("Error loading project data:", error)
       } finally {
         setLoading(false)
       }
     }
 
     loadData()
-  }, [params.id])
+  }, [projectId, loadedProjectId])
 
-  const refreshAll = async () => {
-    try {
-      const supabase = createBrowserClient()
+  const refreshRoles = useCallback(async () => {
+    if (!projectId) return
+    const supabase = createBrowserClient()
+    const { data } = await supabase.from("project_roles").select("*").eq("project_id", projectId).order("created_at")
+    setProjectRoles(data || [])
+  }, [projectId])
 
-      // רענון תפקידים
-      const { data: rolesData } = await supabase
-        .from("project_roles")
-        .select("*")
-        .eq("project_id", params.id)
-        .order("created_at")
+  const refreshActors = useCallback(async () => {
+    if (!projectId) return
+    const supabase = createBrowserClient()
+    const { data } = await supabase.from("project_actors").select(`*, actors (*)`).eq("project_id", projectId)
+    setProjectActors(data || [])
+  }, [projectId])
 
-      setProjectRoles(rolesData || [])
+  const refreshProject = useCallback(async () => {
+    if (!projectId) return
+    const supabase = createBrowserClient()
+    const { data } = await supabase.from("casting_projects").select("*").eq("id", projectId).single()
+    if (data) setProject(data)
+  }, [projectId])
 
-      // רענון שחקנים
-      const { data: actorsData } = await supabase
-        .from("project_actors")
-        .select(`*, actors (*)`)
-        .eq("project_id", params.id)
-
-      setProjectActors(actorsData || [])
-    } catch (error) {
-      console.error("[v0] Error refreshing data:", error)
-    }
-  }
-
-  const refreshProject = async () => {
-    try {
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("casting_projects").select("*").eq("id", params.id).single()
-
-      if (error) throw error
-      setProject(data)
-    } catch (error) {
-      console.error("[v0] Error loading project:", error)
-    }
-  }
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refreshRoles(), refreshActors()])
+  }, [refreshRoles, refreshActors])
 
   const deleteRole = async (roleId: string) => {
-    if (!confirm("האם למחוק תפקיד זה? כל השחקנים המשויכים יישארו בפרויקט بدون תפקיד.")) return
+    if (!confirm("האם למחוק תפקיד זה? כל השחקנים המשויכים יישארו בפרויקט ללא תפקיד.")) return
 
     try {
       const supabase = createBrowserClient()
@@ -137,7 +109,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       if (error) throw error
       refreshAll()
     } catch (error) {
-      console.error("[v0] Error deleting role:", error)
+      console.error("Error deleting role:", error)
       alert("שגיאה במחיקת תפקיד")
     }
   }
@@ -191,24 +163,25 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       if (error) throw error
       setProjectActors((prev) => prev.filter((pa) => pa.id !== projectActorId))
     } catch (error) {
-      console.error("[v0] Error removing actor:", error)
+      console.error("Error removing actor:", error)
       alert("שגיאה בהסרת שחקן")
     }
   }
 
   async function deleteProject() {
     if (!confirm("האם אתה בטוח שברצונך למחוק את הפרויקט? פעולה זו בלתי הפיכה.")) return
+    if (!projectId) return
 
     try {
       const supabase = createBrowserClient()
-      await supabase.from("project_actors").delete().eq("project_id", params.id)
-      await supabase.from("project_roles").delete().eq("project_id", params.id)
-      const { error } = await supabase.from("casting_projects").delete().eq("id", params.id)
+      await supabase.from("project_actors").delete().eq("project_id", projectId)
+      await supabase.from("project_roles").delete().eq("project_id", projectId)
+      const { error } = await supabase.from("casting_projects").delete().eq("id", projectId)
 
       if (error) throw error
       router.push("/projects")
     } catch (error) {
-      console.error("[v0] Error deleting project:", error)
+      console.error("Error deleting project:", error)
       alert("שגיאה במחיקת פרויקט")
     }
   }
@@ -218,6 +191,21 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       return projectActors.filter((pa) => !pa.role_id)
     }
     return projectActors.filter((pa) => pa.role_id === roleId)
+  }
+
+  const getGenderStyle = (gender: string) => {
+    if (gender === "male") {
+      return { bg: "bg-blue-100", text: "text-blue-600", symbol: "♂" }
+    } else if (gender === "female") {
+      return { bg: "bg-pink-100", text: "text-pink-600", symbol: "♀" }
+    }
+    return { bg: "bg-gray-100", text: "text-gray-600", symbol: "?" }
+  }
+
+  const getGenderLabel = (gender: string) => {
+    if (gender === "male") return "זכר"
+    if (gender === "female") return "נקבה"
+    return gender
   }
 
   if (loading) {
@@ -436,6 +424,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                               {roleActors.map((pa) => {
                                 const actor = pa.actors
                                 const currentAge = actor.birth_year ? new Date().getFullYear() - actor.birth_year : null
+                                const genderStyle = getGenderStyle(actor.gender)
 
                                 return (
                                   <div key={pa.id} className="p-4 flex items-center gap-4">
@@ -443,21 +432,17 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                                       href={`/actors/${actor.id}`}
                                       className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0 hover:opacity-80 transition-opacity"
                                     >
-                                      {actor.photo_url ? (
+                                      {actor.image_url ? (
                                         <img
-                                          src={actor.photo_url || "/placeholder.svg"}
+                                          src={actor.image_url || "/placeholder.svg"}
                                           alt={actor.full_name}
                                           className="w-full h-full object-cover"
                                         />
                                       ) : (
                                         <div
-                                          className={`w-full h-full flex items-center justify-center text-lg ${
-                                            actor.gender === "זכר"
-                                              ? "bg-blue-100 text-blue-600"
-                                              : "bg-pink-100 text-pink-600"
-                                          }`}
+                                          className={`w-full h-full flex items-center justify-center text-lg ${genderStyle.bg} ${genderStyle.text}`}
                                         >
-                                          {actor.gender === "זכר" ? "♂" : "♀"}
+                                          {genderStyle.symbol}
                                         </div>
                                       )}
                                     </Link>
@@ -467,7 +452,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                                         <p className="font-medium">{actor.full_name}</p>
                                       </Link>
                                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <span>{actor.gender}</span>
+                                        <span>{getGenderLabel(actor.gender)}</span>
                                         {currentAge && (
                                           <>
                                             <span>•</span>
@@ -497,7 +482,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                                           className="text-destructive"
                                           onClick={() => removeActorFromProject(pa.id)}
                                         >
-                                          הסר מהתפקיד
+                                          הסר מהפרויקט
                                         </DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
@@ -507,52 +492,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                             </div>
                           ) : (
                             <div className="p-8 text-center text-muted-foreground">
-                              <p>אין עדיין שחקנים בתפקיד זה</p>
+                              <p>אין שחקנים משויכים לתפקיד זה</p>
                             </div>
                           )}
                         </Card>
                       )
                     })}
-
-                    {/* שחקנים ללא תפקיד */}
-                    {getActorsByRole(null).length > 0 && (
-                      <Card className="overflow-hidden">
-                        <div className="p-4 bg-muted/50">
-                          <h4 className="font-semibold text-muted-foreground">שחקנים ללא תפקיד מוגדר</h4>
-                        </div>
-                        <div className="divide-y">
-                          {getActorsByRole(null).map((pa) => {
-                            const actor = pa.actors
-                            return (
-                              <div key={pa.id} className="p-4 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted">
-                                  {actor.photo_url ? (
-                                    <img
-                                      src={actor.photo_url || "/placeholder.svg"}
-                                      alt={actor.full_name}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <div
-                                      className={`w-full h-full flex items-center justify-center ${actor.gender === "זכר" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}
-                                    >
-                                      {actor.gender === "זכר" ? "♂" : "♀"}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1">
-                                  <p className="font-medium">{actor.full_name}</p>
-                                  <p className="text-sm text-muted-foreground">{pa.role_name || "ללא תפקיד"}</p>
-                                </div>
-                                <Button variant="ghost" size="icon" onClick={() => removeActorFromProject(pa.id)}>
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </Card>
-                    )}
                   </div>
                 )}
               </TabsContent>
@@ -562,7 +507,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold">כל השחקנים בפרויקט</h3>
-                    <p className="text-sm text-muted-foreground">{projectActors.length} שחקנים</p>
+                    <p className="text-sm text-muted-foreground">רשימת כל השחקנים המשויכים לפרויקט</p>
                   </div>
                   <Button onClick={() => setShowAddDialog(true)}>
                     <Plus className="h-4 w-4 ml-2" />
@@ -573,86 +518,90 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 {projectActors.length === 0 ? (
                   <Card className="p-12 text-center">
                     <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">אין עדיין שחקנים בפרויקט</h3>
-                    <p className="text-muted-foreground mb-6">התחל על ידי הוספת שחקנים מתוך מאגר השחקנים</p>
+                    <h3 className="text-lg font-semibold mb-2">אין עדיין שחקנים</h3>
+                    <p className="text-muted-foreground mb-6">הוסף שחקנים לפרויקט כדי להתחיל</p>
                     <Button onClick={() => setShowAddDialog(true)}>
                       <Plus className="h-4 w-4 ml-2" />
                       הוסף שחקן ראשון
                     </Button>
                   </Card>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {projectActors.map((pa) => {
                       const actor = pa.actors
                       const currentAge = actor.birth_year ? new Date().getFullYear() - actor.birth_year : null
+                      const genderStyle = getGenderStyle(actor.gender)
+                      const role = projectRoles.find((r) => r.id === pa.role_id)
 
                       return (
                         <Card key={pa.id} className="p-4">
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-start gap-4">
                             <Link
                               href={`/actors/${actor.id}`}
-                              className="w-14 h-14 rounded-lg overflow-hidden bg-muted flex-shrink-0 hover:opacity-80 transition-opacity"
+                              className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0 hover:opacity-80 transition-opacity"
                             >
-                              {actor.photo_url ? (
+                              {actor.image_url ? (
                                 <img
-                                  src={actor.photo_url || "/placeholder.svg"}
+                                  src={actor.image_url || "/placeholder.svg"}
                                   alt={actor.full_name}
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
                                 <div
-                                  className={`w-full h-full flex items-center justify-center text-xl ${actor.gender === "זכר" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}
+                                  className={`w-full h-full flex items-center justify-center text-2xl ${genderStyle.bg} ${genderStyle.text}`}
                                 >
-                                  {actor.gender === "זכר" ? "♂" : "♀"}
+                                  {genderStyle.symbol}
                                 </div>
                               )}
                             </Link>
 
                             <div className="flex-1 min-w-0">
-                              <Link href={`/actors/${actor.id}`} className="hover:underline">
-                                <p className="font-medium">{actor.full_name}</p>
-                              </Link>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                                <span>{actor.gender}</span>
-                                {currentAge && (
-                                  <>
-                                    <span>•</span>
-                                    <span>גיל {currentAge}</span>
-                                  </>
-                                )}
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <Link href={`/actors/${actor.id}`} className="hover:underline">
+                                    <p className="font-semibold">{actor.full_name}</p>
+                                  </Link>
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                                    <span>{getGenderLabel(actor.gender)}</span>
+                                    {currentAge && (
+                                      <>
+                                        <span>•</span>
+                                        <span>גיל {currentAge}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => editProjectActor(pa)}>ערוך פרטים</DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() => removeActorFromProject(pa.id)}
+                                    >
+                                      הסר מהפרויקט
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
-                              <div className="mt-1 flex items-center gap-2 flex-wrap">
-                                <Badge variant="outline" className="text-xs">
-                                  {pa.role_name || "ללא תפקיד"}
-                                </Badge>
-                                {pa.replicas_planned && (
+
+                              <div className="mt-2 space-y-1">
+                                {role && (
                                   <Badge variant="secondary" className="text-xs">
-                                    {pa.replicas_planned} רפליקות
+                                    {role.role_name}
                                   </Badge>
+                                )}
+                                {pa.replicas_planned && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {pa.replicas_planned} רפליקות מתוכננות
+                                  </p>
                                 )}
                               </div>
                             </div>
-
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => editProjectActor(pa)}>
-                                  <Edit className="h-4 w-4 ml-2" />
-                                  ערוך פרטים
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => removeActorFromProject(pa.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 ml-2" />
-                                  הסר מהפרויקט
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
                           </div>
                         </Card>
                       )
@@ -665,6 +614,16 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         </div>
       </div>
 
+      {/* Dialogs - Pass only projectId instead of full objects where possible */}
+      <AddActorToProjectDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        projectId={projectId || ""}
+        roles={projectRoles}
+        existingActorIds={projectActors.map((pa) => pa.actor_id)}
+        onActorsAdded={refreshAll}
+      />
+
       <EditProjectDialog
         open={showEditProjectDialog}
         onOpenChange={setShowEditProjectDialog}
@@ -676,22 +635,14 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         open={showEditActorDialog}
         onOpenChange={setShowEditActorDialog}
         projectActor={selectedProjectActor}
-        onActorUpdated={refreshAll}
+        onActorUpdated={refreshActors}
       />
 
       <CreateRoleDialog
         open={showCreateRoleDialog}
         onOpenChange={setShowCreateRoleDialog}
-        projectId={params.id}
-        onRoleCreated={refreshAll}
-      />
-
-      <AddActorToProjectDialog
-        open={showAddDialog}
-        onOpenChange={setShowAddDialog}
-        projectId={params.id}
-        roles={projectRoles}
-        onActorsAdded={refreshAll}
+        projectId={projectId || ""}
+        onRoleCreated={refreshRoles}
       />
     </div>
   )

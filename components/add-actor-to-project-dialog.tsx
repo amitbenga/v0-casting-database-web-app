@@ -36,42 +36,58 @@ export function AddActorToProjectDialog({
   const [newRoleName, setNewRoleName] = useState("")
   const [replicasPlanned, setReplicasPlanned] = useState("")
   const [notes, setNotes] = useState("")
-  const hasLoadedActors = useRef(false)
+  const hasInitialized = useRef(false)
 
   useEffect(() => {
-    if (open && !hasLoadedActors.current) {
-      hasLoadedActors.current = true
-      loadActors()
-    }
-
-    if (open) {
-      setSelectedRoleId("")
-      setNewRoleName("")
-      setSelectedActors([])
-      setSearchQuery("")
-      setReplicasPlanned("")
-      setNotes("")
-    }
-
     if (!open) {
-      hasLoadedActors.current = false
+      // Reset when closing
+      hasInitialized.current = false
+      return
     }
+
+    if (hasInitialized.current) return
+    hasInitialized.current = true
+
+    // Reset form when opening
+    setSelectedRoleId("")
+    setNewRoleName("")
+    setSelectedActors([])
+    setSearchQuery("")
+    setReplicasPlanned("")
+    setNotes("")
+
+    // Load actors
+    async function loadActors() {
+      try {
+        setLoading(true)
+        const supabase = createBrowserClient()
+        const { data, error } = await supabase.from("actors").select("*").order("full_name")
+
+        if (error) throw error
+        setActors(data || [])
+      } catch (error) {
+        console.error("[v0] Error loading actors:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadActors()
   }, [open])
 
-  async function loadActors() {
-    try {
-      setLoading(true)
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("actors").select("*").order("full_name")
+  const getGenderLabel = (gender: string) => {
+    if (gender === "male") return "זכר"
+    if (gender === "female") return "נקבה"
+    return gender
+  }
 
-      if (error) throw error
-
-      setActors(data || [])
-    } catch (error) {
-      console.error("[v0] Error loading actors:", error)
-    } finally {
-      setLoading(false)
+  const getGenderStyle = (gender: string) => {
+    if (gender === "male") {
+      return { bg: "bg-blue-100", text: "text-blue-600", symbol: "♂" }
+    } else if (gender === "female") {
+      return { bg: "bg-pink-100", text: "text-pink-600", symbol: "♀" }
     }
+    return { bg: "bg-gray-100", text: "text-gray-600", symbol: "?" }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -109,7 +125,32 @@ export function AddActorToProjectDialog({
         roleId = newRole.id
       }
 
-      const projectActorRecords = selectedActors.map((actorId) => ({
+      const { data: existingAssignments } = await supabase
+        .from("project_actors")
+        .select("actor_id")
+        .eq("role_id", roleId)
+        .in("actor_id", selectedActors)
+
+      const existingActorIds = new Set(existingAssignments?.map((a) => a.actor_id) || [])
+      const newActorIds = selectedActors.filter((id) => !existingActorIds.has(id))
+
+      if (newActorIds.length === 0) {
+        alert("כל השחקנים שנבחרו כבר משויכים לתפקיד זה")
+        return
+      }
+
+      if (existingActorIds.size > 0) {
+        const skippedCount = existingActorIds.size
+        if (
+          !confirm(
+            `${skippedCount} ${skippedCount === 1 ? "שחקן כבר משויך" : "שחקנים כבר משויכים"} לתפקיד זה ויידלג. להמשיך?`,
+          )
+        ) {
+          return
+        }
+      }
+
+      const projectActorRecords = newActorIds.map((actorId) => ({
         project_id: projectId,
         actor_id: actorId,
         role_id: roleId,
@@ -124,16 +165,9 @@ export function AddActorToProjectDialog({
 
       onActorsAdded?.()
       onOpenChange(false)
-
-      setSelectedActors([])
-      setSearchQuery("")
-      setSelectedRoleId("")
-      setNewRoleName("")
-      setReplicasPlanned("")
-      setNotes("")
     } catch (error) {
       console.error("[v0] Error adding actors to project:", error)
-      alert("שגיאה בהוספת שחקנים לפרויקט")
+      alert("שגיאה בהוספת שחקנים לפרויקט: " + (error as any).message)
     }
   }
 
@@ -225,6 +259,7 @@ export function AddActorToProjectDialog({
             ) : (
               filteredActors.map((actor) => {
                 const currentAge = actor.birth_year ? new Date().getFullYear() - actor.birth_year : null
+                const genderStyle = getGenderStyle(actor.gender)
 
                 return (
                   <Card
@@ -237,26 +272,24 @@ export function AddActorToProjectDialog({
                     <div className="flex items-center gap-4">
                       <Checkbox checked={selectedActors.includes(actor.id)} />
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                        {actor.photo_url ? (
+                        {actor.image_url ? (
                           <img
-                            src={actor.photo_url || "/placeholder.svg"}
+                            src={actor.image_url || "/placeholder.svg"}
                             alt={actor.full_name}
                             className="w-full h-full object-cover"
                           />
                         ) : (
                           <div
-                            className={`w-full h-full flex items-center justify-center ${
-                              actor.gender === "זכר" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
-                            }`}
+                            className={`w-full h-full flex items-center justify-center ${genderStyle.bg} ${genderStyle.text}`}
                           >
-                            {actor.gender === "זכר" ? "♂" : "♀"}
+                            {genderStyle.symbol}
                           </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{actor.full_name}</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>{actor.gender}</span>
+                          <span>{getGenderLabel(actor.gender)}</span>
                           {currentAge && (
                             <>
                               <span>•</span>

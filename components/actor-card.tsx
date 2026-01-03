@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { Heart, MessageCircle, Bookmark, MoreVertical, Music, GraduationCap, User } from "lucide-react"
+import type React from "react"
+
+import { useState, useRef } from "react"
+import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,9 +21,47 @@ interface ActorCardProps {
 
 export function ActorCard({ actor, isSelected, isFavorited, onToggleFavorite, onToggleSelect }: ActorCardProps) {
   const [showOverlay, setShowOverlay] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const currentYear = new Date().getFullYear()
   const age = currentYear - actor.birth_year
+
+  const handlePlayAudio = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    console.log("[v0] Play button clicked, audio URL:", actor.voice_sample_url)
+
+    if (!actor.voice_sample_url) {
+      console.log("[v0] No audio URL available")
+      return
+    }
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio(actor.voice_sample_url)
+      audioRef.current.addEventListener("ended", () => {
+        console.log("[v0] Audio ended")
+        setIsPlaying(false)
+      })
+      audioRef.current.addEventListener("error", (error) => {
+        console.error("[v0] Audio error:", error)
+        setIsPlaying(false)
+      })
+    }
+
+    if (isPlaying) {
+      console.log("[v0] Pausing audio")
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      console.log("[v0] Playing audio")
+      audioRef.current.play().catch((error) => {
+        console.error("[v0] Error playing audio:", error)
+      })
+      setIsPlaying(true)
+    }
+  }
 
   return (
     <Card
@@ -125,8 +165,18 @@ export function ActorCard({ actor, isSelected, isFavorited, onToggleFavorite, on
           >
             <Heart className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isFavorited ? "fill-red-500 text-red-500" : ""}`} />
           </Button>
-          <Button size="icon" variant="ghost" className="h-7 w-7 md:h-8 md:w-8">
-            <MessageCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 md:h-8 md:w-8"
+            onClick={handlePlayAudio}
+            disabled={!actor.voice_sample_url}
+          >
+            {isPlaying ? (
+              <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            ) : (
+              <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            )}
           </Button>
           <Button size="icon" variant="ghost" className="h-7 w-7 md:h-8 md:w-8">
             <Bookmark className="h-3.5 w-3.5 md:h-4 md:w-4" />

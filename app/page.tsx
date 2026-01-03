@@ -12,6 +12,9 @@ import type { Actor } from "@/lib/types"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { AppHeader } from "@/components/app-header"
 import type { FilterState } from "@/lib/types"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
+const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
 
 export default function ActorsDatabase() {
   const [actors, setActors] = useState<Actor[]>([])
@@ -20,6 +23,7 @@ export default function ActorsDatabase() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState<"all" | "favorites">("all")
   const [filters, setFilters] = useState<FilterState>({
     gender: [],
     ageMin: 18,
@@ -33,18 +37,16 @@ export default function ActorsDatabase() {
   })
 
   useEffect(() => {
-    async function loadActors() {
+    async function loadData() {
       try {
         const supabase = createClient()
-        const { data, error } = await supabase.from("actors").select("*").order("full_name")
 
-        if (error) {
-          console.error("[v0] Error loading actors:", error)
-          return
-        }
+        const { data: actorsData, error: actorsError } = await supabase.from("actors").select("*").order("full_name")
 
-        if (data) {
-          const mappedActors: Actor[] = data.map((actor: any) => ({
+        if (actorsError) {
+          console.error("[v0] Error loading actors:", actorsError)
+        } else if (actorsData) {
+          const mappedActors: Actor[] = actorsData.map((actor: any) => ({
             id: actor.id,
             full_name: actor.full_name,
             gender: actor.gender,
@@ -66,6 +68,17 @@ export default function ActorsDatabase() {
           }))
           setActors(mappedActors)
         }
+
+        const { data: favoritesData, error: favoritesError } = await supabase
+          .from("favorites")
+          .select("actor_id")
+          .eq("user_id", DEFAULT_USER_ID)
+
+        if (favoritesError) {
+          console.error("[v0] Error loading favorites:", favoritesError)
+        } else if (favoritesData) {
+          setFavorites(favoritesData.map((fav) => fav.actor_id))
+        }
       } catch (error) {
         console.error("[v0] Error:", error)
       } finally {
@@ -73,23 +86,53 @@ export default function ActorsDatabase() {
       }
     }
 
-    loadActors()
+    loadData()
   }, [])
 
-  const handleToggleFavorite = (actorId: string) => {
-    setFavorites((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
+  const handleToggleFavorite = async (actorId: string) => {
+    const supabase = createClient()
+    const isFavorited = favorites.includes(actorId)
+
+    try {
+      if (isFavorited) {
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", DEFAULT_USER_ID)
+          .eq("actor_id", actorId)
+
+        if (error) {
+          console.error("[v0] Error removing from favorites:", error)
+          return
+        }
+
+        setFavorites((prev) => prev.filter((id) => id !== actorId))
+      } else {
+        const { error } = await supabase.from("favorites").insert({ user_id: DEFAULT_USER_ID, actor_id: actorId })
+
+        if (error) {
+          console.error("[v0] Error adding to favorites:", error)
+          return
+        }
+
+        setFavorites((prev) => [...prev, actorId])
+      }
+    } catch (error) {
+      console.error("[v0] Error toggling favorite:", error)
+    }
   }
 
   const handleToggleSelect = (actorId: string) => {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
   }
 
-  const filteredActors = actors
+  const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
+
+  const filteredActors = displayedActors
     .filter((actor) => {
       const currentYear = new Date().getFullYear()
       const actorAge = currentYear - actor.birth_year
 
-      // חיפוש טקסט
       const query = searchQuery.toLowerCase()
       const matchesSearch =
         actor.full_name.toLowerCase().includes(query) ||
@@ -103,41 +146,34 @@ export default function ActorsDatabase() {
 
       if (!matchesSearch) return false
 
-      // סינון מין
       if (filters.gender.length > 0 && !filters.gender.includes(actor.gender)) {
         return false
       }
 
-      // סינון גיל
       if (actorAge < filters.ageMin || actorAge > filters.ageMax) {
         return false
       }
 
-      // סינון זמר
       if (filters.isSinger !== null && actor.is_singer !== filters.isSinger) {
         return false
       }
 
-      // סינון בוגר קורס
       if (filters.isCourseGrad !== null && actor.is_course_grad !== filters.isCourseGrad) {
         return false
       }
 
-      // סינון כישורים
       if (filters.skills.length > 0) {
         const actorSkills = actor.skills.map((s) => s.key)
         const hasSkill = filters.skills.some((skill) => actorSkills.includes(skill))
         if (!hasSkill) return false
       }
 
-      // סינון שפות
       if (filters.languages.length > 0) {
         const actorLangs = actor.languages.map((l) => l.key)
         const hasLang = filters.languages.some((lang) => actorLangs.includes(lang))
         if (!hasLang) return false
       }
 
-      // סינון מעמד במע"מ
       if (filters.vatStatus.length > 0 && !filters.vatStatus.includes(actor.vat_status)) {
         return false
       }
@@ -234,25 +270,64 @@ export default function ActorsDatabase() {
           )}
 
           <div className="flex-1">
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
-              {filteredActors.map((actor) => (
-                <Link key={actor.id} href={`/actors/${actor.id}`}>
-                  <ActorCard
-                    actor={actor}
-                    isSelected={selectedActors.includes(actor.id)}
-                    isFavorited={favorites.includes(actor.id)}
-                    onToggleFavorite={handleToggleFavorite}
-                    onToggleSelect={handleToggleSelect}
-                  />
-                </Link>
-              ))}
-            </div>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => setActiveTab(value as "all" | "favorites")}
+              className="w-full"
+            >
+              <TabsList className="mb-6">
+                <TabsTrigger value="all">כל השחקנים ({actors.length})</TabsTrigger>
+                <TabsTrigger value="favorites">מועדפים ({favorites.length})</TabsTrigger>
+              </TabsList>
 
-            {filteredActors.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">לא נמצאו שחקנים התואמים את החיפוש.</p>
-              </div>
-            )}
+              <TabsContent value="all" className="mt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+                  {filteredActors.map((actor) => (
+                    <Link key={actor.id} href={`/actors/${actor.id}`}>
+                      <ActorCard
+                        actor={actor}
+                        isSelected={selectedActors.includes(actor.id)}
+                        isFavorited={favorites.includes(actor.id)}
+                        onToggleFavorite={handleToggleFavorite}
+                        onToggleSelect={handleToggleSelect}
+                      />
+                    </Link>
+                  ))}
+                </div>
+
+                {filteredActors.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">לא נמצאו שחקנים התואמים את החיפוש.</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="favorites" className="mt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+                  {filteredActors.map((actor) => (
+                    <Link key={actor.id} href={`/actors/${actor.id}`}>
+                      <ActorCard
+                        actor={actor}
+                        isSelected={selectedActors.includes(actor.id)}
+                        isFavorited={favorites.includes(actor.id)}
+                        onToggleFavorite={handleToggleFavorite}
+                        onToggleSelect={handleToggleSelect}
+                      />
+                    </Link>
+                  ))}
+                </div>
+
+                {filteredActors.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">
+                      {favorites.length === 0
+                        ? "עדיין לא הוספת שחקנים למועדפים."
+                        : "לא נמצאו שחקנים מועדפים התואמים את החיפוש."}
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>

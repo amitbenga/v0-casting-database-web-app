@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Upload, X } from "lucide-react"
+import { ArrowRight, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -78,8 +78,7 @@ export default function ActorIntakePage() {
     try {
       const supabase = createBrowserClient()
 
-      // יצירת אובייקט השחקן
-      const actorData = {
+      const submissionData = {
         full_name: formData.full_name,
         email: formData.email || null,
         phone: formData.phone || null,
@@ -91,19 +90,20 @@ export default function ActorIntakePage() {
         vat_status: formData.vat_status || null,
         skills: skills.length > 0 ? skills : null,
         languages: languages.length > 0 ? languages : null,
-        photo_url: uploadedPhoto || null,
-        audio_url: uploadedAudio || null,
+        image_url: uploadedPhoto || null,
+        voice_sample_url: uploadedAudio || null,
+        status: "pending",
       }
 
-      const { error } = await supabase.from("actors").insert([actorData])
+      const { error } = await supabase.from("actor_submissions").insert([submissionData])
 
       if (error) throw error
 
-      alert("השחקן נוסף בהצלחה!")
+      alert("הבקשה נשלחה בהצלחה! היא תיבדק ותאושר בקרוב.")
       router.push("/")
     } catch (error) {
-      console.error("[v0] Error creating actor:", error)
-      alert("שגיאה בהוספת שחקן")
+      console.error("[v0] Error submitting actor:", error)
+      alert("שגיאה בשליחת הבקשה")
     } finally {
       setLoading(false)
     }
@@ -125,25 +125,25 @@ export default function ActorIntakePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" dir="rtl">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="icon" onClick={() => router.push("/")}>
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowRight className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-2xl font-semibold">Actor Intake Form</h1>
+                <h1 className="text-2xl font-semibold">טופס קליטת שחקן</h1>
                 <p className="text-sm text-muted-foreground">
-                  Step {currentStep} of {totalSteps}
+                  שלב {currentStep} מתוך {totalSteps}
                 </p>
               </div>
             </div>
 
             <Button variant="outline" onClick={() => router.push("/")}>
-              Save Draft
+              שמור טיוטה
             </Button>
           </div>
         </div>
@@ -153,26 +153,34 @@ export default function ActorIntakePage() {
         <div className="max-w-3xl mx-auto">
           {/* Progress Bar */}
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-2">
-              {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
-                <div key={step} className="flex items-center flex-1">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      step <= currentStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {step}
+            <div className="flex items-center justify-between">
+              {[
+                { num: 1, label: "פרטים אישיים" },
+                { num: 2, label: "כישורים ושפות" },
+                { num: 3, label: "תמונות וקול" },
+              ].map((step, index) => (
+                <div key={step.num} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        step.num <= currentStep
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {step.num}
+                    </div>
+                    <span
+                      className={`text-xs mt-2 ${step.num <= currentStep ? "text-primary font-medium" : "text-muted-foreground"}`}
+                    >
+                      {step.label}
+                    </span>
                   </div>
-                  {step < totalSteps && (
-                    <div className={`flex-1 h-1 mx-2 ${step < currentStep ? "bg-primary" : "bg-muted"}`} />
+                  {index < 2 && (
+                    <div className={`flex-1 h-1 mx-4 ${step.num < currentStep ? "bg-primary" : "bg-muted"}`} />
                   )}
                 </div>
               ))}
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Personal</span>
-              <span>Skills & Languages</span>
-              <span>Photos & Audio</span>
             </div>
           </div>
 
@@ -181,70 +189,53 @@ export default function ActorIntakePage() {
             {currentStep === 1 && (
               <Card className="p-6 space-y-6">
                 <div>
-                  <h2 className="text-xl font-semibold mb-2">Personal Information</h2>
-                  <p className="text-sm text-muted-foreground">Tell us about yourself</p>
+                  <h2 className="text-xl font-semibold mb-2">פרטים אישיים</h2>
+                  <p className="text-sm text-muted-foreground">ספר/י לנו על עצמך</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="full_name">Full Name *</Label>
+                    <Label htmlFor="full_name">שם מלא *</Label>
                     <Input
                       id="full_name"
                       value={formData.full_name}
                       onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                      placeholder="John Doe"
+                      placeholder="ישראל ישראלי"
                       required
-                      dir="rtl"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="john@example.com"
-                        dir="ltr"
-                        className="text-right"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone</Label>
+                      <Label htmlFor="phone">טלפון</Label>
                       <Input
                         id="phone"
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        placeholder="+1 (555) 123-4567"
+                        placeholder="050-1234567"
                         dir="ltr"
-                        className="text-right"
+                        className="text-left"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">אימייל</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="example@email.com"
+                        dir="ltr"
+                        className="text-left"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="gender">Gender *</Label>
-                      <Select
-                        value={formData.gender}
-                        onValueChange={(value) => setFormData({ ...formData, gender: value })}
-                      >
-                        <SelectTrigger dir="rtl">
-                          <SelectValue placeholder="Select gender" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="birth_year">Birth Year *</Label>
+                      <Label htmlFor="birth_year">שנת לידה *</Label>
                       <Input
                         id="birth_year"
                         type="number"
@@ -255,31 +246,30 @@ export default function ActorIntakePage() {
                         placeholder="1990"
                         required
                         dir="ltr"
-                        className="text-right"
+                        className="text-left"
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gender">מין *</Label>
+                      <Select
+                        value={formData.gender}
+                        onValueChange={(value) => setFormData({ ...formData, gender: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר מין" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">זכר</SelectItem>
+                          <SelectItem value="female">נקבה</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="vat_status">VAT Status</Label>
-                      <Select
-                        value={formData.vat_status}
-                        onValueChange={(value) => setFormData({ ...formData, vat_status: value })}
-                      >
-                        <SelectTrigger dir="rtl">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="member">Member</SelectItem>
-                          <SelectItem value="exempt">Exempt</SelectItem>
-                          <SelectItem value="not_applicable">Not Applicable</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     <div className="space-y-3">
-                      <Label>Flags</Label>
+                      <Label>סימונים</Label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
@@ -288,7 +278,7 @@ export default function ActorIntakePage() {
                             onChange={(e) => setFormData({ ...formData, is_singer: e.target.checked })}
                             className="rounded"
                           />
-                          <span className="text-sm">Singer</span>
+                          <span className="text-sm">זמר/ית</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
@@ -297,21 +287,37 @@ export default function ActorIntakePage() {
                             onChange={(e) => setFormData({ ...formData, is_course_graduate: e.target.checked })}
                             className="rounded"
                           />
-                          <span className="text-sm">Course Graduate</span>
+                          <span className="text-sm">בוגר/ת קורס</span>
                         </label>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="vat_status">מעמד במע"מ</Label>
+                      <Select
+                        value={formData.vat_status}
+                        onValueChange={(value) => setFormData({ ...formData, vat_status: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר מעמד" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="licensed">עוסק מורשה</SelectItem>
+                          <SelectItem value="exempt">עוסק פטור</SelectItem>
+                          <SelectItem value="none">לא רשום</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="notes">Notes</Label>
+                    <Label htmlFor="notes">הערות</Label>
                     <Textarea
                       id="notes"
                       value={formData.notes}
                       onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      placeholder="Additional notes..."
+                      placeholder="הערות נוספות..."
                       className="min-h-[100px]"
-                      dir="rtl"
                     />
                   </div>
                 </div>
@@ -322,13 +328,13 @@ export default function ActorIntakePage() {
             {currentStep === 2 && (
               <Card className="p-6 space-y-6">
                 <div>
-                  <h2 className="text-xl font-semibold mb-2">Skills & Languages</h2>
-                  <p className="text-sm text-muted-foreground">Choose your skills and languages</p>
+                  <h2 className="text-xl font-semibold mb-2">כישורים ושפות</h2>
+                  <p className="text-sm text-muted-foreground">בחר/י את הכישורים והשפות שלך</p>
                 </div>
 
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <Label>Skills</Label>
+                    <Label>כישורים</Label>
                     <div className="flex flex-wrap gap-2">
                       {SKILLS_OPTIONS.map((skill) => (
                         <Badge
@@ -344,7 +350,7 @@ export default function ActorIntakePage() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label>Languages</Label>
+                    <Label>שפות</Label>
                     <div className="flex flex-wrap gap-2">
                       {LANGUAGES_OPTIONS.map((language) => (
                         <Badge
@@ -366,26 +372,26 @@ export default function ActorIntakePage() {
             {currentStep === 3 && (
               <Card className="p-6 space-y-6">
                 <div>
-                  <h2 className="text-xl font-semibold mb-2">Photos & Audio</h2>
-                  <p className="text-sm text-muted-foreground">Upload your profile photo and audio file</p>
+                  <h2 className="text-xl font-semibold mb-2">תמונות וקול</h2>
+                  <p className="text-sm text-muted-foreground">העלה תמונת פרופיל וקובץ קול</p>
                 </div>
 
                 <div className="space-y-6">
                   {/* Photo */}
                   <div className="space-y-3">
-                    <Label>Profile Photo</Label>
+                    <Label>תמונת פרופיל</Label>
                     {uploadedPhoto ? (
                       <div className="relative w-48 h-48 mx-auto">
                         <img
                           src={uploadedPhoto || "/placeholder.svg"}
-                          alt="Preview"
+                          alt="תצוגה מקדימה"
                           className="w-full h-full object-cover rounded-lg"
                         />
                         <Button
                           type="button"
                           variant="destructive"
                           size="icon"
-                          className="absolute top-2 left-2"
+                          className="absolute top-2 right-2"
                           onClick={() => setUploadedPhoto("")}
                         >
                           <X className="h-4 w-4" />
@@ -395,7 +401,7 @@ export default function ActorIntakePage() {
                       <div className="border-2 border-dashed rounded-lg p-12 text-center">
                         <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                         <Label htmlFor="photo" className="cursor-pointer">
-                          <div className="text-sm text-muted-foreground mb-2">Click to upload photo</div>
+                          <div className="text-sm text-muted-foreground mb-2">לחץ להעלאת תמונה</div>
                           <Input
                             id="photo"
                             type="file"
@@ -404,7 +410,7 @@ export default function ActorIntakePage() {
                             onChange={handlePhotoUpload}
                           />
                           <Button type="button" variant="outline" size="sm">
-                            Choose Photo
+                            בחר תמונה
                           </Button>
                         </Label>
                       </div>
@@ -413,7 +419,7 @@ export default function ActorIntakePage() {
 
                   {/* Audio */}
                   <div className="space-y-3">
-                    <Label>Audio File</Label>
+                    <Label>קובץ קול</Label>
                     {uploadedAudio ? (
                       <div className="space-y-3">
                         <audio controls className="w-full" dir="ltr">
@@ -421,13 +427,13 @@ export default function ActorIntakePage() {
                         </audio>
                         <Button type="button" variant="outline" size="sm" onClick={() => setUploadedAudio("")}>
                           <X className="h-4 w-4 ml-2" />
-                          Remove File
+                          הסר קובץ
                         </Button>
                       </div>
                     ) : (
                       <div className="border-2 border-dashed rounded-lg p-8 text-center">
                         <Label htmlFor="audio" className="cursor-pointer">
-                          <div className="text-sm text-muted-foreground mb-2">Click to upload audio file</div>
+                          <div className="text-sm text-muted-foreground mb-2">לחץ להעלאת קובץ קול</div>
                           <Input
                             id="audio"
                             type="file"
@@ -436,7 +442,7 @@ export default function ActorIntakePage() {
                             onChange={handleAudioUpload}
                           />
                           <Button type="button" variant="outline" size="sm">
-                            Choose Audio File
+                            בחר קובץ קול
                           </Button>
                         </Label>
                       </div>
@@ -449,16 +455,16 @@ export default function ActorIntakePage() {
             {/* Navigation Buttons */}
             <div className="flex items-center justify-between mt-6">
               <Button type="button" variant="outline" onClick={prevStep} disabled={currentStep === 1}>
-                Previous
+                הקודם
               </Button>
 
               {currentStep < totalSteps ? (
                 <Button type="button" onClick={nextStep} disabled={!canProceed()}>
-                  Next
+                  הבא
                 </Button>
               ) : (
                 <Button type="submit" disabled={loading || !canProceed()}>
-                  {loading ? "Submitting..." : "Submit Actor"}
+                  {loading ? "שומר..." : "הוסף שחקן"}
                 </Button>
               )}
             </div>

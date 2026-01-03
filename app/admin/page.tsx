@@ -1,0 +1,500 @@
+"use client"
+
+import type React from "react"
+
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import {
+  ChevronRight,
+  Check,
+  X,
+  User,
+  Calendar,
+  Phone,
+  Mail,
+  Music,
+  GraduationCap,
+  FileText,
+  Clock,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createBrowserClient } from "@/lib/supabase/client"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+
+interface ActorSubmission {
+  id: string
+  full_name: string
+  gender: "male" | "female"
+  birth_year: number
+  phone?: string
+  email?: string
+  image_url?: string
+  voice_sample_url?: string
+  is_singer: boolean
+  is_course_graduate: boolean
+  vat_status?: string
+  skills?: string[]
+  languages?: string[]
+  notes?: string
+  status: "pending" | "approved" | "rejected"
+  submitted_at: string
+  reviewed_at?: string
+  reviewed_by?: string
+}
+
+export default function AdminPage() {
+  const [submissions, setSubmissions] = useState<ActorSubmission[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
+  const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
+  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
+  const [isPlaying, setIsPlaying] = useState<string | null>(null)
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    loadSubmissions()
+  }, [])
+
+  async function loadSubmissions() {
+    try {
+      const supabase = createBrowserClient()
+      const { data, error } = await supabase
+        .from("actor_submissions")
+        .select("*")
+        .order("submitted_at", { ascending: false })
+
+      if (error) throw error
+      setSubmissions(data || [])
+    } catch (error) {
+      console.error("[v0] Error loading submissions:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleApprove(submission: ActorSubmission) {
+    try {
+      const supabase = createBrowserClient()
+
+      const { error: insertError } = await supabase.from("actors").insert({
+        full_name: submission.full_name,
+        gender: submission.gender,
+        birth_year: submission.birth_year,
+        phone: submission.phone,
+        email: submission.email,
+        image_url: submission.image_url,
+        voice_sample_url: submission.voice_sample_url,
+        is_singer: submission.is_singer,
+        is_course_graduate: submission.is_course_graduate,
+        vat_status: submission.vat_status,
+        skills: submission.skills,
+        languages: submission.languages,
+        notes: submission.notes,
+      })
+
+      if (insertError) throw insertError
+
+      const { error: updateError } = await supabase
+        .from("actor_submissions")
+        .update({
+          status: "approved",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: "admin",
+        })
+        .eq("id", submission.id)
+
+      if (updateError) throw updateError
+
+      await loadSubmissions()
+      setIsReviewDialogOpen(false)
+      setSelectedSubmission(null)
+    } catch (error) {
+      console.error("[v0] Error approving submission:", error)
+      alert("שגיאה באישור הבקשה")
+    }
+  }
+
+  async function handleReject(submission: ActorSubmission) {
+    try {
+      const supabase = createBrowserClient()
+
+      const { error } = await supabase
+        .from("actor_submissions")
+        .update({
+          status: "rejected",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: "admin",
+          notes: rejectReason ? `${submission.notes || ""}\n\nסיבת דחייה: ${rejectReason}` : submission.notes,
+        })
+        .eq("id", submission.id)
+
+      if (error) throw error
+
+      await loadSubmissions()
+      setIsReviewDialogOpen(false)
+      setSelectedSubmission(null)
+      setRejectReason("")
+    } catch (error) {
+      console.error("[v0] Error rejecting submission:", error)
+      alert("שגיאה בדחיית הבקשה")
+    }
+  }
+
+  function handlePlayAudio(url: string, id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+
+    if (isPlaying === id) {
+      audio?.pause()
+      setIsPlaying(null)
+      return
+    }
+
+    if (audio) {
+      audio.pause()
+    }
+
+    const newAudio = new Audio(url)
+    newAudio.play()
+    setIsPlaying(id)
+    setAudio(newAudio)
+
+    newAudio.onended = () => {
+      setIsPlaying(null)
+    }
+  }
+
+  const pendingSubmissions = submissions.filter((s) => s.status === "pending")
+  const approvedSubmissions = submissions.filter((s) => s.status === "approved")
+  const rejectedSubmissions = submissions.filter((s) => s.status === "rejected")
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center" dir="rtl">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">טוען בקשות...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-background" dir="rtl">
+      {/* Header */}
+      <header className="border-b sticky top-0 bg-background z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/" className="text-2xl font-bold text-primary">
+                Soprodub
+              </Link>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              <h1 className="text-xl font-semibold">ניהול בקשות</h1>
+            </div>
+            <Link href="/">
+              <Button variant="outline">חזרה לדף הראשי</Button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Content */}
+      <main className="container mx-auto px-4 py-8">
+        <Tabs defaultValue="pending" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="pending" className="relative">
+              ממתינות לאישור
+              {pendingSubmissions.length > 0 && (
+                <Badge variant="destructive" className="mr-2 h-5 min-w-5 px-1.5">
+                  {pendingSubmissions.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="approved">אושרו ({approvedSubmissions.length})</TabsTrigger>
+            <TabsTrigger value="rejected">נדחו ({rejectedSubmissions.length})</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="space-y-4">
+            {pendingSubmissions.length === 0 ? (
+              <Card className="p-12 text-center">
+                <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground text-lg">אין בקשות ממתינות</p>
+              </Card>
+            ) : (
+              pendingSubmissions.map((submission) => (
+                <SubmissionCard
+                  key={submission.id}
+                  submission={submission}
+                  onReview={(action) => {
+                    setSelectedSubmission(submission)
+                    setReviewAction(action)
+                    setIsReviewDialogOpen(true)
+                  }}
+                  onPlayAudio={handlePlayAudio}
+                  isPlaying={isPlaying === submission.id}
+                />
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="approved" className="space-y-4">
+            {approvedSubmissions.length === 0 ? (
+              <Card className="p-12 text-center">
+                <p className="text-muted-foreground">אין בקשות מאושרות</p>
+              </Card>
+            ) : (
+              approvedSubmissions.map((submission) => (
+                <SubmissionCard
+                  key={submission.id}
+                  submission={submission}
+                  onPlayAudio={handlePlayAudio}
+                  isPlaying={isPlaying === submission.id}
+                />
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="rejected" className="space-y-4">
+            {rejectedSubmissions.length === 0 ? (
+              <Card className="p-12 text-center">
+                <p className="text-muted-foreground">אין בקשות שנדחו</p>
+              </Card>
+            ) : (
+              rejectedSubmissions.map((submission) => (
+                <SubmissionCard
+                  key={submission.id}
+                  submission={submission}
+                  onPlayAudio={handlePlayAudio}
+                  isPlaying={isPlaying === submission.id}
+                />
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      {/* Review Dialog */}
+      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+        <DialogContent className="sm:max-width-[500px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{reviewAction === "approve" ? "אישור בקשה" : "דחיית בקשה"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {reviewAction === "approve"
+                ? `האם אתה בטוח שברצונך לאשר את הבקשה של ${selectedSubmission?.full_name}?`
+                : `האם אתה בטוח שברצונך לדחות את הבקשה של ${selectedSubmission?.full_name}?`}
+            </p>
+            {reviewAction === "reject" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">סיבת הדחייה (אופציונלי)</label>
+                <Textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="הוסף הערה על סיבת הדחייה..."
+                  rows={4}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
+              ביטול
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedSubmission) {
+                  if (reviewAction === "approve") {
+                    handleApprove(selectedSubmission)
+                  } else {
+                    handleReject(selectedSubmission)
+                  }
+                }
+              }}
+              variant={reviewAction === "approve" ? "default" : "destructive"}
+            >
+              {reviewAction === "approve" ? "אשר" : "דחה"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function SubmissionCard({
+  submission,
+  onReview,
+  onPlayAudio,
+  isPlaying,
+}: {
+  submission: ActorSubmission
+  onReview?: (action: "approve" | "reject") => void
+  onPlayAudio: (url: string, id: string, e: React.MouseEvent) => void
+  isPlaying: boolean
+}) {
+  const age = new Date().getFullYear() - submission.birth_year
+
+  return (
+    <Card className="p-6">
+      <div className="flex gap-6">
+        {/* Avatar */}
+        <div className="flex-shrink-0">
+          {submission.image_url ? (
+            <img
+              src={submission.image_url || "/placeholder.svg"}
+              alt={submission.full_name}
+              className="h-24 w-24 rounded-full object-cover"
+            />
+          ) : (
+            <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center">
+              <User className="h-12 w-12 text-muted-foreground" />
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-xl font-bold">{submission.full_name}</h3>
+              <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <User className="h-4 w-4" />
+                  {submission.gender === "male" ? "זכר" : "נקבה"}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-4 w-4" />
+                  {age} שנים
+                </span>
+                {submission.phone && (
+                  <span className="flex items-center gap-1">
+                    <Phone className="h-4 w-4" />
+                    {submission.phone}
+                  </span>
+                )}
+                {submission.email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="h-4 w-4" />
+                    {submission.email}
+                  </span>
+                )}
+              </div>
+            </div>
+            <Badge
+              variant={
+                submission.status === "pending"
+                  ? "default"
+                  : submission.status === "approved"
+                    ? "success"
+                    : "destructive"
+              }
+            >
+              {submission.status === "pending" && "ממתין"}
+              {submission.status === "approved" && "אושר"}
+              {submission.status === "rejected" && "נדחה"}
+            </Badge>
+          </div>
+
+          {/* Details */}
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="space-y-2">
+              {submission.is_singer && (
+                <div className="flex items-center gap-2">
+                  <Music className="h-4 w-4 text-primary" />
+                  <span>זמר/ת</span>
+                </div>
+              )}
+              {submission.is_course_graduate && (
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4 text-primary" />
+                  <span>בוגר קורס</span>
+                </div>
+              )}
+              {submission.vat_status && (
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <span>
+                    {submission.vat_status === "registered" && "עוסק מורשה"}
+                    {submission.vat_status === "exempt" && "עוסק פטור"}
+                    {submission.vat_status === "not_registered" && "לא רשום"}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              {submission.skills && submission.skills.length > 0 && (
+                <div>
+                  <p className="font-medium mb-1">כישורים:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {submission.skills.map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-xs">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {submission.languages && submission.languages.length > 0 && (
+                <div>
+                  <p className="font-medium mb-1">שפות:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {submission.languages.map((lang) => (
+                      <Badge key={lang} variant="secondary" className="text-xs">
+                        {lang}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Notes */}
+          {submission.notes && (
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm">{submission.notes}</p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-2">
+            {submission.voice_sample_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => onPlayAudio(submission.voice_sample_url!, submission.id, e)}
+              >
+                <Music className="h-4 w-4 ml-2" />
+                {isPlaying ? "עצור" : "השמע דוגמה"}
+              </Button>
+            )}
+            {submission.status === "pending" && onReview && (
+              <>
+                <Button size="sm" onClick={() => onReview("approve")} className="bg-green-600 hover:bg-green-700">
+                  <Check className="h-4 w-4 ml-2" />
+                  אשר
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => onReview("reject")}>
+                  <X className="h-4 w-4 ml-2" />
+                  דחה
+                </Button>
+              </>
+            )}
+            {submission.reviewed_at && (
+              <span className="text-xs text-muted-foreground mr-auto">
+                נבדק ב-{new Date(submission.reviewed_at).toLocaleDateString("he-IL")}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}

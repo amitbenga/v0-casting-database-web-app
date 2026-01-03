@@ -29,8 +29,9 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
   })
   const [loading, setLoading] = useState(false)
 
+  const projectId = project?.id
   useEffect(() => {
-    if (project) {
+    if (open && project) {
       setFormData({
         name: project.name || "",
         director: project.director || "",
@@ -40,7 +41,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
         notes: project.notes || "",
       })
     }
-  }, [project])
+  }, [open, projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,7 +66,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
       onProjectUpdated()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Error updating project:", error)
+      console.error("Error updating project:", error)
       alert("שגיאה בעדכון פרויקט")
     } finally {
       setLoading(false)
@@ -74,7 +75,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
           <DialogTitle>ערוך פרויקט</DialogTitle>
         </DialogHeader>
@@ -89,7 +90,6 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="שם הפרויקט"
                 required
-                dir="rtl"
               />
             </div>
 
@@ -101,7 +101,6 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
                   value={formData.director}
                   onChange={(e) => setFormData({ ...formData, director: e.target.value })}
                   placeholder="שם הבמאי"
-                  dir="rtl"
                 />
               </div>
 
@@ -112,7 +111,6 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
                   value={formData.casting_director}
                   onChange={(e) => setFormData({ ...formData, casting_director: e.target.value })}
                   placeholder="שם המלהק"
-                  dir="rtl"
                 />
               </div>
             </div>
@@ -134,7 +132,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
               <div className="space-y-2">
                 <Label htmlFor="status">סטטוס</Label>
                 <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                  <SelectTrigger dir="rtl">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -156,7 +154,6 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="הערות על הפרויקט..."
                 className="min-h-[100px]"
-                dir="rtl"
               />
             </div>
           </div>
