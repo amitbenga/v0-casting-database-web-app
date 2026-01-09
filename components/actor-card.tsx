@@ -17,9 +17,23 @@ interface ActorCardProps {
   isFavorited: boolean
   onToggleFavorite: (id: string) => void
   onToggleSelect: (id: string) => void
+  onAddToProject?: (actor: Actor) => void
+  onAddToFolder?: (actor: Actor) => void
+  onDelete?: (id: string) => void
+  onEdit?: (actor: Actor) => void
 }
 
-export function ActorCard({ actor, isSelected, isFavorited, onToggleFavorite, onToggleSelect }: ActorCardProps) {
+export function ActorCard({
+  actor,
+  isSelected,
+  isFavorited,
+  onToggleFavorite,
+  onToggleSelect,
+  onAddToProject,
+  onAddToFolder,
+  onDelete,
+  onEdit,
+}: ActorCardProps) {
   const [showOverlay, setShowOverlay] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -198,12 +212,23 @@ export function ActorCard({ actor, isSelected, isFavorited, onToggleFavorite, on
                 <MoreVertical className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>פרטים מלאים</DropdownMenuItem>
-              <DropdownMenuItem>הוסף לפרויקט</DropdownMenuItem>
-              <DropdownMenuItem>הוסף לתיקייה</DropdownMenuItem>
-              <DropdownMenuItem>ערוך</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">מחיקה</DropdownMenuItem>
+            <DropdownMenuContent align="end" dir="rtl">
+              <DropdownMenuItem asChild>
+                <Link href={`/actors/${actor.id}`}>פרטים מלאים</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddToProject?.(actor)}>הוסף לפרויקט</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddToFolder?.(actor)}>הוסף לתיקייה</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEdit?.(actor)}>ערוך</DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  if (confirm(`האם אתה בטוח שברצונך למחוק את ${actor.full_name}?`)) {
+                    onDelete?.(actor.id)
+                  }
+                }}
+              >
+                מחיקה
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

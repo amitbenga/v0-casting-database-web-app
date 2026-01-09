@@ -13,10 +13,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { AppHeader } from "@/components/app-header"
 import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AddActorToProjectDialog } from "@/components/add-actor-to-project-dialog"
+import { AddActorToFolderDialog } from "@/components/add-actor-to-folder-dialog"
+import { useRouter } from "next/navigation"
 
 const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
 
 export default function ActorsDatabase() {
+  const router = useRouter()
   const [actors, setActors] = useState<Actor[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -24,6 +28,13 @@ export default function ActorsDatabase() {
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all")
+
+  // Dialog states
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
+  const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false)
+  const [currentActor, setCurrentActor] = useState<Actor | null>(null)
+  const [projects, setProjects] = useState<any[]>([])
+  const [folders, setFolders] = useState<any[]>([])
   const [filters, setFilters] = useState<FilterState>({
     gender: [],
     ageMin: 18,
@@ -36,12 +47,11 @@ export default function ActorsDatabase() {
     sortBy: "newest",
   })
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const supabase = createClient()
+  async function loadData() {
+    try {
+      const supabase = createClient()
 
-        const { data: actorsData, error: actorsError } = await supabase.from("actors").select("*").order("full_name")
+      const { data: actorsData, error: actorsError } = await supabase.from("actors").select("*").order("full_name")
 
         if (actorsError) {
           console.error("[v0] Error loading actors:", actorsError)
@@ -79,6 +89,15 @@ export default function ActorsDatabase() {
         } else if (favoritesData) {
           setFavorites(favoritesData.map((fav) => fav.actor_id))
         }
+
+        // Load projects and folders for dialogs
+        const [{ data: projectsData }, { data: foldersData }] = await Promise.all([
+          supabase.from("casting_projects").select("*").order("created_at", { ascending: false }),
+          supabase.from("folders").select("*").order("name"),
+        ])
+
+        setProjects(projectsData || [])
+        setFolders(foldersData || [])
       } catch (error) {
         console.error("[v0] Error:", error)
       } finally {
@@ -86,6 +105,7 @@ export default function ActorsDatabase() {
       }
     }
 
+  useEffect(() => {
     loadData()
   }, [])
 
@@ -124,6 +144,32 @@ export default function ActorsDatabase() {
 
   const handleToggleSelect = (actorId: string) => {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
+  }
+
+  const handleDeleteActor = async (id: string) => {
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("actors").delete().eq("id", id)
+      if (error) throw error
+      setActors((prev) => prev.filter((a) => a.id !== id))
+    } catch (error) {
+      console.error("[v0] Error deleting actor:", error)
+      alert("שגיאה במחיקת שחקן")
+    }
+  }
+
+  const handleAddToProject = (actor: Actor) => {
+    setCurrentActor(actor)
+    setIsProjectDialogOpen(true)
+  }
+
+  const handleAddToFolder = (actor: Actor) => {
+    setCurrentActor(actor)
+    setIsFolderDialogOpen(true)
+  }
+
+  const handleEditActor = (actor: Actor) => {
+    router.push(`/actors/${actor.id}/edit`)
   }
 
   const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
@@ -283,15 +329,21 @@ export default function ActorsDatabase() {
               <TabsContent value="all" className="mt-0">
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
                   {filteredActors.map((actor) => (
-                    <Link key={actor.id} href={`/actors/${actor.id}`}>
-                      <ActorCard
-                        actor={actor}
-                        isSelected={selectedActors.includes(actor.id)}
-                        isFavorited={favorites.includes(actor.id)}
-                        onToggleFavorite={handleToggleFavorite}
-                        onToggleSelect={handleToggleSelect}
-                      />
-                    </Link>
+                    <div key={actor.id} className="relative">
+                      <Link href={`/actors/${actor.id}`}>
+                        <ActorCard
+                          actor={actor}
+                          isSelected={selectedActors.includes(actor.id)}
+                          isFavorited={favorites.includes(actor.id)}
+                          onToggleFavorite={handleToggleFavorite}
+                          onToggleSelect={handleToggleSelect}
+                          onAddToProject={handleAddToProject}
+                          onAddToFolder={handleAddToFolder}
+                          onDelete={handleDeleteActor}
+                          onEdit={handleEditActor}
+                        />
+                      </Link>
+                    </div>
                   ))}
                 </div>
 
@@ -305,15 +357,21 @@ export default function ActorsDatabase() {
               <TabsContent value="favorites" className="mt-0">
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
                   {filteredActors.map((actor) => (
-                    <Link key={actor.id} href={`/actors/${actor.id}`}>
-                      <ActorCard
-                        actor={actor}
-                        isSelected={selectedActors.includes(actor.id)}
-                        isFavorited={favorites.includes(actor.id)}
-                        onToggleFavorite={handleToggleFavorite}
-                        onToggleSelect={handleToggleSelect}
-                      />
-                    </Link>
+                    <div key={actor.id} className="relative">
+                      <Link href={`/actors/${actor.id}`}>
+                        <ActorCard
+                          actor={actor}
+                          isSelected={selectedActors.includes(actor.id)}
+                          isFavorited={favorites.includes(actor.id)}
+                          onToggleFavorite={handleToggleFavorite}
+                          onToggleSelect={handleToggleSelect}
+                          onAddToProject={handleAddToProject}
+                          onAddToFolder={handleAddToFolder}
+                          onDelete={handleDeleteActor}
+                          onEdit={handleEditActor}
+                        />
+                      </Link>
+                    </div>
                   ))}
                 </div>
 
@@ -331,6 +389,30 @@ export default function ActorsDatabase() {
           </div>
         </div>
       </div>
+
+      {/* Dialogs */}
+      {currentActor && (
+        <>
+          <AddActorToProjectDialog
+            open={isProjectDialogOpen}
+            onOpenChange={setIsProjectDialogOpen}
+            projectId={projects[0]?.id || ""} // Default to first project if none selected
+            onActorsAdded={() => {
+              setIsProjectDialogOpen(false)
+              alert("השחקן נוסף לפרויקט בהצלחה")
+            }}
+          />
+          <AddActorToFolderDialog
+            open={isFolderDialogOpen}
+            onOpenChange={setIsFolderDialogOpen}
+            folderId={folders[0]?.id || ""} // Default to first folder
+            onActorsAdded={() => {
+              setIsFolderDialogOpen(false)
+              alert("השחקן נוסף לתיקייה בהצלחה")
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
