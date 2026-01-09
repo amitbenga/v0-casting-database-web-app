@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -37,6 +38,15 @@ export function ActorCard({
   const [showOverlay, setShowOverlay] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const router = useRouter()
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Only navigate if clicking on the card itself, not on interactive elements
+    const target = e.target as HTMLElement
+    if (!target.closest('button') && !target.closest('[role="menuitem"]')) {
+      router.push(`/actors/${actor.id}`)
+    }
+  }
 
   const currentYear = new Date().getFullYear()
   const age = currentYear - actor.birth_year
@@ -79,9 +89,10 @@ export function ActorCard({
 
   return (
     <Card
-      className="group relative overflow-hidden transition-all hover:shadow-lg"
+      className="group relative overflow-hidden transition-all hover:shadow-lg cursor-pointer"
       onMouseEnter={() => setShowOverlay(true)}
       onMouseLeave={() => setShowOverlay(false)}
+      onClick={handleCardClick}
     >
       {/* Image */}
       <div className="relative aspect-[3/4] overflow-hidden bg-muted">
@@ -225,12 +236,34 @@ export function ActorCard({
               <DropdownMenuItem asChild>
                 <Link href={`/actors/${actor.id}`}>פרטים מלאים</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onAddToProject?.(actor)}>הוסף לפרויקט</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onAddToFolder?.(actor)}>הוסף לתיקייה</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit?.(actor)}>ערוך</DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddToProject?.(actor)
+                }}
+              >
+                הוסף לפרויקט
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddToFolder?.(actor)
+                }}
+              >
+                הוסף לתיקייה
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit?.(actor)
+                }}
+              >
+                ערוך
+              </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   if (confirm(`האם אתה בטוח שברצונך למחוק את ${actor.full_name}?`)) {
                     onDelete?.(actor.id)
                   }

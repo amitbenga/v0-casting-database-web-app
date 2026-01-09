@@ -329,21 +329,18 @@ export default function ActorsDatabase() {
               <TabsContent value="all" className="mt-0">
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
                   {filteredActors.map((actor) => (
-                    <div key={actor.id} className="relative">
-                      <Link href={`/actors/${actor.id}`}>
-                        <ActorCard
-                          actor={actor}
-                          isSelected={selectedActors.includes(actor.id)}
-                          isFavorited={favorites.includes(actor.id)}
-                          onToggleFavorite={handleToggleFavorite}
-                          onToggleSelect={handleToggleSelect}
-                          onAddToProject={handleAddToProject}
-                          onAddToFolder={handleAddToFolder}
-                          onDelete={handleDeleteActor}
-                          onEdit={handleEditActor}
-                        />
-                      </Link>
-                    </div>
+                    <ActorCard
+                      key={actor.id}
+                      actor={actor}
+                      isSelected={selectedActors.includes(actor.id)}
+                      isFavorited={favorites.includes(actor.id)}
+                      onToggleFavorite={handleToggleFavorite}
+                      onToggleSelect={handleToggleSelect}
+                      onAddToProject={handleAddToProject}
+                      onAddToFolder={handleAddToFolder}
+                      onDelete={handleDeleteActor}
+                      onEdit={handleEditActor}
+                    />
                   ))}
                 </div>
 
@@ -357,21 +354,18 @@ export default function ActorsDatabase() {
               <TabsContent value="favorites" className="mt-0">
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
                   {filteredActors.map((actor) => (
-                    <div key={actor.id} className="relative">
-                      <Link href={`/actors/${actor.id}`}>
-                        <ActorCard
-                          actor={actor}
-                          isSelected={selectedActors.includes(actor.id)}
-                          isFavorited={favorites.includes(actor.id)}
-                          onToggleFavorite={handleToggleFavorite}
-                          onToggleSelect={handleToggleSelect}
-                          onAddToProject={handleAddToProject}
-                          onAddToFolder={handleAddToFolder}
-                          onDelete={handleDeleteActor}
-                          onEdit={handleEditActor}
-                        />
-                      </Link>
-                    </div>
+                    <ActorCard
+                      key={actor.id}
+                      actor={actor}
+                      isSelected={selectedActors.includes(actor.id)}
+                      isFavorited={favorites.includes(actor.id)}
+                      onToggleFavorite={handleToggleFavorite}
+                      onToggleSelect={handleToggleSelect}
+                      onAddToProject={handleAddToProject}
+                      onAddToFolder={handleAddToFolder}
+                      onDelete={handleDeleteActor}
+                      onEdit={handleEditActor}
+                    />
                   ))}
                 </div>
 
