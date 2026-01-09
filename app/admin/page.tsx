@@ -94,13 +94,30 @@ export default function AdminPage() {
       })
 
       // Normalize gender and vat_status to handle both Hebrew (old) and English (new) values
-      const normalizedGender = submission.gender === "זכר" ? "male" : submission.gender === "נקבה" ? "female" : submission.gender;
+      let normalizedGender = submission.gender;
+      if (submission.gender === "זכר") normalizedGender = "male";
+      else if (submission.gender === "נקבה") normalizedGender = "female";
+      // Ensure it's one of the allowed values, default to male if unknown
+      if (normalizedGender !== "male" && normalizedGender !== "female") {
+        normalizedGender = "male";
+      }
       
       let normalizedVatStatus = submission.vat_status;
-      if (submission.vat_status === "עוסק פטור" || submission.vat_status === "exempt") normalizedVatStatus = "ptor";
-      else if (submission.vat_status === "עוסק מורשה" || submission.vat_status === "licensed") normalizedVatStatus = "murshe";
-      else if (submission.vat_status === "שכר אמנים") normalizedVatStatus = "artist_salary";
-      else if (!normalizedVatStatus || normalizedVatStatus === "none") normalizedVatStatus = "ptor";
+      // Map all possible variations to the allowed DB values
+      const vatMap: Record<string, string> = {
+        "עוסק פטור": "ptor",
+        "exempt": "ptor",
+        "ptor": "ptor",
+        "עוסק מורשה": "murshe",
+        "licensed": "murshe",
+        "murshe": "murshe",
+        "שכר אמנים": "artist_salary",
+        "artist_salary": "artist_salary",
+        "none": "ptor",
+        "לא רשום": "ptor"
+      };
+      
+      normalizedVatStatus = vatMap[submission.vat_status || ""] || "ptor";
 
       const { error: insertError } = await supabase.from("actors").insert({
         full_name: submission.full_name,
