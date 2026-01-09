@@ -210,10 +210,10 @@ export function ActorCard({
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              onToggleFavorite(actor.id)
+              onAddToProject?.(actor)
             }}
           >
-            <Bookmark className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isFavorited ? "fill-primary text-primary" : ""}`} />
+            <Bookmark className="h-3.5 w-3.5 md:h-4 md:w-4" />
           </Button>
         </div>
 

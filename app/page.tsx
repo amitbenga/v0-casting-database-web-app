@@ -13,8 +13,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { AppHeader } from "@/components/app-header"
 import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AddActorToProjectDialog } from "@/components/add-actor-to-project-dialog"
-import { AddActorToFolderDialog } from "@/components/add-actor-to-folder-dialog"
+import { QuickAddToProjectDialog } from "@/components/quick-add-to-project-dialog"
+import { QuickAddToFolderDialog } from "@/components/quick-add-to-folder-dialog"
 import { useRouter } from "next/navigation"
 
 const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
@@ -33,8 +33,6 @@ export default function ActorsDatabase() {
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
   const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false)
   const [currentActor, setCurrentActor] = useState<Actor | null>(null)
-  const [projects, setProjects] = useState<any[]>([])
-  const [folders, setFolders] = useState<any[]>([])
   const [filters, setFilters] = useState<FilterState>({
     gender: [],
     ageMin: 18,
@@ -90,14 +88,7 @@ export default function ActorsDatabase() {
           setFavorites(favoritesData.map((fav) => fav.actor_id))
         }
 
-        // Load projects and folders for dialogs
-        const [{ data: projectsData }, { data: foldersData }] = await Promise.all([
-          supabase.from("casting_projects").select("*").order("created_at", { ascending: false }),
-          supabase.from("folders").select("*").order("name"),
-        ])
 
-        setProjects(projectsData || [])
-        setFolders(foldersData || [])
       } catch (error) {
         console.error("[v0] Error:", error)
       } finally {
@@ -385,28 +376,22 @@ export default function ActorsDatabase() {
       </div>
 
       {/* Dialogs */}
-      {currentActor && (
-        <>
-          <AddActorToProjectDialog
-            open={isProjectDialogOpen}
-            onOpenChange={setIsProjectDialogOpen}
-            projectId={projects[0]?.id || ""} // Default to first project if none selected
-            onActorsAdded={() => {
-              setIsProjectDialogOpen(false)
-              alert("השחקן נוסף לפרויקט בהצלחה")
-            }}
-          />
-          <AddActorToFolderDialog
-            open={isFolderDialogOpen}
-            onOpenChange={setIsFolderDialogOpen}
-            folderId={folders[0]?.id || ""} // Default to first folder
-            onActorsAdded={() => {
-              setIsFolderDialogOpen(false)
-              alert("השחקן נוסף לתיקייה בהצלחה")
-            }}
-          />
-        </>
-      )}
+      <QuickAddToProjectDialog
+        open={isProjectDialogOpen}
+        onOpenChange={setIsProjectDialogOpen}
+        actor={currentActor}
+        onSuccess={() => {
+          alert("השחקן נוסף לפרויקט בהצלחה")
+        }}
+      />
+      <QuickAddToFolderDialog
+        open={isFolderDialogOpen}
+        onOpenChange={setIsFolderDialogOpen}
+        actor={currentActor}
+        onSuccess={() => {
+          alert("השחקן נוסף לתיקייה בהצלחה")
+        }}
+      />
     </div>
   )
 }
