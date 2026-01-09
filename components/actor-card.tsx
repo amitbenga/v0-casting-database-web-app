@@ -192,8 +192,17 @@ export function ActorCard({
               <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
             )}
           </Button>
-          <Button size="icon" variant="ghost" className="h-7 w-7 md:h-8 md:w-8">
-            <Bookmark className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 md:h-8 md:w-8"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleFavorite(actor.id)
+            }}
+          >
+            <Bookmark className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isFavorited ? "fill-primary text-primary" : ""}`} />
           </Button>
         </div>
 
