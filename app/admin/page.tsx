@@ -22,6 +22,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { SKILLS_LIST, LANGUAGES_LIST } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -81,20 +82,40 @@ export default function AdminPage() {
     try {
       const supabase = createBrowserClient()
 
+      // Map skills and languages to the format expected by the actors table (Skill[] and Language[])
+      const mappedSkills = (submission.skills || []).map((skillLabel) => {
+        const found = SKILLS_LIST.find((s) => s.label === skillLabel)
+        return found || { id: Math.random().toString(36).substr(2, 9), key: skillLabel, label: skillLabel }
+      })
+
+      const mappedLanguages = (submission.languages || []).map((langLabel) => {
+        const found = LANGUAGES_LIST.find((l) => l.label === langLabel)
+        return found || { id: Math.random().toString(36).substr(2, 9), key: langLabel, label: langLabel }
+      })
+
+      // Normalize gender and vat_status to handle both Hebrew (old) and English (new) values
+      const normalizedGender = submission.gender === "זכר" ? "male" : submission.gender === "נקבה" ? "female" : submission.gender;
+      
+      let normalizedVatStatus = submission.vat_status;
+      if (submission.vat_status === "עוסק פטור" || submission.vat_status === "exempt") normalizedVatStatus = "ptor";
+      else if (submission.vat_status === "עוסק מורשה" || submission.vat_status === "licensed") normalizedVatStatus = "murshe";
+      else if (submission.vat_status === "שכר אמנים") normalizedVatStatus = "artist_salary";
+      else if (!normalizedVatStatus || normalizedVatStatus === "none") normalizedVatStatus = "ptor";
+
       const { error: insertError } = await supabase.from("actors").insert({
         full_name: submission.full_name,
-        gender: submission.gender,
+        gender: normalizedGender,
         birth_year: submission.birth_year,
-        phone: submission.phone,
-        email: submission.email,
-        image_url: submission.image_url,
-        voice_sample_url: submission.voice_sample_url,
+        phone: submission.phone || "",
+        email: submission.email || "",
+        image_url: submission.image_url || "",
+        voice_sample_url: submission.voice_sample_url || "",
         is_singer: submission.is_singer,
-        is_course_graduate: submission.is_course_graduate,
-        vat_status: submission.vat_status,
-        skills: submission.skills,
-        languages: submission.languages,
-        notes: submission.notes,
+        is_course_grad: submission.is_course_graduate,
+        vat_status: normalizedVatStatus,
+        skills: mappedSkills,
+        languages: mappedLanguages,
+        notes: submission.notes || "",
       })
 
       if (insertError) throw insertError
