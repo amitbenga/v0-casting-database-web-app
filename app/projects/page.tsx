@@ -111,7 +111,7 @@ export default function ProjectsPage() {
                 variant={statusFilter === "all" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setStatusFilter("all")}
-                className="text-xs md:text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="text-xs md:text-sm"
               >
                 הכל
               </Button>
@@ -119,7 +119,7 @@ export default function ProjectsPage() {
                 variant={statusFilter === "active" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setStatusFilter("active")}
-                className="text-xs md:text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="text-xs md:text-sm"
               >
                 פעיל
               </Button>
@@ -127,7 +127,7 @@ export default function ProjectsPage() {
                 variant={statusFilter === "draft" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setStatusFilter("draft")}
-                className="text-xs md:text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="text-xs md:text-sm"
               >
                 טיוטה
               </Button>
@@ -135,7 +135,7 @@ export default function ProjectsPage() {
                 variant={statusFilter === "completed" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setStatusFilter("completed")}
-                className="text-xs md:text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="text-xs md:text-sm"
               >
                 הושלם
               </Button>
@@ -183,19 +183,19 @@ export default function ProjectsPage() {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-colors">
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" dir="rtl">
-                      <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent focus:bg-accent">
-                        <Link href={`/projects/${project.id}`} className="w-full">צפייה בפרטים</Link>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        <Link href={`/projects/${project.id}`}>צפייה בפרטים</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer hover:bg-accent focus:bg-accent">עריכת פרויקט</DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer hover:bg-accent focus:bg-accent">שכפול</DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer hover:bg-accent focus:bg-accent">ייצוא</DropdownMenuItem>
+                      <DropdownMenuItem>עריכת פרויקט</DropdownMenuItem>
+                      <DropdownMenuItem>שכפול</DropdownMenuItem>
+                      <DropdownMenuItem>ייצוא</DropdownMenuItem>
                       <DropdownMenuItem
-                        className="text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive"
+                        className="text-destructive"
                         onClick={(e) => {
                           e.preventDefault()
                           handleDeleteProject(project.id)

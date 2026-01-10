@@ -13,14 +13,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { AppHeader } from "@/components/app-header"
 import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { QuickAddToProjectDialog } from "@/components/quick-add-to-project-dialog"
-import { QuickAddToFolderDialog } from "@/components/quick-add-to-folder-dialog"
-import { useRouter } from "next/navigation"
 
 const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
 
 export default function ActorsDatabase() {
-  const router = useRouter()
   const [actors, setActors] = useState<Actor[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -28,11 +24,6 @@ export default function ActorsDatabase() {
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all")
-
-  // Dialog states
-  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
-  const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false)
-  const [currentActor, setCurrentActor] = useState<Actor | null>(null)
   const [filters, setFilters] = useState<FilterState>({
     gender: [],
     ageMin: 18,
@@ -45,11 +36,12 @@ export default function ActorsDatabase() {
     sortBy: "newest",
   })
 
-  async function loadData() {
-    try {
-      const supabase = createClient()
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const supabase = createClient()
 
-      const { data: actorsData, error: actorsError } = await supabase.from("actors").select("*").order("full_name")
+        const { data: actorsData, error: actorsError } = await supabase.from("actors").select("*").order("full_name")
 
         if (actorsError) {
           console.error("[v0] Error loading actors:", actorsError)
@@ -87,8 +79,6 @@ export default function ActorsDatabase() {
         } else if (favoritesData) {
           setFavorites(favoritesData.map((fav) => fav.actor_id))
         }
-
-
       } catch (error) {
         console.error("[v0] Error:", error)
       } finally {
@@ -96,7 +86,6 @@ export default function ActorsDatabase() {
       }
     }
 
-  useEffect(() => {
     loadData()
   }, [])
 
@@ -137,30 +126,44 @@ export default function ActorsDatabase() {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
   }
 
-  const handleDeleteActor = async (id: string) => {
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.from("actors").delete().eq("id", id)
-      if (error) throw error
-      setActors((prev) => prev.filter((a) => a.id !== id))
-    } catch (error) {
-      console.error("[v0] Error deleting actor:", error)
-      alert("שגיאה במחיקת שחקן")
-    }
-  }
-
   const handleAddToProject = (actor: Actor) => {
-    setCurrentActor(actor)
-    setIsProjectDialogOpen(true)
+    console.log("[v0] Add to project:", actor.full_name)
+    // TODO: פתיחת דיאלוג לבחירת פרויקט
+    alert(`הוסף את ${actor.full_name} לפרויקט (בקרוב)`)
   }
 
   const handleAddToFolder = (actor: Actor) => {
-    setCurrentActor(actor)
-    setIsFolderDialogOpen(true)
+    console.log("[v0] Add to folder:", actor.full_name)
+    // TODO: פתיחת דיאלוג לבחירת תיקייה
+    alert(`הוסף את ${actor.full_name} לתיקייה (בקרוב)`)
   }
 
-  const handleEditActor = (actor: Actor) => {
-    router.push(`/actors/${actor.id}/edit`)
+  const handleEdit = (actor: Actor) => {
+    console.log("[v0] Edit actor:", actor.full_name)
+    // Navigate to edit page
+    window.location.href = `/actors/${actor.id}`
+  }
+
+  const handleDelete = async (id: string) => {
+    console.log("[v0] Delete actor:", id)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("actors").delete().eq("id", id)
+
+      if (error) {
+        console.error("[v0] Error deleting actor:", error)
+        alert("שגיאה במחיקת השחקן")
+        return
+      }
+
+      // Remove from state
+      setActors((prev) => prev.filter((actor) => actor.id !== id))
+      setFavorites((prev) => prev.filter((favId) => favId !== id))
+      setSelectedActors((prev) => prev.filter((actorId) => actorId !== id))
+    } catch (error) {
+      console.error("[v0] Error:", error)
+      alert("שגיאה במחיקת השחקן")
+    }
   }
 
   const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
@@ -329,8 +332,8 @@ export default function ActorsDatabase() {
                       onToggleSelect={handleToggleSelect}
                       onAddToProject={handleAddToProject}
                       onAddToFolder={handleAddToFolder}
-                      onDelete={handleDeleteActor}
-                      onEdit={handleEditActor}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
@@ -354,8 +357,8 @@ export default function ActorsDatabase() {
                       onToggleSelect={handleToggleSelect}
                       onAddToProject={handleAddToProject}
                       onAddToFolder={handleAddToFolder}
-                      onDelete={handleDeleteActor}
-                      onEdit={handleEditActor}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
@@ -374,24 +377,6 @@ export default function ActorsDatabase() {
           </div>
         </div>
       </div>
-
-      {/* Dialogs */}
-      <QuickAddToProjectDialog
-        open={isProjectDialogOpen}
-        onOpenChange={setIsProjectDialogOpen}
-        actor={currentActor}
-        onSuccess={() => {
-          alert("השחקן נוסף לפרויקט בהצלחה")
-        }}
-      />
-      <QuickAddToFolderDialog
-        open={isFolderDialogOpen}
-        onOpenChange={setIsFolderDialogOpen}
-        actor={currentActor}
-        onSuccess={() => {
-          alert("השחקן נוסף לתיקייה בהצלחה")
-        }}
-      />
     </div>
   )
 }

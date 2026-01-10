@@ -3,8 +3,8 @@
 import type React from "react"
 
 import { useState, useRef } from "react"
-import { useRouter } from "next/navigation"
 import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -40,62 +40,95 @@ export function ActorCard({
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const router = useRouter()
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    // Only navigate if clicking on the card itself, not on interactive elements
-    const target = e.target as HTMLElement
-    if (!target.closest('button') && !target.closest('[role="menuitem"]')) {
-      router.push(`/actors/${actor.id}`)
-    }
-  }
-
   const currentYear = new Date().getFullYear()
   const age = currentYear - actor.birth_year
+
+  const handleNavigateToProfile = () => {
+    router.push(`/actors/${actor.id}`)
+  }
 
   const handlePlayAudio = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
-    console.log("[v0] Play button clicked, audio URL:", actor.voice_sample_url)
-
     if (!actor.voice_sample_url) {
-      console.log("[v0] No audio URL available")
       return
     }
 
     if (!audioRef.current) {
       audioRef.current = new Audio(actor.voice_sample_url)
       audioRef.current.addEventListener("ended", () => {
-        console.log("[v0] Audio ended")
         setIsPlaying(false)
       })
-      audioRef.current.addEventListener("error", (error) => {
-        console.error("[v0] Audio error:", error)
+      audioRef.current.addEventListener("error", () => {
         setIsPlaying(false)
       })
     }
 
     if (isPlaying) {
-      console.log("[v0] Pausing audio")
       audioRef.current.pause()
       setIsPlaying(false)
     } else {
-      console.log("[v0] Playing audio")
-      audioRef.current.play().catch((error) => {
-        console.error("[v0] Error playing audio:", error)
+      audioRef.current.play().catch(() => {
+        setIsPlaying(false)
       })
       setIsPlaying(true)
     }
   }
 
+  const handleBookmark = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onAddToProject) {
+      onAddToProject(actor)
+    }
+  }
+
+  const handleViewDetails = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    router.push(`/actors/${actor.id}`)
+  }
+
+  const handleAddToProject = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onAddToProject) {
+      onAddToProject(actor)
+    }
+  }
+
+  const handleAddToFolder = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onAddToFolder) {
+      onAddToFolder(actor)
+    }
+  }
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onEdit) {
+      onEdit(actor)
+    }
+  }
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onDelete && confirm(`האם אתה בטוח שברצונך למחוק את ${actor.full_name}?`)) {
+      onDelete(actor.id)
+    }
+  }
+
   return (
     <Card
-      className="group relative overflow-hidden transition-all hover:shadow-lg cursor-pointer"
+      className="group relative overflow-hidden transition-all hover:shadow-lg"
       onMouseEnter={() => setShowOverlay(true)}
       onMouseLeave={() => setShowOverlay(false)}
-      onClick={handleCardClick}
     >
-      {/* Image */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-muted">
+      <div className="relative aspect-[3/4] overflow-hidden bg-muted cursor-pointer" onClick={handleNavigateToProfile}>
         {actor.image_url ? (
           <img
             src={actor.image_url || "/placeholder.svg"}
@@ -181,7 +214,7 @@ export function ActorCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -193,7 +226,7 @@ export function ActorCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200"
             onClick={handlePlayAudio}
             disabled={!actor.voice_sample_url}
           >
@@ -206,12 +239,8 @@ export function ActorCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-colors"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              onAddToProject?.(actor)
-            }}
+            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200"
+            onClick={handleBookmark}
           >
             <Bookmark className="h-3.5 w-3.5 md:h-4 md:w-4" />
           </Button>
@@ -225,52 +254,65 @@ export function ActorCard({
             onClick={(e) => e.stopPropagation()}
             className="h-4 w-4"
           />
-          <span className="font-medium text-xs md:text-sm flex-1 line-clamp-1">{actor.full_name}</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-              <Button size="icon" variant="ghost" className="h-6 w-6 hover:bg-accent hover:text-accent-foreground transition-colors">
+          <span
+            className="font-medium text-xs md:text-sm flex-1 line-clamp-1 cursor-pointer hover:text-primary transition-colors"
+            onClick={handleNavigateToProfile}
+          >
+            {actor.full_name}
+          </span>
+          <DropdownMenu dir="rtl">
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 hover:bg-primary/10 hover:text-primary transition-all duration-200"
+              >
                 <MoreVertical className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" dir="rtl" className="min-w-[160px]">
-              <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent focus:bg-accent">
-                <Link href={`/actors/${actor.id}`} className="w-full">פרטים מלאים</Link>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleViewDetails(e as any)
+                }}
+                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
+              >
+                פרטים מלאים
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="cursor-pointer hover:bg-accent focus:bg-accent"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAddToProject?.(actor)
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleAddToProject(e as any)
                 }}
+                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
               >
                 הוסף לפרויקט
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="cursor-pointer hover:bg-accent focus:bg-accent"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAddToFolder?.(actor)
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleAddToFolder(e as any)
                 }}
+                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
               >
                 הוסף לתיקייה
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="cursor-pointer hover:bg-accent focus:bg-accent"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onEdit?.(actor)
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleEdit(e as any)
                 }}
+                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
               >
                 ערוך
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (confirm(`האם אתה בטוח שברצונך למחוק את ${actor.full_name}?`)) {
-                    onDelete?.(actor.id)
-                  }
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleDelete(e as any)
                 }}
+                className="cursor-pointer text-destructive hover:bg-destructive/20 hover:text-destructive focus:bg-destructive/20 focus:text-destructive transition-colors"
               >
                 מחיקה
               </DropdownMenuItem>

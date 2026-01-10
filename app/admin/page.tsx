@@ -22,29 +22,34 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
-import { SKILLS_LIST, LANGUAGES_LIST } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 
 interface ActorSubmission {
   id: string
   full_name: string
-  gender: "male" | "female"
+  gender: string // "זכר" או "נקבה" בעברית
   birth_year: number
   phone?: string
   email?: string
+  normalized_email?: string
+  normalized_phone?: string
   image_url?: string
   voice_sample_url?: string
-  is_singer: boolean
-  is_course_graduate: boolean
+  is_singer?: boolean
+  is_course_graduate?: boolean
   vat_status?: string
   skills?: string[]
+  skills_other?: string
   languages?: string[]
+  languages_other?: string
   notes?: string
-  status: "pending" | "approved" | "rejected"
-  submitted_at: string
-  reviewed_at?: string
-  reviewed_by?: string
+  review_status: "pending" | "approved" | "rejected"
+  match_status?: string
+  matched_actor_id?: string
+  merge_report?: any
+  raw_payload?: any
+  created_at: string
 }
 
 export default function AdminPage() {
@@ -64,12 +69,15 @@ export default function AdminPage() {
   async function loadSubmissions() {
     try {
       const supabase = createBrowserClient()
+
       const { data, error } = await supabase
         .from("actor_submissions")
         .select("*")
-        .order("submitted_at", { ascending: false })
+        .order("created_at", { ascending: false })
 
       if (error) throw error
+
+      console.log("[v0] Loaded submissions:", data)
       setSubmissions(data || [])
     } catch (error) {
       console.error("[v0] Error loading submissions:", error)
@@ -82,57 +90,23 @@ export default function AdminPage() {
     try {
       const supabase = createBrowserClient()
 
-      // Map skills and languages to the format expected by the actors table (Skill[] and Language[])
-      const mappedSkills = (submission.skills || []).map((skillLabel) => {
-        const found = SKILLS_LIST.find((s) => s.label === skillLabel)
-        return found || { id: Math.random().toString(36).substr(2, 9), key: skillLabel, label: skillLabel }
-      })
+      const genderInEnglish = submission.gender === "זכר" ? "male" : "female"
 
-      const mappedLanguages = (submission.languages || []).map((langLabel) => {
-        const found = LANGUAGES_LIST.find((l) => l.label === langLabel)
-        return found || { id: Math.random().toString(36).substr(2, 9), key: langLabel, label: langLabel }
-      })
-
-      // Normalize gender and vat_status to handle both Hebrew (old) and English (new) values
-      let normalizedGender = submission.gender;
-      if (submission.gender === "זכר") normalizedGender = "male";
-      else if (submission.gender === "נקבה") normalizedGender = "female";
-      // Ensure it's one of the allowed values, default to male if unknown
-      if (normalizedGender !== "male" && normalizedGender !== "female") {
-        normalizedGender = "male";
-      }
-      
-      let normalizedVatStatus = submission.vat_status;
-      // Map all possible variations to the allowed DB values
-      const vatMap: Record<string, string> = {
-        "עוסק פטור": "ptor",
-        "exempt": "ptor",
-        "ptor": "ptor",
-        "עוסק מורשה": "murshe",
-        "licensed": "murshe",
-        "murshe": "murshe",
-        "שכר אמנים": "artist_salary",
-        "artist_salary": "artist_salary",
-        "none": "ptor",
-        "לא רשום": "ptor"
-      };
-      
-      normalizedVatStatus = vatMap[submission.vat_status || ""] || "ptor";
-
+      // שינוי is_course_graduate ל-is_course_grad בהתאמה לשם השדה בטבלת actors
       const { error: insertError } = await supabase.from("actors").insert({
         full_name: submission.full_name,
-        gender: normalizedGender,
+        gender: genderInEnglish,
         birth_year: submission.birth_year,
-        phone: submission.phone || "",
-        email: submission.email || "",
-        image_url: submission.image_url || "",
-        voice_sample_url: submission.voice_sample_url || "",
-        is_singer: submission.is_singer,
-        is_course_grad: submission.is_course_graduate,
-        vat_status: normalizedVatStatus,
-        skills: mappedSkills,
-        languages: mappedLanguages,
-        notes: submission.notes || "",
+        phone: submission.phone,
+        email: submission.email,
+        image_url: submission.image_url,
+        voice_sample_url: submission.voice_sample_url,
+        is_singer: submission.is_singer || false,
+        is_course_grad: submission.is_course_graduate || false,
+        vat_status: submission.vat_status,
+        skills: submission.skills,
+        languages: submission.languages,
+        notes: submission.notes,
       })
 
       if (insertError) throw insertError
@@ -140,9 +114,7 @@ export default function AdminPage() {
       const { error: updateError } = await supabase
         .from("actor_submissions")
         .update({
-          status: "approved",
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: "admin",
+          review_status: "approved",
         })
         .eq("id", submission.id)
 
@@ -164,9 +136,7 @@ export default function AdminPage() {
       const { error } = await supabase
         .from("actor_submissions")
         .update({
-          status: "rejected",
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: "admin",
+          review_status: "rejected",
           notes: rejectReason ? `${submission.notes || ""}\n\nסיבת דחייה: ${rejectReason}` : submission.notes,
         })
         .eq("id", submission.id)
@@ -206,9 +176,9 @@ export default function AdminPage() {
     }
   }
 
-  const pendingSubmissions = submissions.filter((s) => s.status === "pending")
-  const approvedSubmissions = submissions.filter((s) => s.status === "approved")
-  const rejectedSubmissions = submissions.filter((s) => s.status === "rejected")
+  const pendingSubmissions = submissions.filter((s) => s.review_status === "pending")
+  const approvedSubmissions = submissions.filter((s) => s.review_status === "approved")
+  const rejectedSubmissions = submissions.filter((s) => s.review_status === "rejected")
 
   if (loading) {
     return (
@@ -318,7 +288,7 @@ export default function AdminPage() {
 
       {/* Review Dialog */}
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-        <DialogContent className="sm:max-width-[500px]" dir="rtl">
+        <DialogContent className="sm:max-w-[500px]" dir="rtl">
           <DialogHeader>
             <DialogTitle>{reviewAction === "approve" ? "אישור בקשה" : "דחיית בקשה"}</DialogTitle>
           </DialogHeader>
@@ -405,7 +375,7 @@ function SubmissionCard({
               <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <User className="h-4 w-4" />
-                  {submission.gender === "male" ? "זכר" : "נקבה"}
+                  {submission.gender}
                 </span>
                 <span className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
@@ -427,16 +397,16 @@ function SubmissionCard({
             </div>
             <Badge
               variant={
-                submission.status === "pending"
+                submission.review_status === "pending"
                   ? "default"
-                  : submission.status === "approved"
+                  : submission.review_status === "approved"
                     ? "success"
                     : "destructive"
               }
             >
-              {submission.status === "pending" && "ממתין"}
-              {submission.status === "approved" && "אושר"}
-              {submission.status === "rejected" && "נדחה"}
+              {submission.review_status === "pending" && "ממתין"}
+              {submission.review_status === "approved" && "אושר"}
+              {submission.review_status === "rejected" && "נדחה"}
             </Badge>
           </div>
 
@@ -458,11 +428,7 @@ function SubmissionCard({
               {submission.vat_status && (
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-primary" />
-                  <span>
-                    {submission.vat_status === "registered" && "עוסק מורשה"}
-                    {submission.vat_status === "exempt" && "עוסק פטור"}
-                    {submission.vat_status === "not_registered" && "לא רשום"}
-                  </span>
+                  <span>{submission.vat_status}</span>
                 </div>
               )}
             </div>
@@ -513,22 +479,17 @@ function SubmissionCard({
                 {isPlaying ? "עצור" : "השמע דוגמה"}
               </Button>
             )}
-            {submission.status === "pending" && onReview && (
+            {submission.review_status === "pending" && onReview && (
               <>
-                <Button size="sm" onClick={() => onReview("approve")} className="bg-green-600 hover:bg-green-700 transition-colors">
+                <Button size="sm" onClick={() => onReview("approve")} className="bg-green-600 hover:bg-green-700">
                   <Check className="h-4 w-4 ml-2" />
                   אשר
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => onReview("reject")} className="hover:bg-destructive/90 transition-colors">
+                <Button size="sm" variant="destructive" onClick={() => onReview("reject")}>
                   <X className="h-4 w-4 ml-2" />
                   דחה
                 </Button>
               </>
-            )}
-            {submission.reviewed_at && (
-              <span className="text-xs text-muted-foreground mr-auto">
-                נבדק ב-{new Date(submission.reviewed_at).toLocaleDateString("he-IL")}
-              </span>
             )}
           </div>
         </div>

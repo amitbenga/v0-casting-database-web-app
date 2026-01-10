@@ -302,9 +302,9 @@ export default function ActorIntakePage() {
                           <SelectValue placeholder="בחר מעמד" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="murshe">עוסק מורשה</SelectItem>
-                          <SelectItem value="ptor">עוסק פטור</SelectItem>
-                          <SelectItem value="artist_salary">שכר אמנים</SelectItem>
+                          <SelectItem value="licensed">עוסק מורשה</SelectItem>
+                          <SelectItem value="exempt">עוסק פטור</SelectItem>
+                          <SelectItem value="none">לא רשום</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
