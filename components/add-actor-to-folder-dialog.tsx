@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Search } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 
 interface AddActorToFolderDialogProps {
   open: boolean
@@ -34,7 +34,7 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
   async function loadActors() {
     try {
       setLoading(true)
-      const supabase = createBrowserClient()
+      const supabase = createClient()
 
       const [actorsResult, folderActorsResult] = await Promise.all([
         supabase.from("actors").select("*").order("full_name"),
@@ -60,7 +60,7 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
     setLoading(true)
 
     try {
-      const supabase = createBrowserClient()
+      const supabase = createClient()
 
       const { data: existingAssignments } = await supabase
         .from("folder_actors")
@@ -104,6 +104,14 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
   }
 
+  const getGenderLabel = (gender: string) => {
+    return gender === "male" ? "זכר" : gender === "female" ? "נקבה" : gender
+  }
+
+  const getGenderStyle = (gender: string) => {
+    return gender === "male" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh]">
@@ -141,26 +149,24 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
                   <div className="flex items-center gap-4">
                     <Checkbox checked={selectedActors.includes(actor.id)} />
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                      {actor.photo_url ? (
+                      {actor.image_url ? (
                         <img
-                          src={actor.photo_url || "/placeholder.svg"}
+                          src={actor.image_url || "/placeholder.svg"}
                           alt={actor.full_name}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <div
-                          className={`w-full h-full flex items-center justify-center text-2xl ${
-                            actor.gender === "זכר" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
-                          }`}
+                          className={`w-full h-full flex items-center justify-center text-2xl ${getGenderStyle(actor.gender)}`}
                         >
-                          {actor.gender === "זכר" ? "♂" : "♀"}
+                          {actor.gender === "male" ? "♂" : "♀"}
                         </div>
                       )}
                     </div>
                     <div className="flex-1">
                       <p className="font-medium">{actor.full_name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {actor.gender}
+                        {getGenderLabel(actor.gender)}
                         {currentAge && ` • גיל ${currentAge}`}
                       </p>
                     </div>

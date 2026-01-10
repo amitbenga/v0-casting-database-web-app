@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Plus, Search, MoreVertical, Folder, Trash2 } from "lucide-react"
+import { ArrowLeft, Plus, Search, MoreVertical, Folder, Trash2, Play, Pause } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,6 +20,8 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddActorDialog, setShowAddActorDialog] = useState(false)
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     loadFolder()
@@ -104,6 +108,38 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       actor.email?.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
+  const handlePlayAudio = (e: React.MouseEvent, actorId: string, voiceUrl: string | null) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (!voiceUrl) {
+      alert("אין קובץ קול לשחקן זה")
+      return
+    }
+
+    if (playingAudioId === actorId) {
+      // Stop playing
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+      setPlayingAudioId(null)
+    } else {
+      // Start playing
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      const audio = new Audio(voiceUrl)
+      audioRef.current = audio
+      audio.play().catch((error) => {
+        console.error("[v0] Error playing audio:", error)
+        alert("שגיאה בהשמעת הקול")
+      })
+      audio.onended = () => setPlayingAudioId(null)
+      setPlayingAudioId(actorId)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -142,6 +178,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
                 </div>
                 <div className="min-w-0">
                   <h1 className="text-xl md:text-2xl font-semibold truncate">{folder.name}</h1>
+                  {folder.description && <p className="text-sm text-muted-foreground">{folder.description}</p>}
                   <p className="text-sm text-muted-foreground">{actors.length} שחקנים</p>
                 </div>
               </div>
@@ -202,23 +239,33 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
                 <Card key={actor.id} className="group relative overflow-hidden hover:shadow-lg transition-shadow">
                   <Link href={`/actors/${actor.id}`}>
                     <div className="aspect-[3/4] relative overflow-hidden bg-muted">
-                      {actor.photo_url ? (
+                      {actor.image_url ? (
                         <img
-                          src={actor.photo_url || "/placeholder.svg"}
+                          src={actor.image_url || "/placeholder.svg"}
                           alt={actor.full_name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
                         <div
                           className={`w-full h-full flex items-center justify-center text-6xl ${
-                            actor.gender === "זכר" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
+                            actor.gender === "male" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
                           }`}
                         >
-                          {actor.gender === "זכר" ? "♂" : "♀"}
+                          {actor.gender === "male" ? "♂" : "♀"}
                         </div>
                       )}
                     </div>
                   </Link>
+
+                  {actor.voice_sample_url && (
+                    <button
+                      onClick={(e) => handlePlayAudio(e, actor.id, actor.voice_sample_url)}
+                      className="absolute top-3 left-3 p-2 rounded-full bg-white/90 hover:bg-white text-primary shadow-md transition-all duration-200 hover:scale-110"
+                      title={playingAudioId === actor.id ? "עצור נגינה" : "השמע דוגמית קול"}
+                    >
+                      {playingAudioId === actor.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </button>
+                  )}
 
                   <div className="p-4">
                     <Link href={`/actors/${actor.id}`}>
@@ -226,7 +273,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
                     </Link>
                     <div className="text-sm text-muted-foreground space-y-1">
                       <p>
-                        {actor.gender}
+                        {actor.gender === "male" ? "זכר" : "נקבה"}
                         {currentAge && ` • גיל ${currentAge}`}
                       </p>
                       {actor.phone && (

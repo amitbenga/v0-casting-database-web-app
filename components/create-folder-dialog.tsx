@@ -44,7 +44,7 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
         .insert([
           {
             name: formData.name,
-            description: formData.description,
+            description: formData.description || null,
             color: formData.color,
           },
         ])
@@ -91,13 +91,14 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">תיאור</Label>
+            <Label htmlFor="description">תיאור (אופציונלי)</Label>
             <Textarea
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="תיאור קצר של התיקייה..."
-              className="min-h-[80px]"
+              rows={3}
+              dir="rtl"
             />
           </div>
 

@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { AppHeader } from "@/components/app-header"
 import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SelectFolderDialog } from "@/components/select-folder-dialog"
 
 const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
 
@@ -24,6 +25,8 @@ export default function ActorsDatabase() {
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all")
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [selectedActorForFolder, setSelectedActorForFolder] = useState<Actor | null>(null)
   const [filters, setFilters] = useState<FilterState>({
     gender: [],
     ageMin: 18,
@@ -134,8 +137,8 @@ export default function ActorsDatabase() {
 
   const handleAddToFolder = (actor: Actor) => {
     console.log("[v0] Add to folder:", actor.full_name)
-    // TODO: פתיחת דיאלוג לבחירת תיקייה
-    alert(`הוסף את ${actor.full_name} לתיקייה (בקרוב)`)
+    setSelectedActorForFolder(actor)
+    setFolderDialogOpen(true)
   }
 
   const handleEdit = (actor: Actor) => {
@@ -377,6 +380,15 @@ export default function ActorsDatabase() {
           </div>
         </div>
       </div>
+
+      {selectedActorForFolder && (
+        <SelectFolderDialog
+          open={folderDialogOpen}
+          onOpenChange={setFolderDialogOpen}
+          actorIds={[selectedActorForFolder.id]}
+          actorNames={[selectedActorForFolder.full_name]}
+        />
+      )}
     </div>
   )
 }
