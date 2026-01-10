@@ -515,11 +515,11 @@ function SubmissionCard({
             )}
             {submission.status === "pending" && onReview && (
               <>
-                <Button size="sm" onClick={() => onReview("approve")} className="bg-green-600 hover:bg-green-700">
+                <Button size="sm" onClick={() => onReview("approve")} className="bg-green-600 hover:bg-green-700 transition-colors">
                   <Check className="h-4 w-4 ml-2" />
                   אשר
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => onReview("reject")}>
+                <Button size="sm" variant="destructive" onClick={() => onReview("reject")} className="hover:bg-destructive/90 transition-colors">
                   <X className="h-4 w-4 ml-2" />
                   דחה
                 </Button>

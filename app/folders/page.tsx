@@ -139,18 +139,18 @@ export default function FoldersPage() {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-accent-foreground transition-all">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Link href={`/folders/${folder.id}`}>צפייה בתיקייה</Link>
+                    <DropdownMenuContent align="end" dir="rtl">
+                      <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent focus:bg-accent">
+                        <Link href={`/folders/${folder.id}`} className="w-full">צפייה בתיקייה</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem>עריכת תיקייה</DropdownMenuItem>
-                      <DropdownMenuItem>שכפול</DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer hover:bg-accent focus:bg-accent">עריכת תיקייה</DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer hover:bg-accent focus:bg-accent">שכפול</DropdownMenuItem>
                       <DropdownMenuItem
-                        className="text-destructive"
+                        className="text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive"
                         onClick={(e) => {
                           e.preventDefault()
                           handleDeleteFolder(folder.id)

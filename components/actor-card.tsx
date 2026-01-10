@@ -181,7 +181,7 @@ export function ActorCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8"
+            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-colors"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -193,7 +193,7 @@ export function ActorCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8"
+            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-colors"
             onClick={handlePlayAudio}
             disabled={!actor.voice_sample_url}
           >
@@ -206,7 +206,7 @@ export function ActorCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8"
+            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-colors"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -228,15 +228,16 @@ export function ActorCard({
           <span className="font-medium text-xs md:text-sm flex-1 line-clamp-1">{actor.full_name}</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-              <Button size="icon" variant="ghost" className="h-6 w-6">
+              <Button size="icon" variant="ghost" className="h-6 w-6 hover:bg-accent hover:text-accent-foreground transition-colors">
                 <MoreVertical className="h-3.5 w-3.5 md:h-4 md:w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" dir="rtl">
-              <DropdownMenuItem asChild>
-                <Link href={`/actors/${actor.id}`}>פרטים מלאים</Link>
+            <DropdownMenuContent align="end" dir="rtl" className="min-w-[160px]">
+              <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent focus:bg-accent">
+                <Link href={`/actors/${actor.id}`} className="w-full">פרטים מלאים</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
+                className="cursor-pointer hover:bg-accent focus:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
                   onAddToProject?.(actor)
@@ -245,6 +246,7 @@ export function ActorCard({
                 הוסף לפרויקט
               </DropdownMenuItem>
               <DropdownMenuItem
+                className="cursor-pointer hover:bg-accent focus:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
                   onAddToFolder?.(actor)
@@ -253,6 +255,7 @@ export function ActorCard({
                 הוסף לתיקייה
               </DropdownMenuItem>
               <DropdownMenuItem
+                className="cursor-pointer hover:bg-accent focus:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
                   onEdit?.(actor)
@@ -261,7 +264,7 @@ export function ActorCard({
                 ערוך
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="text-destructive"
+                className="text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive"
                 onClick={(e) => {
                   e.stopPropagation()
                   if (confirm(`האם אתה בטוח שברצונך למחוק את ${actor.full_name}?`)) {
