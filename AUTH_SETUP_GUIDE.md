@@ -25,7 +25,7 @@
 3. לחץ על **Add User** (או **Invite User**)
 
 #### משתמש 1: Leni (Admin)
-```
+\`\`\`
 Email: leni@madrasafree.org
 Password: [בחר סיסמה חזקה - לפחות 8 תווים]
 User Metadata (JSON):
@@ -33,10 +33,10 @@ User Metadata (JSON):
   "full_name": "Leni",
   "role": "admin"
 }
-```
+\`\`\`
 
 #### משתמש 2: Sharon (Admin)
-```
+\`\`\`
 Email: sharon@madrasafree.org
 Password: [בחר סיסמה חזקה - לפחות 8 תווים]
 User Metadata (JSON):
@@ -44,7 +44,7 @@ User Metadata (JSON):
   "full_name": "Sharon",
   "role": "admin"
 }
-```
+\`\`\`
 
 **חשוב:** שמור את הסיסמאות במקום מאובטח!
 
@@ -53,11 +53,11 @@ User Metadata (JSON):
 ### 3. בדיקת המערכת
 
 1. **Deploy את הקוד החדש ל-Vercel**
-   ```bash
+   \`\`\`bash
    git add .
    git commit -m "feat: add authentication system"
    git push origin main
-   ```
+   \`\`\`
 
 2. **המתן לסיום ה-Deployment** (כ-2-3 דקות)
 
@@ -104,9 +104,9 @@ User Metadata (JSON):
 
 ### בעיה: RLS חוסם פעולות
 **פתרון:** ודא שהסקריפט SQL רץ בהצלחה. בדוק:
-```sql
+\`\`\`sql
 SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';
-```
+\`\`\`
 כל הטבלאות צריכות להיות עם `rowsecurity = true`
 
 ---
@@ -116,12 +116,12 @@ SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';
 1. Supabase Dashboard → Authentication → Users → Add User
 2. הזן Email, Password
 3. הוסף User Metadata:
-   ```json
+   \`\`\`json
    {
      "full_name": "שם המשתמש",
      "role": "admin"  // או "viewer"
    }
-   ```
+   \`\`\`
 4. הפרופיל ייווצר אוטומטית!
 
 ---

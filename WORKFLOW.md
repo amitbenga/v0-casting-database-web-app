@@ -24,7 +24,7 @@
 - ✅ אינטגרציות עם APIs חיצוניים
 
 **קבצים שManus אחראי עליהם:**
-```
+\`\`\`
 app/
   ├── page.tsx                    # Main actors page - data fetching & handlers
   ├── admin/page.tsx              # Admin approval logic
@@ -40,7 +40,7 @@ lib/
 components/
   ├── *-dialog.tsx                # Dialog logic & data submission
   └── actor-edit-form.tsx         # Form validation & submission
-```
+\`\`\`
 
 ---
 
@@ -56,7 +56,7 @@ components/
 - ✅ shadcn/ui components
 
 **קבצים שv0 אחראי עליהם:**
-```
+\`\`\`
 components/ui/                    # shadcn/ui components
   ├── button.tsx
   ├── card.tsx
@@ -70,17 +70,17 @@ components/
 
 client/src/
   └── index.css                   # Global styles & theme
-```
+\`\`\`
 
 ---
 
 ## 🚦 כללי עבודה
 
 ### כלל 1: תמיד עשה Pull לפני שינויים
-```bash
+\`\`\`bash
 cd v0-casting-database-web-app
 git pull origin main
-```
+\`\`\`
 
 ### כלל 2: הודע על שינויים מתוכננים
 לפני שמתחילים לעבוד על קובץ, **תמיד** תודיע:
@@ -162,7 +162,7 @@ git pull origin main
 - v0 דחף commit `def456` עם שינויי UI, אבל מחק בטעות את ה-logic של Manus
 
 **פתרון:**
-```bash
+\`\`\`bash
 # Manus עושה:
 cd v0-casting-database-web-app
 git pull origin main
@@ -174,7 +174,7 @@ git cherry-pick abc123  # מחזיר את Manus
 # עכשיו מוסיף ידנית את השינויים של v0 שהיו טובים
 
 git push origin main
-```
+\`\`\`
 
 ---
 
@@ -187,7 +187,7 @@ git push origin main
 - `app/page.tsx` (שינוי `handleAddToProject`)
 
 **קוד שיכתוב:**
-```typescript
+\`\`\`typescript
 // components/quick-add-to-project-dialog.tsx
 export function QuickAddToProjectDialog({ actor, open, onOpenChange }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -219,7 +219,7 @@ export function QuickAddToProjectDialog({ actor, open, onOpenChange }: Props) {
     </Dialog>
   );
 }
-```
+\`\`\`
 
 ---
 
@@ -229,7 +229,7 @@ export function QuickAddToProjectDialog({ actor, open, onOpenChange }: Props) {
 - `components/quick-add-to-project-dialog.tsx` (styling בלבד)
 
 **קוד שישנה:**
-```typescript
+\`\`\`typescript
 // v0 מוסיף רק classes ו-styling:
 return (
   <Dialog open={open} onOpenChange={onOpenChange}>
@@ -261,7 +261,7 @@ return (
     </DialogContent>
   </Dialog>
 );
-```
+\`\`\`
 
 **שים לב:** v0 **לא** שינה:
 - ❌ את ה-`useState`
