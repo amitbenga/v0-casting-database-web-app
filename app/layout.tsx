@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Rubik } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+import { AuthProvider } from "@/contexts/AuthContext"
 
 const rubik = Rubik({ subsets: ["hebrew", "latin"] })
 
@@ -37,7 +38,9 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl">
       <body className={`${rubik.className} antialiased`}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <Analytics />
       </body>
     </html>

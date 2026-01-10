@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 interface ActorSubmission {
   id: string
@@ -52,7 +53,7 @@ interface ActorSubmission {
   created_at: string
 }
 
-export default function AdminPage() {
+function AdminPageContent() {
   const [submissions, setSubmissions] = useState<ActorSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
@@ -495,5 +496,13 @@ function SubmissionCard({
         </div>
       </div>
     </Card>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <AdminPageContent />
+    </ProtectedRoute>
   )
 }

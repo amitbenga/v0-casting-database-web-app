@@ -14,10 +14,11 @@ import { AppHeader } from "@/components/app-header"
 import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectFolderDialog } from "@/components/select-folder-dialog"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
 
-export default function ActorsDatabase() {
+function ActorsDatabaseContent() {
   const [actors, setActors] = useState<Actor[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -390,5 +391,13 @@ export default function ActorsDatabase() {
         />
       )}
     </div>
+  )
+}
+
+export default function ActorsDatabase() {
+  return (
+    <ProtectedRoute>
+      <ActorsDatabaseContent />
+    </ProtectedRoute>
   )
 }
