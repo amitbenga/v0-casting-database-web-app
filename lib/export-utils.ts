@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
+import { utils, writeFileXLSX } from "xlsx";
 import type { Actor } from "@/lib/types";
 
 // Helper function to reverse Hebrew text for PDF (RTL support)
@@ -229,7 +229,7 @@ export const exportActorToExcel = (actor: Actor) => {
     { שדה: "הערות", ערך: actor.notes || "לא זמין" },
   ];
 
-  const ws = XLSX.utils.json_to_sheet(data);
+  const ws = utils.json_to_sheet(data);
   
   // הגדרת רוחב עמודות
   ws["!cols"] = [
@@ -237,11 +237,11 @@ export const exportActorToExcel = (actor: Actor) => {
     { wch: 50 }, // ערך
   ];
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "פרופיל שחקן");
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, ws, "פרופיל שחקן");
 
   const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
-  XLSX.writeFile(wb, `actor_${filename}.xlsx`);
+  writeFileXLSX(wb, `actor_${filename}.xlsx`);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
@@ -271,7 +271,7 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
     "הערות": actor.notes || "לא זמין",
   }));
 
-  const ws = XLSX.utils.json_to_sheet(data);
+  const ws = utils.json_to_sheet(data);
   
   // הגדרת רוחב עמודות
   ws["!cols"] = [
@@ -290,11 +290,11 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
     { wch: 50 }, // הערות
   ];
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "שחקנים");
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, ws, "שחקנים");
 
   const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
-  XLSX.writeFile(wb, `${cleanFilename}.xlsx`);
+  writeFileXLSX(wb, `${cleanFilename}.xlsx`);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
