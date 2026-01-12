@@ -3,22 +3,91 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import type { Actor } from "@/lib/types";
 
+// Helper function to reverse Hebrew text for PDF (RTL support)
+function reverseHebrewText(text: string): string {
+  // Split by spaces to preserve word order but reverse each Hebrew word
+  return text
+    .split(' ')
+    .map(word => {
+      // Check if word contains Hebrew characters
+      if (/[\u0590-\u05FF]/.test(word)) {
+        return word.split('').reverse().join('');
+      }
+      return word;
+    })
+    .reverse()
+    .join(' ');
+}
+
+// Helper function to add Hebrew font to jsPDF
+async function addHebrewFont(doc: jsPDF): Promise<boolean> {
+  try {
+    const response = await fetch('/fonts/NotoSansHebrew-Regular.ttf');
+    if (!response.ok) throw new Error('Font not found');
+    
+    const fontBlob = await response.blob();
+    const reader = new FileReader();
+    
+    const fontBase64 = await new Promise<string>((resolve, reject) => {
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(fontBlob);
+    });
+
+    doc.addFileToVFS("NotoSansHebrew.ttf", fontBase64);
+    doc.addFont("NotoSansHebrew.ttf", "NotoSansHebrew", "normal");
+    return true;
+  } catch (error) {
+    console.error("Failed to load Hebrew font:", error);
+    return false;
+  }
+}
+
 /**
  * ייצוא שחקן בודד ל-PDF
- * Note: jsPDF doesn't support Hebrew well, so we'll use a workaround with reversed text
  */
-export const exportActorToPDF = (actor: Actor) => {
+export const exportActorToPDF = async (actor: Actor) => {
   const doc = new jsPDF();
+  
+  // Try to load Hebrew font
+  const hebrewFontLoaded = await addHebrewFont(doc);
+  
+  if (hebrewFontLoaded) {
+    doc.setFont("NotoSansHebrew");
+  }
 
-  // כותרת באנגלית
+  // כותרת
   doc.setFontSize(20);
-  doc.text("Actor Profile", 105, 20, { align: "center" });
+  const title = hebrewFontLoaded ? reverseHebrewText("פרופיל שחקן") : "Actor Profile";
+  doc.text(title, 105, 20, { align: "center" });
 
-  // פרטי השחקן - נשתמש באנגלית כדי להימנע מבעיות עם עברית
+  // פרטי השחקן
   const currentYear = new Date().getFullYear();
   const age = currentYear - actor.birth_year;
 
-  const data = [
+  const data = hebrewFontLoaded ? [
+    [reverseHebrewText("שם מלא"), reverseHebrewText(actor.full_name)],
+    [reverseHebrewText("מין"), reverseHebrewText(actor.gender === "male" ? "זכר" : "נקבה")],
+    [reverseHebrewText("גיל"), `${age} (${reverseHebrewText("נולד")} ${actor.birth_year})`],
+    [reverseHebrewText("טלפון"), actor.phone],
+    [reverseHebrewText("אימייל"), actor.email || reverseHebrewText("לא זמין")],
+    [reverseHebrewText("עיר"), actor.city ? reverseHebrewText(actor.city) : reverseHebrewText("לא זמין")],
+    [reverseHebrewText("זמר/ת"), reverseHebrewText(actor.is_singer ? "כן" : "לא")],
+    [reverseHebrewText("בוגר/ת קורס"), reverseHebrewText(actor.is_course_grad ? "כן" : "לא")],
+    [reverseHebrewText("סטטוס מעמ"), actor.vat_status],
+    [
+      reverseHebrewText("כישורים"),
+      actor.skills.length > 0 ? reverseHebrewText(actor.skills.map((s) => s.label).join(", ")) : reverseHebrewText("לא זמין"),
+    ],
+    [
+      reverseHebrewText("שפות"),
+      actor.languages.length > 0 ? reverseHebrewText(actor.languages.map((l) => l.label).join(", ")) : reverseHebrewText("לא זמין"),
+    ],
+    [reverseHebrewText("הערות"), actor.notes ? reverseHebrewText(actor.notes) : reverseHebrewText("לא זמין")],
+  ] : [
     ["Full Name", actor.full_name],
     ["Gender", actor.gender === "male" ? "Male" : "Female"],
     ["Age", `${age} (Born ${actor.birth_year})`],
@@ -41,18 +110,18 @@ export const exportActorToPDF = (actor: Actor) => {
 
   autoTable(doc, {
     startY: 30,
-    head: [["Field", "Value"]],
+    head: hebrewFontLoaded ? [[reverseHebrewText("שדה"), reverseHebrewText("ערך")]] : [["Field", "Value"]],
     body: data,
     theme: "grid",
     styles: {
-      font: "helvetica",
+      font: hebrewFontLoaded ? "NotoSansHebrew" : "helvetica",
       fontSize: 10,
-      halign: "left",
+      halign: "right",
     },
     headStyles: {
       fillColor: [66, 66, 66],
       textColor: [255, 255, 255],
-      halign: "left",
+      halign: "right",
     },
     columnStyles: {
       0: { cellWidth: 50, fontStyle: "bold" },
@@ -61,23 +130,39 @@ export const exportActorToPDF = (actor: Actor) => {
   });
 
   // שמירת הקובץ
-  const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_");
+  const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
   doc.save(`actor_${filename}.pdf`);
 };
 
 /**
  * ייצוא מספר שחקנים ל-PDF
  */
-export const exportActorsToPDF = (actors: Actor[], filename: string = "actors") => {
+export const exportActorsToPDF = async (actors: Actor[], filename: string = "actors") => {
   const doc = new jsPDF();
+  
+  // Try to load Hebrew font
+  const hebrewFontLoaded = await addHebrewFont(doc);
+  
+  if (hebrewFontLoaded) {
+    doc.setFont("NotoSansHebrew");
+  }
 
   // כותרת
   doc.setFontSize(20);
-  doc.text("Actors List", 105, 20, { align: "center" });
+  const title = hebrewFontLoaded ? reverseHebrewText("רשימת שחקנים") : "Actors List";
+  doc.text(title, 105, 20, { align: "center" });
 
   // הכנת הנתונים
   const currentYear = new Date().getFullYear();
-  const tableData = actors.map((actor) => [
+  const tableData = actors.map((actor) => hebrewFontLoaded ? [
+    reverseHebrewText(actor.full_name),
+    reverseHebrewText(actor.gender === "male" ? "ז" : "נ"),
+    `${currentYear - actor.birth_year}`,
+    actor.phone,
+    actor.email || reverseHebrewText("לא זמין"),
+    reverseHebrewText(actor.is_singer ? "כן" : "לא"),
+    actor.vat_status,
+  ] : [
     actor.full_name,
     actor.gender === "male" ? "M" : "F",
     `${currentYear - actor.birth_year}`,
@@ -87,20 +172,24 @@ export const exportActorsToPDF = (actors: Actor[], filename: string = "actors") 
     actor.vat_status,
   ]);
 
+  const headers = hebrewFontLoaded ? 
+    [[reverseHebrewText("שם"), reverseHebrewText("מין"), reverseHebrewText("גיל"), reverseHebrewText("טלפון"), reverseHebrewText("אימייל"), reverseHebrewText("זמר/ת"), reverseHebrewText("מעמ")]] :
+    [["Name", "Gender", "Age", "Phone", "Email", "Singer", "VAT"]];
+
   autoTable(doc, {
     startY: 30,
-    head: [["Name", "Gender", "Age", "Phone", "Email", "Singer", "VAT"]],
+    head: headers,
     body: tableData,
     theme: "grid",
     styles: {
-      font: "helvetica",
+      font: hebrewFontLoaded ? "NotoSansHebrew" : "helvetica",
       fontSize: 8,
-      halign: "left",
+      halign: "right",
     },
     headStyles: {
       fillColor: [66, 66, 66],
       textColor: [255, 255, 255],
-      halign: "left",
+      halign: "right",
     },
     columnStyles: {
       0: { cellWidth: 35 },
@@ -114,7 +203,7 @@ export const exportActorsToPDF = (actors: Actor[], filename: string = "actors") 
   });
 
   // שמירת הקובץ
-  const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_");
+  const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
   doc.save(`${cleanFilename}.pdf`);
 };
 
@@ -157,7 +246,7 @@ export const exportActorToExcel = (actor: Actor) => {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "פרופיל שחקן");
 
-  const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_");
+  const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
   XLSX.writeFile(wb, `actor_${filename}.xlsx`);
 };
 
@@ -205,7 +294,7 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "שחקנים");
 
-  const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_");
+  const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
   XLSX.writeFile(wb, `${cleanFilename}.xlsx`);
 };
 
