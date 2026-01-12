@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
-import { Search, SlidersHorizontal, UserPlus } from "lucide-react"
+import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Film, Heart, Trash2, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -15,6 +15,13 @@ import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 
 const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
 
@@ -39,6 +46,7 @@ function ActorsDatabaseContent() {
     vatStatus: [],
     sortBy: "newest",
   })
+  const [bulkFolderDialogOpen, setBulkFolderDialogOpen] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -170,6 +178,43 @@ function ActorsDatabaseContent() {
     }
   }
 
+  const handleBulkAddToFavorites = async () => {
+    const supabase = createClient()
+    for (const actorId of selectedActors) {
+      if (!favorites.includes(actorId)) {
+        await supabase.from("favorites").insert({ user_id: DEFAULT_USER_ID, actor_id: actorId })
+      }
+    }
+    setFavorites((prev) => [...new Set([...prev, ...selectedActors])])
+    setSelectedActors([])
+  }
+
+  const handleBulkAddToFolder = () => {
+    setBulkFolderDialogOpen(true)
+  }
+
+  const handleBulkAddToProject = () => {
+    alert(`הוספת ${selectedActors.length} שחקנים לפרויקט (בקרוב)`)
+    setSelectedActors([])
+  }
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedActors.length} שחקנים?`)) {
+      return
+    }
+    const supabase = createClient()
+    for (const actorId of selectedActors) {
+      await supabase.from("actors").delete().eq("id", actorId)
+    }
+    setActors((prev) => prev.filter((actor) => !selectedActors.includes(actor.id)))
+    setFavorites((prev) => prev.filter((id) => !selectedActors.includes(id)))
+    setSelectedActors([])
+  }
+
+  const handleClearSelection = () => {
+    setSelectedActors([])
+  }
+
   const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
 
   const filteredActors = displayedActors
@@ -292,8 +337,71 @@ function ActorsDatabaseContent() {
             </Button>
 
             {selectedActors.length > 0 && (
-              <div className="text-sm text-muted-foreground">{selectedActors.length} נבחרו</div>
+              <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-1.5">
+                <span className="text-sm font-medium">{selectedActors.length} נבחרו</span>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/20">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleBulkAddToFavorites()
+                      }}
+                      className="cursor-pointer hover:bg-accent"
+                    >
+                      <Heart className="h-4 w-4 ml-2" />
+                      הוסף למועדפים
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleBulkAddToProject()
+                      }}
+                      className="cursor-pointer hover:bg-accent"
+                    >
+                      <Film className="h-4 w-4 ml-2" />
+                      הוסף לפרויקט
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleBulkAddToFolder()
+                      }}
+                      className="cursor-pointer hover:bg-accent"
+                    >
+                      <FolderPlus className="h-4 w-4 ml-2" />
+                      הוסף לתיקייה
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleBulkDelete()
+                      }}
+                      className="cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 ml-2" />
+                      מחיקה
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 hover:bg-primary/20"
+                  onClick={handleClearSelection}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             )}
+
             <Button asChild size="sm" className="md:size-default">
               <Link href="/intake">
                 <UserPlus className="h-4 w-4 ml-2" />
@@ -388,6 +496,16 @@ function ActorsDatabaseContent() {
           onOpenChange={setFolderDialogOpen}
           actorIds={[selectedActorForFolder.id]}
           actorNames={[selectedActorForFolder.full_name]}
+        />
+      )}
+
+      {selectedActors.length > 0 && (
+        <SelectFolderDialog
+          open={bulkFolderDialogOpen}
+          onOpenChange={setBulkFolderDialogOpen}
+          actorIds={selectedActors}
+          actorNames={actors.filter((a) => selectedActors.includes(a.id)).map((a) => a.full_name)}
+          onSuccess={() => setSelectedActors([])}
         />
       )}
     </div>

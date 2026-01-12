@@ -14,6 +14,7 @@ interface SelectFolderDialogProps {
   onOpenChange: (open: boolean) => void
   actorIds: string[]
   actorNames: string[]
+  onSuccess?: () => void // Added optional onSuccess callback
 }
 
 interface FolderType {
@@ -23,7 +24,7 @@ interface FolderType {
   created_at: string
 }
 
-export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames }: SelectFolderDialogProps) {
+export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, onSuccess }: SelectFolderDialogProps) {
   const [folders, setFolders] = useState<FolderType[]>([])
   const [loading, setLoading] = useState(false)
   const [showCreateNew, setShowCreateNew] = useState(false)
@@ -87,6 +88,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames }:
       setNewFolderName("")
       setNewFolderColor("blue")
       setShowCreateNew(false)
+      onSuccess?.() // Call onSuccess after adding
     } catch (error) {
       console.error("[v0] Error creating folder:", error)
       alert("שגיאה ביצירת התיקייה")
@@ -134,6 +136,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames }:
       setLoading(true)
       await addActorsToFolder(folderId)
       onOpenChange(false)
+      onSuccess?.() // Call onSuccess after adding
     } catch (error) {
       alert("שגיאה בהוספת השחקנים לתיקייה")
     } finally {
