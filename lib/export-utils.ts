@@ -5,18 +5,15 @@ import type { Actor } from "@/lib/types";
 
 // Helper function to reverse Hebrew text for PDF (RTL support)
 function reverseHebrewText(text: string): string {
-  // Split by spaces to preserve word order but reverse each Hebrew word
-  return text
-    .split(' ')
-    .map(word => {
-      // Check if word contains Hebrew characters
-      if (/[\u0590-\u05FF]/.test(word)) {
-        return word.split('').reverse().join('');
-      }
-      return word;
-    })
-    .reverse()
-    .join(' ');
+  if (!text) return text;
+  
+  // For simple single words or short phrases, just reverse the entire string
+  // This works better for table headers
+  const hasHebrew = /[\u0590-\u05FF]/.test(text);
+  if (!hasHebrew) return text;
+  
+  // Reverse the entire text for RTL display
+  return text.split('').reverse().join('');
 }
 
 // Helper function to add Hebrew font to jsPDF
@@ -211,6 +208,7 @@ export const exportActorsToPDF = async (actors: Actor[], filename: string = "act
  * ייצוא שחקן בודד ל-Excel
  */
 export const exportActorToExcel = (actor: Actor) => {
+  try {
   const currentYear = new Date().getFullYear();
   const age = currentYear - actor.birth_year;
 
@@ -248,12 +246,17 @@ export const exportActorToExcel = (actor: Actor) => {
 
   const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
   XLSX.writeFile(wb, `actor_${filename}.xlsx`);
+  } catch (error) {
+    console.error("Error exporting to Excel:", error);
+    alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
+  }
 };
 
 /**
  * ייצוא מספר שחקנים ל-Excel
  */
 export const exportActorsToExcel = (actors: Actor[], filename: string = "actors") => {
+  try {
   const currentYear = new Date().getFullYear();
 
   const data = actors.map((actor) => ({
@@ -296,6 +299,10 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
 
   const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
   XLSX.writeFile(wb, `${cleanFilename}.xlsx`);
+  } catch (error) {
+    console.error("Error exporting to Excel:", error);
+    alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
+  }
 };
 
 /**
