@@ -107,7 +107,7 @@ export const exportActorToPDF = async (actor: Actor) => {
 
   autoTable(doc, {
     startY: 30,
-    head: hebrewFontLoaded ? [[reverseHebrewText("שדה"), reverseHebrewText("ערך")]] : [["Field", "Value"]],
+    head: [["Field", "Value"]],
     body: data,
     theme: "grid",
     styles: {
@@ -169,13 +169,9 @@ export const exportActorsToPDF = async (actors: Actor[], filename: string = "act
     actor.vat_status,
   ]);
 
-  const headers = hebrewFontLoaded ? 
-    [[reverseHebrewText("שם"), reverseHebrewText("מין"), reverseHebrewText("גיל"), reverseHebrewText("טלפון"), reverseHebrewText("אימייל"), reverseHebrewText("זמר/ת"), reverseHebrewText("מעמ")]] :
-    [["Name", "Gender", "Age", "Phone", "Email", "Singer", "VAT"]];
-
   autoTable(doc, {
     startY: 30,
-    head: headers,
+    head: [["Name", "Gender", "Age", "Phone", "Email", "Singer", "VAT"]],
     body: tableData,
     theme: "grid",
     styles: {
