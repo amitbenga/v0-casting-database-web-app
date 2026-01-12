@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
-import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Film, Heart, Trash2, X } from "lucide-react"
+import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Film, Heart, Trash2, X, Download } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -15,6 +15,7 @@ import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { exportActors } from "@/lib/export-utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -215,6 +216,15 @@ function ActorsDatabaseContent() {
     setSelectedActors([])
   }
 
+  const handleBulkExport = (format: "pdf" | "excel") => {
+    const selectedActorObjects = actors.filter((actor) => selectedActors.includes(actor.id))
+    if (selectedActorObjects.length === 0) {
+      alert("אין שחקנים נבחרים")
+      return
+    }
+    exportActors(selectedActorObjects, format, "selected_actors")
+  }
+
   const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
 
   const filteredActors = displayedActors
@@ -376,6 +386,27 @@ function ActorsDatabaseContent() {
                     >
                       <FolderPlus className="h-4 w-4 ml-2" />
                       הוסף לתיקייה
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleBulkExport("pdf")
+                      }}
+                      className="cursor-pointer hover:bg-accent"
+                    >
+                      <Download className="h-4 w-4 ml-2" />
+                      ייצוא PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleBulkExport("excel")
+                      }}
+                      className="cursor-pointer hover:bg-accent"
+                    >
+                      <Download className="h-4 w-4 ml-2" />
+                      ייצוא Excel
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef } from "react"
-import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User } from "lucide-react"
+import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { type Actor, VAT_STATUS_LABELS } from "@/lib/types"
+import { exportActor } from "@/lib/export-utils"
 
 interface ActorCardProps {
   actor: Actor
@@ -117,9 +118,15 @@ export function ActorCard({
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (onDelete && confirm(`האם אתה בטוח שברצונך למחוק את ${actor.full_name}?`)) {
+    if (onDelete) {
       onDelete(actor.id)
     }
+  }
+
+  const handleExport = (e: React.MouseEvent, format: "pdf" | "excel") => {
+    e.preventDefault()
+    e.stopPropagation()
+    exportActor(actor, format)
   }
 
   return (
@@ -306,6 +313,26 @@ export function ActorCard({
                 className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
               >
                 ערוך
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleExport(e as any, "pdf")
+                }}
+                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
+              >
+                <Download className="h-4 w-4 ml-2" />
+                ייצוא PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  handleExport(e as any, "excel")
+                }}
+                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
+              >
+                <Download className="h-4 w-4 ml-2" />
+                ייצוא Excel
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={(e) => {

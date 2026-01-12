@@ -14,6 +14,7 @@ import { ActorEditForm } from "@/components/actor-edit-form"
 import { createClient } from "@/lib/supabase/client"
 import { VAT_STATUS_LABELS, type Actor } from "@/lib/types"
 import { AppHeader } from "@/components/app-header"
+import { exportActor } from "@/lib/export-utils"
 
 export default function ActorProfile() {
   const params = useParams()
@@ -22,6 +23,37 @@ export default function ActorProfile() {
   const [isEditing, setIsEditing] = useState(false)
   const [actor, setActor] = useState<Actor | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const handleShare = async () => {
+    if (!actor) return
+    
+    const url = window.location.href
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: actor.full_name,
+          text: `פרופיל שחקן: ${actor.full_name}`,
+          url: url,
+        })
+      } catch (err) {
+        console.log('Share cancelled or failed')
+      }
+    } else {
+      // Fallback: copy to clipboard
+      try {
+        await navigator.clipboard.writeText(url)
+        alert('הקישור הועתק ללוח')
+      } catch (err) {
+        console.error('Failed to copy:', err)
+      }
+    }
+  }
+
+  const handleDownload = (format: "pdf" | "excel") => {
+    if (!actor) return
+    exportActor(actor, format)
+  }
 
   useEffect(() => {
     if (!actorId) return
@@ -162,12 +194,24 @@ export default function ActorProfile() {
                 <Edit className="h-4 w-4 ml-2" />
                 <span className="md:inline">ערוך</span>
               </Button>
-              <Button variant="outline" size="icon" className="hidden md:flex bg-transparent">
+              <Button variant="outline" size="icon" className="hidden md:flex bg-transparent" onClick={handleShare}>
                 <Share2 className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" className="hidden md:flex bg-transparent">
-                <Download className="h-4 w-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="hidden md:flex bg-transparent">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleDownload("pdf")}>
+                    הורד PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload("excel")}>
+                    הורד Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">
@@ -177,7 +221,14 @@ export default function ActorProfile() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem>הוסף לפרויקט</DropdownMenuItem>
                   <DropdownMenuItem>הוסף לתיקייה</DropdownMenuItem>
-                  <DropdownMenuItem>ייצוא פרופיל</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload("pdf")}>
+                    <Download className="h-4 w-4 ml-2" />
+                    ייצוא PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload("excel")}>
+                    <Download className="h-4 w-4 ml-2" />
+                    ייצוא Excel
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="text-destructive">מחק שחקן</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

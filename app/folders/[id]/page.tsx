@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Plus, Search, MoreVertical, Folder, Trash2, Play, Pause } from "lucide-react"
+import { ArrowLeft, Plus, Search, MoreVertical, Folder, Trash2, Play, Pause, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AddActorToFolderDialog } from "@/components/add-actor-to-folder-dialog"
 import { createBrowserClient } from "@/lib/supabase/client"
 import Link from "next/link"
+import { exportActors } from "@/lib/export-utils"
 
 export default function FolderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -99,6 +100,15 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       console.error("[v0] Error deleting folder:", error)
       alert("שגיאה במחיקת תיקייה")
     }
+  }
+
+  function handleExportFolder(format: "pdf" | "excel") {
+    if (actors.length === 0) {
+      alert("אין שחקנים בתיקייה לייצוא")
+      return
+    }
+    const filename = `folder_${folder.name.replace(/\s+/g, "_")}`
+    exportActors(actors, format, filename)
   }
 
   const filteredActors = actors.filter(
@@ -193,7 +203,14 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem>שכפל תיקייה</DropdownMenuItem>
-                  <DropdownMenuItem>ייצא שחקנים</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportFolder("pdf")}>
+                    <Download className="h-4 w-4 ml-2" />
+                    ייצוא PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportFolder("excel")}>
+                    <Download className="h-4 w-4 ml-2" />
+                    ייצוא Excel
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="text-destructive" onClick={deleteFolder}>
                     מחק תיקייה
                   </DropdownMenuItem>
