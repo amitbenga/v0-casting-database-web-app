@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { utils, writeFileXLSX } from "xlsx";
+import { utils, write } from "xlsx";
 import type { Actor } from "@/lib/types";
 
 // Helper function to reverse Hebrew text for PDF (RTL support)
@@ -240,8 +240,16 @@ export const exportActorToExcel = (actor: Actor) => {
   const wb = utils.book_new();
   utils.book_append_sheet(wb, ws, "פרופיל שחקן");
 
+  // Generate Excel file as blob and download
+  const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/octet-stream' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
   const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
-  writeFileXLSX(wb, `actor_${filename}.xlsx`);
+  a.href = url;
+  a.download = `actor_${filename}.xlsx`;
+  a.click();
+  window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
@@ -293,8 +301,16 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
   const wb = utils.book_new();
   utils.book_append_sheet(wb, ws, "שחקנים");
 
+  // Generate Excel file as blob and download
+  const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/octet-stream' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
   const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
-  writeFileXLSX(wb, `${cleanFilename}.xlsx`);
+  a.href = url;
+  a.download = `${cleanFilename}.xlsx`;
+  a.click();
+  window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
