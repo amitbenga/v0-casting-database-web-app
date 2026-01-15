@@ -82,15 +82,18 @@ function ActorsDatabaseContent() {
           setActors(mappedActors)
         }
 
-        const { data: favoritesData, error: favoritesError } = await supabase
-          .from("favorites")
-          .select("actor_id")
-          .eq("user_id", user?.id)
+        // Only load favorites if user is authenticated
+        if (user?.id) {
+          const { data: favoritesData, error: favoritesError } = await supabase
+            .from("favorites")
+            .select("actor_id")
+            .eq("user_id", user.id)
 
-        if (favoritesError) {
-          console.error("[v0] Error loading favorites:", favoritesError)
-        } else if (favoritesData) {
-          setFavorites(favoritesData.map((fav) => fav.actor_id))
+          if (favoritesError) {
+            console.error("[v0] Error loading favorites:", favoritesError)
+          } else if (favoritesData) {
+            setFavorites(favoritesData.map((fav) => fav.actor_id))
+          }
         }
       } catch (error) {
         console.error("[v0] Error:", error)
@@ -100,7 +103,7 @@ function ActorsDatabaseContent() {
     }
 
     loadData()
-  }, [])
+  }, [user])
 
   const handleToggleFavorite = async (actorId: string) => {
     const supabase = createClient()
