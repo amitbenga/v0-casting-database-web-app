@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { utils, write } from "xlsx";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 import type { Actor } from "@/lib/types";
 
 // Helper function to reverse Hebrew text for PDF (RTL support)
@@ -205,51 +206,48 @@ export const exportActorsToPDF = async (actors: Actor[], filename: string = "act
  */
 export const exportActorToExcel = (actor: Actor) => {
   try {
-  const currentYear = new Date().getFullYear();
-  const age = currentYear - actor.birth_year;
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - actor.birth_year;
 
-  const data = [
-    { שדה: "שם מלא", ערך: actor.full_name },
-    { שדה: "מין", ערך: actor.gender === "male" ? "זכר" : "נקבה" },
-    { שדה: "גיל", ערך: `${age} (נולד ${actor.birth_year})` },
-    { שדה: "טלפון", ערך: actor.phone },
-    { שדה: "אימייל", ערך: actor.email || "לא זמין" },
-    { שדה: "עיר", ערך: actor.city || "לא זמין" },
-    { שדה: "זמר/ת", ערך: actor.is_singer ? "כן" : "לא" },
-    { שדה: "בוגר/ת קורס", ערך: actor.is_course_grad ? "כן" : "לא" },
-    { שדה: "סטטוס מעמ", ערך: actor.vat_status },
-    {
-      שדה: "כישורים",
-      ערך: actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "לא זמין",
-    },
-    {
-      שדה: "שפות",
-      ערך: actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "לא זמין",
-    },
-    { שדה: "הערות", ערך: actor.notes || "לא זמין" },
-  ];
+    const data = [
+      { שדה: "שם מלא", ערך: actor.full_name },
+      { שדה: "מין", ערך: actor.gender === "male" ? "זכר" : "נקבה" },
+      { שדה: "גיל", ערך: `${age} (נולד ${actor.birth_year})` },
+      { שדה: "טלפון", ערך: actor.phone },
+      { שדה: "אימייל", ערך: actor.email || "לא זמין" },
+      { שדה: "עיר", ערך: actor.city || "לא זמין" },
+      { שדה: "זמר/ת", ערך: actor.is_singer ? "כן" : "לא" },
+      { שדה: "בוגר/ת קורס", ערך: actor.is_course_grad ? "כן" : "לא" },
+      { שדה: "סטטוס מעמ", ערך: actor.vat_status },
+      {
+        שדה: "כישורים",
+        ערך: actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "לא זמין",
+      },
+      {
+        שדה: "שפות",
+        ערך: actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "לא זמין",
+      },
+      { שדה: "הערות", ערך: actor.notes || "לא זמין" },
+    ];
 
-  const ws = utils.json_to_sheet(data);
-  
-  // הגדרת רוחב עמודות
-  ws["!cols"] = [
-    { wch: 20 }, // שדה
-    { wch: 50 }, // ערך
-  ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    
+    // הגדרת רוחב עמודות
+    ws["!cols"] = [
+      { wch: 20 }, // שדה
+      { wch: 50 }, // ערך
+    ];
 
-  const wb = utils.book_new();
-  utils.book_append_sheet(wb, ws, "פרופיל שחקן");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "פרופיל שחקן");
 
-  // Generate Excel file as blob and download
-  const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], { type: 'application/octet-stream' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
-  a.href = url;
-  a.download = `actor_${filename}.xlsx`;
-  a.click();
-  window.URL.revokeObjectURL(url);
+    // Generate Excel file as ArrayBuffer
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    
+    // Create blob and download using file-saver
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
+    saveAs(blob, `actor_${filename}.xlsx`);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
@@ -261,56 +259,53 @@ export const exportActorToExcel = (actor: Actor) => {
  */
 export const exportActorsToExcel = (actors: Actor[], filename: string = "actors") => {
   try {
-  const currentYear = new Date().getFullYear();
+    const currentYear = new Date().getFullYear();
 
-  const data = actors.map((actor) => ({
-    "שם מלא": actor.full_name,
-    "מין": actor.gender === "male" ? "זכר" : "נקבה",
-    "גיל": currentYear - actor.birth_year,
-    "שנת לידה": actor.birth_year,
-    "טלפון": actor.phone,
-    "אימייל": actor.email || "לא זמין",
-    "עיר": actor.city || "לא זמין",
-    "זמר/ת": actor.is_singer ? "כן" : "לא",
-    "בוגר/ת קורס": actor.is_course_grad ? "כן" : "לא",
-    "סטטוס מעמ": actor.vat_status,
-    "כישורים": actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "לא זמין",
-    "שפות": actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "לא זמין",
-    "הערות": actor.notes || "לא זמין",
-  }));
+    const data = actors.map((actor) => ({
+      "שם מלא": actor.full_name,
+      "מין": actor.gender === "male" ? "זכר" : "נקבה",
+      "גיל": currentYear - actor.birth_year,
+      "שנת לידה": actor.birth_year,
+      "טלפון": actor.phone,
+      "אימייל": actor.email || "לא זמין",
+      "עיר": actor.city || "לא זמין",
+      "זמר/ת": actor.is_singer ? "כן" : "לא",
+      "בוגר/ת קורס": actor.is_course_grad ? "כן" : "לא",
+      "סטטוס מעמ": actor.vat_status,
+      "כישורים": actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "לא זמין",
+      "שפות": actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "לא זמין",
+      "הערות": actor.notes || "לא זמין",
+    }));
 
-  const ws = utils.json_to_sheet(data);
-  
-  // הגדרת רוחב עמודות
-  ws["!cols"] = [
-    { wch: 25 }, // שם מלא
-    { wch: 10 }, // מין
-    { wch: 8 },  // גיל
-    { wch: 12 }, // שנת לידה
-    { wch: 15 }, // טלפון
-    { wch: 30 }, // אימייל
-    { wch: 15 }, // עיר
-    { wch: 10 }, // זמר/ת
-    { wch: 15 }, // בוגר/ת קורס
-    { wch: 15 }, // סטטוס מעמ
-    { wch: 40 }, // כישורים
-    { wch: 30 }, // שפות
-    { wch: 50 }, // הערות
-  ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    
+    // הגדרת רוחב עמודות
+    ws["!cols"] = [
+      { wch: 25 }, // שם מלא
+      { wch: 10 }, // מין
+      { wch: 8 },  // גיל
+      { wch: 12 }, // שנת לידה
+      { wch: 15 }, // טלפון
+      { wch: 30 }, // אימייל
+      { wch: 15 }, // עיר
+      { wch: 10 }, // זמר/ת
+      { wch: 15 }, // בוגר/ת קורס
+      { wch: 15 }, // סטטוס מעמ
+      { wch: 40 }, // כישורים
+      { wch: 30 }, // שפות
+      { wch: 50 }, // הערות
+    ];
 
-  const wb = utils.book_new();
-  utils.book_append_sheet(wb, ws, "שחקנים");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "שחקנים");
 
-  // Generate Excel file as blob and download
-  const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], { type: 'application/octet-stream' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
-  a.href = url;
-  a.download = `${cleanFilename}.xlsx`;
-  a.click();
-  window.URL.revokeObjectURL(url);
+    // Generate Excel file as ArrayBuffer
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    
+    // Create blob and download using file-saver
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
+    saveAs(blob, `${cleanFilename}.xlsx`);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
