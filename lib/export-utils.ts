@@ -1,8 +1,19 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
 import type { Actor } from "@/lib/types";
+
+// Helper function to download file (replaces file-saver)
+function downloadFile(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 // Helper function to reverse Hebrew text for PDF (RTL support)
 function reverseHebrewText(text: string): string {
@@ -247,7 +258,7 @@ export const exportActorToExcel = (actor: Actor) => {
     // Create blob and download using file-saver
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const filename = actor.full_name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actor";
-    saveAs(blob, `actor_${filename}.xlsx`);
+    downloadFile(blob, `actor_${filename}.xlsx`);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
@@ -305,7 +316,7 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
     // Create blob and download using file-saver
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const cleanFilename = filename.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") || "actors";
-    saveAs(blob, `${cleanFilename}.xlsx`);
+    downloadFile(blob, `${cleanFilename}.xlsx`);
   } catch (error) {
     console.error("Error exporting to Excel:", error);
     alert("שגיאה בייצוא ל-Excel. בדוק את הקונסול.");
