@@ -1,7 +1,7 @@
 "use client"
 
 import type { Actor, CastingProject, Folder } from "./types"
-import { mockActors, mockProjects, mockFolders } from "./mock-data"
+// Mock data removed - all data comes from Supabase
 
 const STORAGE_KEYS = {
   ACTORS: "casting_db_actors",
@@ -11,13 +11,11 @@ const STORAGE_KEYS = {
 
 export class LocalStore {
   static getActors(): Actor[] {
-    if (typeof window === "undefined") return mockActors
+    if (typeof window === "undefined") return []
 
     const stored = localStorage.getItem(STORAGE_KEYS.ACTORS)
     if (!stored) {
-      // אם אין נתונים, נשתמש בנתונים הראשוניים
-      this.setActors(mockActors)
-      return mockActors
+      return []
     }
     return JSON.parse(stored)
   }
@@ -63,12 +61,11 @@ export class LocalStore {
   }
 
   static getProjects(): CastingProject[] {
-    if (typeof window === "undefined") return mockProjects
+    if (typeof window === "undefined") return []
 
     const stored = localStorage.getItem(STORAGE_KEYS.PROJECTS)
     if (!stored) {
-      this.setProjects(mockProjects)
-      return mockProjects
+      return []
     }
     return JSON.parse(stored)
   }
@@ -84,12 +81,11 @@ export class LocalStore {
   }
 
   static getFolders(): Folder[] {
-    if (typeof window === "undefined") return mockFolders
+    if (typeof window === "undefined") return []
 
     const stored = localStorage.getItem(STORAGE_KEYS.FOLDERS)
     if (!stored) {
-      this.setFolders(mockFolders)
-      return mockFolders
+      return []
     }
     return JSON.parse(stored)
   }

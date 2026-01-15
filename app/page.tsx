@@ -15,6 +15,7 @@ import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { useAuth } from "@/contexts/AuthContext"
 import { exportActors } from "@/lib/export-utils"
 import {
   DropdownMenu,
@@ -24,9 +25,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 
-const DEFAULT_USER_ID = "leni" // הוספת user_id ברירת מחדל
-
 function ActorsDatabaseContent() {
+  const { user } = useAuth() // Get authenticated user
   const [actors, setActors] = useState<Actor[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -85,7 +85,7 @@ function ActorsDatabaseContent() {
         const { data: favoritesData, error: favoritesError } = await supabase
           .from("favorites")
           .select("actor_id")
-          .eq("user_id", DEFAULT_USER_ID)
+          .eq("user_id", user?.id)
 
         if (favoritesError) {
           console.error("[v0] Error loading favorites:", favoritesError)
@@ -111,7 +111,7 @@ function ActorsDatabaseContent() {
         const { error } = await supabase
           .from("favorites")
           .delete()
-          .eq("user_id", DEFAULT_USER_ID)
+          .eq("user_id", user?.id)
           .eq("actor_id", actorId)
 
         if (error) {
@@ -121,7 +121,7 @@ function ActorsDatabaseContent() {
 
         setFavorites((prev) => prev.filter((id) => id !== actorId))
       } else {
-        const { error } = await supabase.from("favorites").insert({ user_id: DEFAULT_USER_ID, actor_id: actorId })
+        const { error } = await supabase.from("favorites").insert({ user_id: user?.id, actor_id: actorId })
 
         if (error) {
           console.error("[v0] Error adding to favorites:", error)
@@ -183,7 +183,7 @@ function ActorsDatabaseContent() {
     const supabase = createClient()
     for (const actorId of selectedActors) {
       if (!favorites.includes(actorId)) {
-        await supabase.from("favorites").insert({ user_id: DEFAULT_USER_ID, actor_id: actorId })
+        await supabase.from("favorites").insert({ user_id: user?.id, actor_id: actorId })
       }
     }
     setFavorites((prev) => [...new Set([...prev, ...selectedActors])])
