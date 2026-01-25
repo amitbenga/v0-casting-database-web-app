@@ -37,43 +37,43 @@
    - Click "Add User" button
 
 2. **Create User 1 (Leni - Admin)**
-   ```
+   \`\`\`
    Email: leni@madrasafree.org
    Password: [Choose a strong password]
    Auto Confirm User: ✅ Yes
-   ```
+   \`\`\`
    
    **User Metadata (click "Show Advanced Settings"):**
-   ```json
+   \`\`\`json
    {
      "full_name": "Leni",
      "role": "admin"
    }
-   ```
+   \`\`\`
 
 3. **Create User 2 (Sharon - Admin)**
-   ```
+   \`\`\`
    Email: sharon@madrasafree.org
    Password: [Choose a strong password]
    Auto Confirm User: ✅ Yes
-   ```
+   \`\`\`
    
    **User Metadata:**
-   ```json
+   \`\`\`json
    {
      "full_name": "Sharon",
      "role": "admin"
    }
-   ```
+   \`\`\`
 
 ### Option B: Via SQL (Alternative)
 
 If you prefer SQL, run this in SQL Editor:
 
-```sql
+\`\`\`sql
 -- This requires Supabase service role key
 -- Usually done via Dashboard instead
-```
+\`\`\`
 
 ---
 
@@ -81,29 +81,29 @@ If you prefer SQL, run this in SQL Editor:
 
 ### Check if RLS is enabled:
 
-```sql
+\`\`\`sql
 SELECT tablename, rowsecurity 
 FROM pg_tables 
 WHERE schemaname = 'public';
-```
+\`\`\`
 
 Expected: All tables should have `rowsecurity = true`
 
 ### Check if policies exist:
 
-```sql
+\`\`\`sql
 SELECT tablename, policyname 
 FROM pg_policies 
 WHERE schemaname = 'public';
-```
+\`\`\`
 
 Expected: You should see multiple policies for each table
 
 ### Check if user profiles were created:
 
-```sql
+\`\`\`sql
 SELECT * FROM user_profiles;
-```
+\`\`\`
 
 Expected: You should see 2 rows (Leni and Sharon)
 
@@ -134,9 +134,9 @@ Expected: You should see 2 rows (Leni and Sharon)
 ### Error: "new row violates row-level security policy"
 
 **Solution:** Check that RLS policies were created correctly:
-```sql
+\`\`\`sql
 SELECT * FROM pg_policies WHERE tablename = 'actors';
-```
+\`\`\`
 
 ### Error: "Cannot coerce the result to a single JSON object"
 

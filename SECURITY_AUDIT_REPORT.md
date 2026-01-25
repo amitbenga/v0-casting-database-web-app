@@ -36,13 +36,13 @@
 - Consider removing entirely if not needed
 
 **Sample Data Found:**
-```typescript
+\`\`\`typescript
 {
   full_name: "מיכה אוזין סליאן",
   phone: "052-827-2740",
   ...
 }
-```
+\`\`\`
 
 ---
 
@@ -53,7 +53,7 @@
 **Root Cause:** AuthContext was calling `.single()` on a query that might return multiple rows or no rows.
 
 **Fix Applied:**
-```typescript
+\`\`\`typescript
 // Before:
 const { data, error } = await supabase
   .from("user_profiles")
@@ -66,7 +66,7 @@ const { data, error } = await supabase
   .from("user_profiles")
   .select("*")
   .eq("id", userId) // ✅ Returns array, handles gracefully
-```
+\`\`\`
 
 ### Issue 2: Missing user_profiles Table
 
@@ -80,10 +80,10 @@ const { data, error } = await supabase
 ### Issue 3: Authentication Blocking App Usage
 
 **Temporary Solution:**
-```typescript
+\`\`\`typescript
 // In ProtectedRoute.tsx
 const ENABLE_AUTH = false; // Temporarily disabled
-```
+\`\`\`
 
 **Why:** Prevents authentication errors from blocking the entire app.
 
@@ -101,19 +101,19 @@ const ENABLE_AUTH = false; // Temporarily disabled
 **Root Cause:** `xlsx` library was trying to use Deno API (server-side) in browser context.
 
 **Error Message:**
-```
+\`\`\`
 TypeError: Deno.writeFile is not a function
-```
+\`\`\`
 
 ### Solution Applied
 
 **1. Installed file-saver:**
-```bash
+\`\`\`bash
 npm install file-saver @types/file-saver
-```
+\`\`\`
 
 **2. Rewrote export functions:**
-```typescript
+\`\`\`typescript
 // Old approach (failed):
 XLSX.writeFile(wb, 'filename.xlsx')
 
@@ -121,7 +121,7 @@ XLSX.writeFile(wb, 'filename.xlsx')
 const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 saveAs(blob, 'filename.xlsx');
-```
+\`\`\`
 
 **3. Benefits:**
 - ✅ Works in all modern browsers

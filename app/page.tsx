@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
-import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Film, Heart, Trash2, X, Download } from "lucide-react"
+import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Film, Heart, Trash2, X, Download, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -25,10 +26,69 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 
+const PAGE_SIZE = 20
+
+// Mapper function to convert DB record to Actor type
+function mapActor(actor: any): Actor {
+  return {
+    id: actor.id,
+    full_name: actor.full_name,
+    gender: actor.gender,
+    birth_year: actor.birth_year,
+    phone: actor.phone,
+    email: actor.email || "",
+    is_singer: actor.is_singer || false,
+    is_course_grad: actor.is_course_grad || false,
+    vat_status: actor.vat_status,
+    image_url: actor.image_url || "",
+    voice_sample_url: actor.voice_sample_url || "",
+    notes: actor.notes || "",
+    city: actor.city || "",
+    skills: Array.isArray(actor.skills) ? actor.skills : [],
+    languages: Array.isArray(actor.languages) ? actor.languages : [],
+    other_lang_text: actor.other_lang_text || "",
+    created_at: actor.created_at,
+    updated_at: actor.updated_at,
+  }
+}
+
+// Fetcher for SWR Infinite - cursor-based pagination
+async function fetchActorsPage(cursor: string | null): Promise<{ actors: Actor[]; nextCursor: string | null }> {
+  const supabase = createClient()
+  
+  let query = supabase
+    .from("actors")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(PAGE_SIZE)
+  
+  if (cursor) {
+    // Parse cursor: "created_at|id"
+    const [cursorDate, cursorId] = cursor.split("|")
+    query = query.or(`created_at.lt.${cursorDate},and(created_at.eq.${cursorDate},id.lt.${cursorId})`)
+  }
+  
+  const { data, error } = await query
+  
+  if (error) {
+    console.error("[v0] Error fetching actors:", error)
+    throw error
+  }
+  
+  const actors = (data || []).map(mapActor)
+  
+  // Generate next cursor from last item
+  const lastActor = actors[actors.length - 1]
+  const nextCursor = actors.length === PAGE_SIZE && lastActor 
+    ? `${lastActor.created_at}|${lastActor.id}` 
+    : null
+  
+  return { actors, nextCursor }
+}
+
 function ActorsDatabaseContent() {
   const { user } = useAuth() // Get authenticated user
-  const [actors, setActors] = useState<Actor[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [showFilters, setShowFilters] = useState(false)
   const [selectedActors, setSelectedActors] = useState<string[]>([])
@@ -48,61 +108,74 @@ function ActorsDatabaseContent() {
     sortBy: "newest",
   })
   const [bulkFolderDialogOpen, setBulkFolderDialogOpen] = useState(false)
-
+  const [loading, setLoading] = useState(false) // Declare the loading variable
+  
+  // Infinite scroll observer ref
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  
+  // SWR Infinite for cursor-based pagination
+  const getKey = (pageIndex: number, previousPageData: { actors: Actor[]; nextCursor: string | null } | null) => {
+    // First page - no cursor
+    if (pageIndex === 0) return ["actors", null]
+    // No more pages
+    if (previousPageData && !previousPageData.nextCursor) return null
+    // Return cursor for next page
+    return ["actors", previousPageData?.nextCursor]
+  }
+  
+  const { data, error, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(
+    getKey,
+    ([, cursor]) => fetchActorsPage(cursor as string | null),
+    {
+      revalidateOnFocus: false,
+      revalidateFirstPage: false,
+      dedupingInterval: 60000, // 1 minute cache
+    }
+  )
+  
+  // Flatten all pages into single actors array
+  const actors = data ? data.flatMap(page => page.actors) : []
+  const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === "undefined")
+  const isEmpty = data?.[0]?.actors.length === 0
+  const isReachingEnd = isEmpty || (data && data[data.length - 1]?.nextCursor === null)
+  
+  // Infinite scroll observer
   useEffect(() => {
-    async function loadData() {
-      try {
-        const supabase = createClient()
-
-        const { data: actorsData, error: actorsError } = await supabase.from("actors").select("*").order("full_name")
-
-        if (actorsError) {
-          console.error("[v0] Error loading actors:", actorsError)
-        } else if (actorsData) {
-          const mappedActors: Actor[] = actorsData.map((actor: any) => ({
-            id: actor.id,
-            full_name: actor.full_name,
-            gender: actor.gender,
-            birth_year: actor.birth_year,
-            phone: actor.phone,
-            email: actor.email || "",
-            is_singer: actor.is_singer || false,
-            is_course_grad: actor.is_course_grad || false,
-            vat_status: actor.vat_status,
-            image_url: actor.image_url || "",
-            voice_sample_url: actor.voice_sample_url || "",
-            notes: actor.notes || "",
-            city: actor.city || "",
-            skills: Array.isArray(actor.skills) ? actor.skills : [],
-            languages: Array.isArray(actor.languages) ? actor.languages : [],
-            other_lang_text: actor.other_lang_text || "",
-            created_at: actor.created_at,
-            updated_at: actor.updated_at,
-          }))
-          setActors(mappedActors)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore && !isReachingEnd) {
+          setSize(size + 1)
         }
-
-        // Only load favorites if user is authenticated
-        if (user?.id) {
-          const { data: favoritesData, error: favoritesError } = await supabase
-            .from("favorites")
-            .select("actor_id")
-            .eq("user_id", user.id)
-
-          if (favoritesError) {
-            console.error("[v0] Error loading favorites:", favoritesError)
-          } else if (favoritesData) {
-            setFavorites(favoritesData.map((fav) => fav.actor_id))
-          }
-        }
-      } catch (error) {
-        console.error("[v0] Error:", error)
-      } finally {
-        setLoading(false)
+      },
+      { threshold: 0.1 }
+    )
+    
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current)
+    }
+    
+    return () => observer.disconnect()
+  }, [isLoadingMore, isReachingEnd, size, setSize])
+  
+  // Load favorites
+  useEffect(() => {
+    async function loadFavorites() {
+      if (!user?.id) return
+      
+      const supabase = createClient()
+      const { data: favoritesData, error: favoritesError } = await supabase
+        .from("favorites")
+        .select("actor_id")
+        .eq("user_id", user.id)
+      
+      if (favoritesError) {
+        console.error("[v0] Error loading favorites:", favoritesError)
+      } else if (favoritesData) {
+        setFavorites(favoritesData.map((fav) => fav.actor_id))
       }
     }
-
-    loadData()
+    
+    loadFavorites()
   }, [user])
 
   const handleToggleFavorite = async (actorId: string) => {
@@ -161,7 +234,6 @@ function ActorsDatabaseContent() {
   }
 
   const handleDelete = async (id: string) => {
-    console.log("[v0] Delete actor:", id)
     try {
       const supabase = createClient()
       const { error } = await supabase.from("actors").delete().eq("id", id)
@@ -172,8 +244,14 @@ function ActorsDatabaseContent() {
         return
       }
 
-      // Remove from state
-      setActors((prev) => prev.filter((actor) => actor.id !== id))
+      // Optimistically update cache - remove actor from all pages
+      mutate(
+        (currentData) => currentData?.map(page => ({
+          ...page,
+          actors: page.actors.filter(actor => actor.id !== id)
+        })),
+        false
+      )
       setFavorites((prev) => prev.filter((favId) => favId !== id))
       setSelectedActors((prev) => prev.filter((actorId) => actorId !== id))
     } catch (error) {
@@ -210,7 +288,13 @@ function ActorsDatabaseContent() {
     for (const actorId of selectedActors) {
       await supabase.from("actors").delete().eq("id", actorId)
     }
-    setActors((prev) => prev.filter((actor) => !selectedActors.includes(actor.id)))
+    mutate((prevData) => {
+      if (!prevData) return prevData
+      return prevData.map((page) => ({
+        ...page,
+        actors: page.actors.filter((actor) => !selectedActors.includes(actor.id)),
+      }))
+    })
     setFavorites((prev) => prev.filter((id) => !selectedActors.includes(id)))
     setSelectedActors([])
   }
@@ -298,10 +382,13 @@ function ActorsDatabaseContent() {
       }
     })
 
-  if (loading) {
+  if (isLoading && !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">טוען שחקנים...</p>
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <p className="text-muted-foreground">טוען שחקנים...</p>
+        </div>
       </div>
     )
   }
@@ -484,11 +571,24 @@ function ActorsDatabaseContent() {
                   ))}
                 </div>
 
-                {filteredActors.length === 0 && (
+                {filteredActors.length === 0 && !isLoading && (
                   <div className="text-center py-12">
                     <p className="text-muted-foreground">לא נמצאו שחקנים התואמים את החיפוש.</p>
                   </div>
                 )}
+                
+                {/* Infinite scroll trigger */}
+                <div ref={loadMoreRef} className="w-full py-8 flex justify-center">
+                  {isLoadingMore && (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      <p className="text-muted-foreground text-sm">טוען עוד שחקנים...</p>
+                    </div>
+                  )}
+                  {isReachingEnd && actors.length > 0 && (
+                    <p className="text-muted-foreground text-sm">הצגת כל {actors.length} השחקנים</p>
+                  )}
+                </div>
               </TabsContent>
 
               <TabsContent value="favorites" className="mt-0">
