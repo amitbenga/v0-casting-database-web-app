@@ -115,3 +115,59 @@ export const GENDER_LABELS: Record<Gender, string> = {
 export function getDefaultAvatar(gender: Gender): string {
   return gender === "male" ? "/male-silhouette-professional.jpg" : "/female-silhouette-professional.jpg"
 }
+
+// Script Processing Types
+export type ScriptProcessingStatus = "uploaded" | "processing" | "completed" | "error"
+export type ExtractedRoleType = "regular" | "combined" | "group" | "ambiguous"
+export type CastingWarningType = "same_scene" | "other"
+
+export interface ProjectScript {
+  id: string
+  project_id: string
+  file_name: string
+  file_url?: string
+  file_type?: string
+  file_size_bytes?: number
+  processing_status: ScriptProcessingStatus
+  processing_error?: string
+  processed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScriptExtractedRole {
+  id: string
+  project_id: string
+  script_id?: string
+  role_name: string
+  role_type: ExtractedRoleType
+  replicas_count: number
+  first_appearance_script?: string
+  notes?: string
+  created_at: string
+}
+
+export interface ScriptCastingWarning {
+  id: string
+  project_id: string
+  role_1_name: string
+  role_2_name: string
+  scene_reference?: string
+  warning_type: CastingWarningType
+  notes?: string
+  created_at: string
+}
+
+export const SCRIPT_STATUS_LABELS: Record<ScriptProcessingStatus, string> = {
+  uploaded: "הועלה",
+  processing: "בעיבוד",
+  completed: "עובד בהצלחה",
+  error: "שגיאה",
+}
+
+export const ROLE_TYPE_LABELS: Record<ExtractedRoleType, string> = {
+  regular: "רגיל",
+  combined: "משולב",
+  group: "קבוצתי",
+  ambiguous: "לא ברור",
+}
