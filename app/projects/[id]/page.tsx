@@ -14,7 +14,9 @@ import { AddActorToProjectDialog } from "@/components/add-actor-to-project-dialo
 import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { EditProjectActorDialog } from "@/components/edit-project-actor-dialog"
 import { CreateRoleDialog } from "@/components/create-role-dialog"
+import { ProjectScriptsSection } from "@/components/project-scripts-section"
 import Link from "next/link"
+import { FileText } from "lucide-react"
 
 export default function ProjectDetailPage() {
   const router = useRouter()
@@ -353,9 +355,13 @@ export default function ProjectDetailPage() {
           {/* Main Content */}
           <div className="lg:col-span-3 space-y-6">
             <Tabs defaultValue="roles" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="roles">תפקידים ({projectRoles.length})</TabsTrigger>
                 <TabsTrigger value="actors">כל השחקנים ({projectActors.length})</TabsTrigger>
+                <TabsTrigger value="scripts" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  תסריטים
+                </TabsTrigger>
               </TabsList>
 
               {/* תפקידים */}
@@ -608,6 +614,11 @@ export default function ProjectDetailPage() {
                     })}
                   </div>
                 )}
+              </TabsContent>
+
+              {/* Scripts Tab */}
+              <TabsContent value="scripts" className="mt-6">
+                <ProjectScriptsSection projectId={projectId || ""} />
               </TabsContent>
             </Tabs>
           </div>
