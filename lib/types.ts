@@ -1,6 +1,13 @@
 export type VatStatus = "ptor" | "murshe" | "artist_salary"
 export type ProjectStatus = "not_started" | "casting" | "casted" | "recording" | "completed"
 export type Gender = "male" | "female"
+export type SingingLevel = "basic" | "good" | "high"
+export type SingingStyle = "musical" | "classic" | "pop" | "opera" | "jazz" | "rock"
+
+export interface SingingStyleOther {
+  name: string
+  level: SingingLevel
+}
 
 export interface Skill {
   id: string
@@ -33,6 +40,11 @@ export interface Actor {
   city?: string
   skills: Skill[]
   languages: Language[]
+  // שדות חדשים - דיבוב ושירה
+  dubbing_experience_years?: number
+  singing_level?: SingingLevel | null
+  singing_styles?: SingingStyle[]
+  singing_styles_other?: SingingStyleOther[]
 }
 
 export interface CastingProject {
@@ -69,13 +81,35 @@ export interface Favorite {
 }
 
 // Predefined lists as per specification
+// הוסר: משחק, קומדיה, שירה - שירה מנוהלת דרך שדות נפרדים
 export const SKILLS_LIST: Skill[] = [
-  { id: "1", key: "acting", label: "משחק" },
-  { id: "2", key: "singing", label: "שירה" },
   { id: "3", key: "voice_acting", label: "קריינות" },
-  { id: "4", key: "carpentry", label: "נגרות" },
   { id: "5", key: "russian_accent", label: "מבטא רוסי" },
   { id: "6", key: "any_accent", label: "כל מבטא אפשרי" },
+]
+
+// רמות שירה
+export const SINGING_LEVEL_LABELS: Record<SingingLevel, string> = {
+  basic: "שירה ברמה בסיסית",
+  good: "שירה ברמה טובה",
+  high: "שירה ברמה גבוהה",
+}
+
+// סגנונות שירה
+export const SINGING_STYLES_LIST: { key: SingingStyle; label: string }[] = [
+  { key: "musical", label: "מוזיקל" },
+  { key: "classic", label: "קלאסי" },
+  { key: "pop", label: "פופ" },
+  { key: "opera", label: "אופרה" },
+  { key: "jazz", label: "ג׳אז" },
+  { key: "rock", label: "רוק" },
+]
+
+// טווחי ניסיון בדיבוב לסינון
+export const DUBBING_EXPERIENCE_RANGES = [
+  { key: "0-1", label: "0-1 שנים", min: 0, max: 1 },
+  { key: "2-4", label: "2-4 שנים", min: 2, max: 4 },
+  { key: "5+", label: "5+ שנים", min: 5, max: 999 },
 ]
 
 export const LANGUAGES_LIST: Language[] = [
