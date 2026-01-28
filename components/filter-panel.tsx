@@ -9,21 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Slider } from "@/components/ui/slider"
-import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, DUBBING_EXPERIENCE_RANGES, SINGING_LEVEL_LABELS, type SingingLevel } from "@/lib/types"
-
-export interface FilterState {
-  gender: string[]
-  ageMin: number
-  ageMax: number
-  isSinger: boolean | null
-  isCourseGrad: boolean | null
-  skills: string[]
-  languages: string[]
-  vatStatus: string[]
-  sortBy: string
-  dubbingExperience: string[] // טווחי ניסיון בדיבוב: "0-1", "2-4", "5+"
-  singingLevel: SingingLevel[] // רמות שירה לסינון
-}
+import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, DUBBING_EXPERIENCE_RANGES, SINGING_LEVEL_LABELS, type SingingLevel, type FilterState } from "@/lib/types"
 
 interface FilterPanelProps {
   onFilterChange?: (filters: FilterState) => void

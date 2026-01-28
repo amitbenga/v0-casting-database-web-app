@@ -146,6 +146,20 @@ export const GENDER_LABELS: Record<Gender, string> = {
   female: "נקבה",
 }
 
+export interface FilterState {
+  gender: string[]
+  ageMin: number
+  ageMax: number
+  isSinger: boolean | null
+  isCourseGrad: boolean | null
+  skills: string[]
+  languages: string[]
+  vatStatus: string[]
+  sortBy: string
+  dubbingExperience: string[]
+  singingLevel: SingingLevel[]
+}
+
 export function getDefaultAvatar(gender: Gender): string {
   return gender === "male" ? "/male-silhouette-professional.jpg" : "/female-silhouette-professional.jpg"
 }
