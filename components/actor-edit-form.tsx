@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, SINGING_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingLevel, type SingingStyle, type SingingStyleOther } from "@/lib/types"
+import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleLevel, type SingingStyle, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 
 interface ActorEditFormProps {
@@ -53,7 +53,6 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
           other_lang_text: formData.other_lang_text,
           // שדות חדשים - דיבוב ושירה
           dubbing_experience_years: formData.dubbing_experience_years || 0,
-          singing_level: formData.singing_level || null,
           singing_styles: formData.singing_styles || [],
           singing_styles_other: formData.singing_styles_other || [],
           updated_at: new Date().toISOString(),
@@ -407,59 +406,65 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
             </div>
           </Card>
 
-          {/* Singing */}
+          {/* Singing Styles */}
           <Card className="p-4 md:p-6 space-y-6">
-            <h3 className="font-semibold">שירה</h3>
+            <h3 className="font-semibold">סגנונות שירה</h3>
             <Separator />
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="singing_level">רמת שירה</Label>
-                <Select 
-                  value={formData.singing_level || "none"} 
-                  onValueChange={(value) => handleChange("singing_level", value === "none" ? null : value as SingingLevel)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="בחר רמת שירה" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">לא רלוונטי</SelectItem>
-                    {Object.entries(SINGING_LEVEL_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <p className="text-sm text-muted-foreground">בחר סגנונות שירה והגדר רמה לכל סגנון</p>
+              
+              <div className="space-y-3">
+                {SINGING_STYLES_LIST.filter(style => style.key !== "other").map((style) => {
+                  const currentStyles = (formData.singing_styles || []) as SingingStyleWithLevel[]
+                  const existingStyle = currentStyles.find((s) => s.style === style.key)
+                  const isSelected = !!existingStyle
 
-              <div className="space-y-2">
-                <Label>סגנונות שירה</Label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {SINGING_STYLES_LIST.map((style) => (
-                    <div key={style.key} className="flex items-center gap-2">
+                  return (
+                    <div key={style.key} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
                       <Checkbox
                         id={`singing-style-${style.key}`}
-                        checked={(formData.singing_styles || []).includes(style.key)}
+                        checked={isSelected}
                         onCheckedChange={(checked) => {
-                          const currentStyles = formData.singing_styles || []
                           if (checked) {
-                            handleChange("singing_styles", [...currentStyles, style.key])
+                            handleChange("singing_styles", [...currentStyles, { style: style.key, level: "basic" as SingingStyleLevel }])
                           } else {
-                            handleChange("singing_styles", currentStyles.filter((s: SingingStyle) => s !== style.key))
+                            handleChange("singing_styles", currentStyles.filter((s) => s.style !== style.key))
                           }
                         }}
                       />
-                      <Label htmlFor={`singing-style-${style.key}`} className="cursor-pointer text-sm">
+                      <Label htmlFor={`singing-style-${style.key}`} className="cursor-pointer text-sm flex-1">
                         {style.label}
                       </Label>
+                      {isSelected && (
+                        <Select
+                          value={existingStyle.level}
+                          onValueChange={(value) => {
+                            const newStyles = currentStyles.map((s) =>
+                              s.style === style.key ? { ...s, level: value as SingingStyleLevel } : s
+                            )
+                            handleChange("singing_styles", newStyles)
+                          }}
+                        >
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(SINGING_STYLE_LEVEL_LABELS).map(([key, label]) => (
+                              <SelectItem key={key} value={key}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
 
               {/* Other singing styles */}
-              <div className="space-y-3">
+              <div className="space-y-3 pt-4 border-t">
                 <div className="flex items-center justify-between">
                   <Label>סגנונות שירה נוספים (אחר)</Label>
                   <Button
@@ -468,7 +473,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                     size="sm"
                     onClick={() => {
                       const currentOther = formData.singing_styles_other || []
-                      handleChange("singing_styles_other", [...currentOther, { name: "", level: "basic" as SingingLevel }])
+                      handleChange("singing_styles_other", [...currentOther, { name: "", level: "basic" as SingingStyleLevel }])
                     }}
                   >
                     <Plus className="h-4 w-4 ml-1" />
@@ -492,17 +497,17 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                       value={item.level}
                       onValueChange={(value) => {
                         const newOther = [...(formData.singing_styles_other || [])]
-                        newOther[index] = { ...newOther[index], level: value as SingingLevel }
+                        newOther[index] = { ...newOther[index], level: value as SingingStyleLevel }
                         handleChange("singing_styles_other", newOther)
                       }}
                     >
-                      <SelectTrigger className="w-[140px]">
+                      <SelectTrigger className="w-[120px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(SINGING_LEVEL_LABELS).map(([key, label]) => (
+                        {Object.entries(SINGING_STYLE_LEVEL_LABELS).map(([key, label]) => (
                           <SelectItem key={key} value={key}>
-                            {label.replace("שירה ברמה ", "")}
+                            {label}
                           </SelectItem>
                         ))}
                       </SelectContent>

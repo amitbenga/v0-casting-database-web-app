@@ -50,7 +50,6 @@ function mapActor(actor: any): Actor {
     updated_at: actor.updated_at,
     // שדות חדשים - דיבוב ושירה
     dubbing_experience_years: actor.dubbing_experience_years || 0,
-    singing_level: actor.singing_level || null,
     singing_styles: Array.isArray(actor.singing_styles) ? actor.singing_styles : [],
     singing_styles_other: Array.isArray(actor.singing_styles_other) ? actor.singing_styles_other : [],
   }
@@ -111,7 +110,7 @@ function ActorsDatabaseContent() {
     vatStatus: [],
     sortBy: "newest",
     dubbingExperience: [],
-    singingLevel: [],
+    singingStyles: [],
   })
   const [bulkFolderDialogOpen, setBulkFolderDialogOpen] = useState(false)
   const [loading, setLoading] = useState(false) // Declare the loading variable
@@ -382,11 +381,12 @@ function ActorsDatabaseContent() {
         if (!matchesRange) return false
       }
 
-      // סינון לפי רמת שירה
-      if (filters.singingLevel && filters.singingLevel.length > 0) {
-        if (!actor.singing_level || !filters.singingLevel.includes(actor.singing_level)) {
-          return false
-        }
+      // סינון לפי סגנונות שירה
+      if (filters.singingStyles && filters.singingStyles.length > 0) {
+        const actorStyles = (actor.singing_styles || []) as { style: string; level: string }[]
+        const actorStyleKeys = actorStyles.map(s => s.style)
+        const hasMatchingStyle = filters.singingStyles.some(style => actorStyleKeys.includes(style))
+        if (!hasMatchingStyle) return false
       }
 
       return true

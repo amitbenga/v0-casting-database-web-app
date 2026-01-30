@@ -1,12 +1,19 @@
 export type VatStatus = "ptor" | "murshe" | "artist_salary"
 export type ProjectStatus = "not_started" | "casting" | "casted" | "recording" | "completed"
 export type Gender = "male" | "female"
-export type SingingLevel = "basic" | "good" | "high"
-export type SingingStyle = "musical" | "classic" | "pop" | "opera" | "jazz" | "rock"
+export type SingingStyleLevel = "basic" | "medium" | "high"
+export type SingingStyle = "opera" | "pop" | "rock" | "jazz" | "classical" | "musical" | "folk" | "other"
 
+// מבנה חדש - כל סגנון עם רמה
+export interface SingingStyleWithLevel {
+  style: SingingStyle
+  level: SingingStyleLevel
+}
+
+// סגנונות מותאמים אישית (אחר)
 export interface SingingStyleOther {
   name: string
-  level: SingingLevel
+  level: SingingStyleLevel
 }
 
 export interface Skill {
@@ -42,8 +49,7 @@ export interface Actor {
   languages: Language[]
   // שדות חדשים - דיבוב ושירה
   dubbing_experience_years?: number
-  singing_level?: SingingLevel | null
-  singing_styles?: SingingStyle[]
+  singing_styles?: SingingStyleWithLevel[]
   singing_styles_other?: SingingStyleOther[]
 }
 
@@ -88,21 +94,23 @@ export const SKILLS_LIST: Skill[] = [
   { id: "6", key: "any_accent", label: "כל מבטא אפשרי" },
 ]
 
-// רמות שירה
-export const SINGING_LEVEL_LABELS: Record<SingingLevel, string> = {
-  basic: "שירה ברמה בסיסית",
-  good: "שירה ברמה טובה",
-  high: "שירה ברמה גבוהה",
+// רמות סגנון שירה
+export const SINGING_STYLE_LEVEL_LABELS: Record<SingingStyleLevel, string> = {
+  basic: "בסיסי",
+  medium: "בינוני",
+  high: "גבוה",
 }
 
 // סגנונות שירה
 export const SINGING_STYLES_LIST: { key: SingingStyle; label: string }[] = [
-  { key: "musical", label: "מוזיקל" },
-  { key: "classic", label: "קלאסי" },
-  { key: "pop", label: "פופ" },
   { key: "opera", label: "אופרה" },
-  { key: "jazz", label: "ג׳אז" },
+  { key: "pop", label: "פופ" },
   { key: "rock", label: "רוק" },
+  { key: "jazz", label: "ג׳אז" },
+  { key: "classical", label: "קלאסי" },
+  { key: "musical", label: "מחזמר" },
+  { key: "folk", label: "פולק" },
+  { key: "other", label: "אחר" },
 ]
 
 // טווחי ניסיון בדיבוב לסינון
@@ -157,7 +165,7 @@ export interface FilterState {
   vatStatus: string[]
   sortBy: string
   dubbingExperience: string[]
-  singingLevel: SingingLevel[]
+  singingStyles: SingingStyle[]
 }
 
 export function getDefaultAvatar(gender: Gender): string {
