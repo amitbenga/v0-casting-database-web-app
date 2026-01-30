@@ -85,6 +85,8 @@ export interface RoleConflict {
   project_id: string
   role_id_a: string
   role_id_b: string
+  role_a_name?: string
+  role_b_name?: string
   warning_type: string
   scene_reference?: string
   evidence_json?: any

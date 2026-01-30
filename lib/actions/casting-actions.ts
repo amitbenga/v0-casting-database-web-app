@@ -335,6 +335,9 @@ export async function getProjectRolesWithCasting(
 
     if (conflictsError) throw conflictsError
 
+    // Map role names for conflict visualization
+    const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]));
+
     // Transform roles to handle children and legacy casting naming
     const transformedRoles = roles.map(role => {
       const casting = role.role_castings && role.role_castings.length > 0 ? {
@@ -350,6 +353,13 @@ export async function getProjectRolesWithCasting(
       }
     });
 
+    // Enhance conflicts with role names for UI
+    const enhancedConflicts = conflicts.map(c => ({
+      ...c,
+      role_a_name: roleIdToName.get(c.role_id_a),
+      role_b_name: roleIdToName.get(c.role_id_b)
+    }));
+
     // Group children under parents
     const parentRoles = transformedRoles.filter(r => !r.parent_role_id);
     const resultRoles = parentRoles.map(parent => ({
@@ -360,7 +370,7 @@ export async function getProjectRolesWithCasting(
     return { 
       success: true, 
       roles: resultRoles as ProjectRoleWithCasting[], 
-      conflicts: conflicts as RoleConflict[] 
+      conflicts: enhancedConflicts as RoleConflict[] 
     }
   } catch (error: any) {
     console.error("Error fetching roles with casting:", error)

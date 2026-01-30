@@ -22,7 +22,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus, X, RefreshCw, FileText, Play, Loader2, Trash2 } from "lucide-react"
+import { UserPlus, X, RefreshCw, FileText, Play, Loader2, Trash2, AlertTriangle } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
 import {
   assignActorToRole,
@@ -66,10 +66,10 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
     try {
       const result = await assignActorToRole(role.id, actor.id)
       
-      if (!result.success && result.error) {
+      if (!result.success) {
         toast({
           title: "שגיאת שיבוץ",
-          description: result.error.message_he,
+          description: result.message_he || result.error || "שגיאה בשיבוץ השחקן",
           variant: "destructive",
         })
         return
@@ -211,12 +211,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
               {/* Actor Card */}
               <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={role.casting.actor.image_url} alt={role.casting.actor.name} />
-                  <AvatarFallback>{role.casting.actor.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={role.casting.actor?.image_url} alt={role.casting.actor?.full_name} />
+                  <AvatarFallback>{(role.casting.actor?.full_name || "ש").charAt(0)}</AvatarFallback>
                 </Avatar>
-                <span className="text-sm font-medium">{role.casting.actor.name}</span>
+                <span className="text-sm font-medium">{role.casting.actor?.full_name || "שחקן"}</span>
                 
-                {role.casting.actor.voice_sample_url && (
+                {role.casting.actor?.voice_sample_url && (
                   <Button
                     size="icon"
                     variant="ghost"
@@ -369,6 +369,23 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
           )}
         </div>
       </div>
+
+      {/* Conflict Warnings */}
+      {conflicts.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {conflicts
+            .filter(c => c.role_id_a === role.id || c.role_id_b === role.id)
+            .map((conflict, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-1 rounded border border-amber-100">
+                <AlertTriangle className="h-3 w-3" />
+                <span>
+                  קונפליקט עם {conflict.role_id_a === role.id ? conflict.role_b_name : conflict.role_a_name} 
+                  {conflict.scene_reference && ` (סצנה: ${conflict.scene_reference})`}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
 
       {/* Casting replicas badge */}
       {role.casting && (role.casting.replicas_planned || role.casting.replicas_final) && (
