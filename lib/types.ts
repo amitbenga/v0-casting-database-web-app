@@ -62,6 +62,17 @@ export interface CastingProject {
   updated_at: string
 }
 
+export interface ProjectRole {
+  id: string
+  project_id: string
+  role_name: string
+  role_name_normalized?: string
+  parent_role_id?: string
+  description?: string
+  replicas_needed: number
+  created_at: string
+}
+
 export interface ProjectActor {
   id: string
   project_id: string
@@ -71,6 +82,35 @@ export interface ProjectActor {
   replicas_final: number
   notes: string
   actor?: Actor
+}
+
+export interface RoleCasting {
+  id: string
+  project_id: string
+  role_id: string
+  actor_id: string
+  status: string
+  notes?: string
+  replicas_planned: number
+  replicas_final: number
+  created_at: string
+  updated_at: string
+  actors?: Actor
+}
+
+export interface RoleConflict {
+  id: string
+  project_id: string
+  role_id_a: string
+  role_id_b: string
+  warning_type: string
+  scene_reference?: string
+  evidence_json?: any
+  created_at: string
+}
+
+export interface ProjectRoleWithCasting extends ProjectRole {
+  role_castings?: RoleCasting
 }
 
 export interface Folder {

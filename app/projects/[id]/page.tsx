@@ -26,6 +26,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<any>(null)
   const [projectActors, setProjectActors] = useState<any[]>([])
   const [projectRoles, setProjectRoles] = useState<any[]>([])
+  const [roleCastings, setRoleCastings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditProjectDialog, setShowEditProjectDialog] = useState(false)
@@ -59,6 +60,13 @@ export default function ProjectDetailPage() {
 
         setProjectRoles(rolesData || [])
 
+        const { data: castingsData } = await supabase
+          .from("role_castings")
+          .select(`*, actors (*)`)
+          .eq("project_id", projectId)
+        
+        setRoleCastings(castingsData || [])
+
         const { data: actorsData } = await supabase
           .from("project_actors")
           .select(`*, actors (*)`)
@@ -83,6 +91,13 @@ export default function ProjectDetailPage() {
     setProjectRoles(data || [])
   }, [projectId])
 
+  const refreshCastings = useCallback(async () => {
+    if (!projectId) return
+    const supabase = createBrowserClient()
+    const { data } = await supabase.from("role_castings").select(`*, actors (*)`).eq("project_id", projectId)
+    setRoleCastings(data || [])
+  }, [projectId])
+
   const refreshActors = useCallback(async () => {
     if (!projectId) return
     const supabase = createBrowserClient()
@@ -98,8 +113,8 @@ export default function ProjectDetailPage() {
   }, [projectId])
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([refreshRoles(), refreshActors()])
-  }, [refreshRoles, refreshActors])
+    await Promise.all([refreshRoles(), refreshActors(), refreshCastings()])
+  }, [refreshRoles, refreshActors, refreshCastings])
 
   const deleteRole = async (roleId: string) => {
     if (!confirm("האם למחוק תפקיד זה? כל השחקנים המשויכים יישארו בפרויקט ללא תפקיד.")) return
@@ -155,15 +170,21 @@ export default function ProjectDetailPage() {
     setShowEditActorDialog(true)
   }
 
-  async function removeActorFromProject(projectActorId: string) {
+  async function removeActorFromProject(projectActor: any) {
     if (!confirm("האם להסיר שחקן זה מהפרויקט?")) return
 
     try {
       const supabase = createBrowserClient()
-      const { error } = await supabase.from("project_actors").delete().eq("id", projectActorId)
+      const tableName = projectActor.isNew ? "role_castings" : "project_actors"
+      const { error } = await supabase.from(tableName).delete().eq("id", projectActor.id)
 
       if (error) throw error
-      setProjectActors((prev) => prev.filter((pa) => pa.id !== projectActorId))
+      
+      if (projectActor.isNew) {
+        setRoleCastings((prev) => prev.filter((rc) => rc.id !== projectActor.id))
+      } else {
+        setProjectActors((prev) => prev.filter((pa) => pa.id !== projectActor.id))
+      }
     } catch (error) {
       console.error("Error removing actor:", error)
       alert("שגיאה בהסרת שחקן")
@@ -192,7 +213,13 @@ export default function ProjectDetailPage() {
     if (roleId === null) {
       return projectActors.filter((pa) => !pa.role_id)
     }
-    return projectActors.filter((pa) => pa.role_id === roleId)
+    // Combined logic: actors from legacy project_actors AND new role_castings
+    const legacyActors = projectActors.filter((pa) => pa.role_id === roleId)
+    const newCastings = roleCastings.filter((rc) => rc.role_id === roleId)
+    
+    // Merge them, avoiding duplicates if same actor is in both (though they shouldn't be ideally)
+    const merged = [...newCastings.map(rc => ({ ...rc, isNew: true })), ...legacyActors]
+    return merged
   }
 
   const getGenderStyle = (gender: string) => {
@@ -454,9 +481,21 @@ export default function ProjectDetailPage() {
                                     </Link>
 
                                     <div className="flex-1 min-w-0">
-                                      <Link href={`/actors/${actor.id}`} className="hover:underline">
-                                        <p className="font-medium">{actor.full_name}</p>
-                                      </Link>
+                                      <div className="flex items-center gap-2">
+                                        <Link href={`/actors/${actor.id}`} className="hover:underline">
+                                          <p className="font-medium">{actor.full_name}</p>
+                                        </Link>
+                                        {pa.isNew && (
+                                          <Badge variant="outline" className="text-[10px] h-4 px-1 bg-blue-50 text-blue-600 border-blue-200">
+                                            חדש
+                                          </Badge>
+                                        )}
+                                        {pa.status && (
+                                          <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                            {pa.status}
+                                          </Badge>
+                                        )}
+                                      </div>
                                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <span>{getGenderLabel(actor.gender)}</span>
                                         {currentAge && (
@@ -465,10 +504,10 @@ export default function ProjectDetailPage() {
                                             <span>גיל {currentAge}</span>
                                           </>
                                         )}
-                                        {pa.replicas_planned && (
+                                        {(pa.replicas_planned || pa.replicas_final) && (
                                           <>
                                             <span>•</span>
-                                            <span>{pa.replicas_planned} רפליקות</span>
+                                            <span>{pa.replicas_final || pa.replicas_planned} רפליקות</span>
                                           </>
                                         )}
                                       </div>
@@ -486,7 +525,7 @@ export default function ProjectDetailPage() {
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                           className="text-destructive"
-                                          onClick={() => removeActorFromProject(pa.id)}
+                                          onClick={() => removeActorFromProject(pa)}
                                         >
                                           הסר מהפרויקט
                                         </DropdownMenuItem>

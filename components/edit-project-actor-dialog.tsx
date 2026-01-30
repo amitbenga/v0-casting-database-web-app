@@ -49,14 +49,21 @@ export function EditProjectActorDialog({
 
     try {
       const supabase = createBrowserClient()
+      const tableName = projectActor.isNew ? "role_castings" : "project_actors"
+      
+      const updateData: any = {
+        replicas_planned: formData.replicas_planned ? Number.parseInt(formData.replicas_planned) : null,
+        replicas_final: formData.replicas_final ? Number.parseInt(formData.replicas_final) : null,
+        notes: formData.notes || null,
+      }
+      
+      if (!projectActor.isNew) {
+        updateData.role_name = formData.role_name
+      }
+
       const { error } = await supabase
-        .from("project_actors")
-        .update({
-          role_name: formData.role_name,
-          replicas_planned: formData.replicas_planned ? Number.parseInt(formData.replicas_planned) : null,
-          replicas_final: formData.replicas_final ? Number.parseInt(formData.replicas_final) : null,
-          notes: formData.notes || null,
-        })
+        .from(tableName)
+        .update(updateData)
         .eq("id", projectActor.id)
 
       if (error) throw error
@@ -118,15 +125,17 @@ export function EditProjectActorDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="role_name">שם התפקיד</Label>
-            <Input
-              id="role_name"
-              value={formData.role_name}
-              onChange={(e) => setFormData({ ...formData, role_name: e.target.value })}
-              placeholder="למשל: דמות ראשית, קריין"
-            />
-          </div>
+          {!projectActor.isNew && (
+            <div className="space-y-2">
+              <Label htmlFor="role_name">שם התפקיד</Label>
+              <Input
+                id="role_name"
+                value={formData.role_name}
+                onChange={(e) => setFormData({ ...formData, role_name: e.target.value })}
+                placeholder="למשל: דמות ראשית, קריין"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
