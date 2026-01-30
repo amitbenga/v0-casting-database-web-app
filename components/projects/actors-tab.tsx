@@ -15,25 +15,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Search, Loader2, Users, LayoutGrid, List, Play } from "lucide-react"
-import { getProjectCastings } from "@/lib/projects/api"
-import type { ActorBasic, CastingStatus } from "@/lib/projects/types"
+import { getProjectActorsFromCastings } from "@/lib/actions/casting-actions"
+import type { CastingStatus, CASTING_STATUS_COLORS } from "@/lib/types"
 
-interface ActorWithRoles {
-  actor: ActorBasic
-  roles: Array<{
-    role_id: string
-    role_name: string
-    status: CastingStatus
-    replicas_planned?: number
-    replicas_final?: number
-  }>
-}
+type ActorWithRoles = Awaited<ReturnType<typeof getProjectActorsFromCastings>>[number]
 
 interface ActorsTabProps {
   projectId: string
 }
 
-const STATUS_COLORS: Record<CastingStatus, string> = {
+const STATUS_COLORS: Record<string, string> = {
   "באודישן": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
   "בליהוק": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   "מלוהק": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
@@ -49,7 +40,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
     async function loadCastings() {
       try {
         setLoading(true)
-        const data = await getProjectCastings(projectId)
+        const data = await getProjectActorsFromCastings(projectId)
         setCastings(data)
       } catch (error) {
         console.error("Error loading castings:", error)
@@ -66,7 +57,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
     const searchLower = searchQuery.toLowerCase()
     return (
       c.actor.name.toLowerCase().includes(searchLower) ||
-      c.roles.some((r) => r.role_name.toLowerCase().includes(searchLower))
+      c.roles.some((r) => r.role_name?.toLowerCase().includes(searchLower))
     )
   })
 

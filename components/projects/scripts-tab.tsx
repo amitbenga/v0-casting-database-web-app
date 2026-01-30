@@ -24,8 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { createBrowserClient } from "@/lib/supabase/client"
-import { applyParsedScript } from "@/lib/projects/api"
-import type { ScriptProcessingStatus } from "@/lib/projects/types"
+import { applyParsedScript } from "@/lib/actions/casting-actions"
+import type { ScriptProcessingStatus } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
 interface ProjectScript {
@@ -177,16 +177,24 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     try {
       const result = await applyParsedScript(scriptId)
 
-      toast({
-        title: "התסריט הוחל בהצלחה",
-        description: `נוצרו ${result.roles_created} תפקידים ו-${result.conflicts_created} אזהרות קונפליקט`,
-      })
+      if (result.success) {
+        toast({
+          title: "התסריט הוחל בהצלחה",
+          description: `נוצרו ${result.rolesCreated} תפקידים ו-${result.conflictsCreated} אזהרות קונפליקט`,
+        })
 
-      // Refresh scripts list
-      await loadScripts()
+        // Refresh scripts list
+        await loadScripts()
 
-      // Notify parent to switch to roles tab
-      onScriptApplied?.()
+        // Notify parent to switch to roles tab
+        onScriptApplied?.()
+      } else {
+        toast({
+          title: "שגיאה בהחלת התסריט",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error("Error applying script:", error)
       toast({

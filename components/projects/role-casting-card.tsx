@@ -22,29 +22,32 @@ import {
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus, X, RefreshCw, FileText, Play, Loader2 } from "lucide-react"
+import { UserPlus, X, RefreshCw, FileText, Play, Loader2, Trash2 } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
 import {
   assignActorToRole,
   unassignActorFromRole,
-  updateRoleCasting,
-} from "@/lib/projects/api"
+  updateCastingStatus,
+  updateCastingDetails,
+  deleteRole,
+} from "@/lib/actions/casting-actions"
 import {
-  CASTING_STATUS_OPTIONS,
-  isCastingConflictError,
   type ProjectRoleWithCasting,
+  type RoleConflict,
   type CastingStatus,
-  type ActorBasic,
-} from "@/lib/projects/types"
+  CASTING_STATUS_LIST,
+  CASTING_STATUS_COLORS,
+} from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
 interface RoleCastingCardProps {
   role: ProjectRoleWithCasting
+  conflicts?: RoleConflict[]
   isChild?: boolean
   onUpdate: () => void
 }
 
-export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCastingCardProps) {
+export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdate }: RoleCastingCardProps) {
   const { toast } = useToast()
   const [isAssigning, setIsAssigning] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -58,15 +61,15 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
     role.casting?.replicas_final?.toString() || ""
   )
 
-  const handleAssignActor = async (actor: ActorBasic) => {
+  const handleAssignActor = async (actor: { id: string; name: string; image_url?: string }) => {
     setIsAssigning(true)
     try {
       const result = await assignActorToRole(role.id, actor.id)
       
-      if (isCastingConflictError(result)) {
+      if (!result.success && result.error) {
         toast({
           title: "שגיאת שיבוץ",
-          description: result.message_he,
+          description: result.error.message_he,
           variant: "destructive",
         })
         return
@@ -92,18 +95,20 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
   const handleUnassign = async () => {
     setIsUpdating(true)
     try {
-      await unassignActorFromRole(role.id)
-      toast({
-        title: "השיבוץ בוטל",
-        description: `התפקיד ${role.role_name} כעת פנוי`,
-      })
-      onUpdate()
-    } catch (error) {
-      toast({
-        title: "שגיאה",
-        description: "אירעה שגיאה בעת ביטול השיבוץ",
-        variant: "destructive",
-      })
+      const result = await unassignActorFromRole(role.id)
+      if (result.success) {
+        toast({
+          title: "השיבוץ בוטל",
+          description: `התפקיד ${role.role_name} כעת פנוי`,
+        })
+        onUpdate()
+      } else {
+        toast({
+          title: "שגיאה",
+          description: result.error || "אירעה שגיאה בעת ביטול השיבוץ",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsUpdating(false)
     }
@@ -112,14 +117,16 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
   const handleStatusChange = async (newStatus: CastingStatus) => {
     setIsUpdating(true)
     try {
-      await updateRoleCasting(role.id, { status: newStatus })
-      onUpdate()
-    } catch (error) {
-      toast({
-        title: "שגיאה",
-        description: "אירעה שגיאה בעת עדכון הסטטוס",
-        variant: "destructive",
-      })
+      const result = await updateCastingStatus(role.id, newStatus)
+      if (result.success) {
+        onUpdate()
+      } else {
+        toast({
+          title: "שגיאה",
+          description: result.error || "אירעה שגיאה בעת עדכון הסטטוס",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsUpdating(false)
     }
@@ -128,25 +135,55 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
   const handleSaveNotes = async () => {
     setIsUpdating(true)
     try {
-      await updateRoleCasting(role.id, {
+      const result = await updateCastingDetails(role.id, {
         notes: localNotes,
         replicas_planned: localReplicasPlanned ? parseInt(localReplicasPlanned) : undefined,
         replicas_final: localReplicasFinal ? parseInt(localReplicasFinal) : undefined,
       })
-      setNotesSheetOpen(false)
-      onUpdate()
-      toast({
-        title: "נשמר בהצלחה",
-      })
-    } catch (error) {
-      toast({
-        title: "שגיאה",
-        description: "אירעה שגיאה בעת שמירת הפרטים",
-        variant: "destructive",
-      })
+      if (result.success) {
+        setNotesSheetOpen(false)
+        onUpdate()
+        toast({
+          title: "נשמר בהצלחה",
+        })
+      } else {
+        toast({
+          title: "שגיאה",
+          description: result.error || "אירעה שגיאה בעת שמירת הפרטים",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsUpdating(false)
     }
+  }
+
+  const handleDeleteRole = async () => {
+    if (!confirm(`האם למחוק את התפקיד "${role.role_name}"?`)) return
+    
+    setIsUpdating(true)
+    try {
+      const result = await deleteRole(role.id)
+      if (result.success) {
+        toast({
+          title: "התפקיד נמחק",
+        })
+        onUpdate()
+      } else {
+        toast({
+          title: "שגיאה",
+          description: result.error || "אירעה שגיאה במחיקת התפקיד",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // Get status badge color
+  const getStatusBadgeClass = (status: CastingStatus) => {
+    return CASTING_STATUS_COLORS[status] || ""
   }
 
   return (
@@ -155,7 +192,12 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
         {/* Role Info */}
         <div className="flex items-center gap-4 min-w-0 flex-1">
           <div className="min-w-0 flex-1">
-            <h4 className="font-medium truncate">{role.role_name}</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium truncate">{role.role_name}</h4>
+              {role.source === "script" && (
+                <Badge variant="outline" className="text-xs">מתסריט</Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               {role.replicas_count} רפליקות
             </p>
@@ -192,14 +234,14 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
               {/* Status Dropdown */}
               <Select
                 value={role.casting.status}
-                onValueChange={handleStatusChange}
+                onValueChange={(v) => handleStatusChange(v as CastingStatus)}
                 disabled={isUpdating}
               >
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger className={`w-[120px] ${getStatusBadgeClass(role.casting.status)}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CASTING_STATUS_OPTIONS.map((status) => (
+                  {CASTING_STATUS_LIST.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status}
                     </SelectItem>
@@ -266,6 +308,7 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
                 variant="ghost"
                 onClick={() => setShowSearch(true)}
                 disabled={isUpdating}
+                title="החלף שחקן"
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
@@ -277,6 +320,7 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
                 onClick={handleUnassign}
                 disabled={isUpdating}
                 className="text-destructive hover:text-destructive"
+                title="בטל שיבוץ"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -288,6 +332,7 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
                 disabled={isAssigning}
                 placeholder="חיפוש שחקן לשיבוץ..."
               />
+              {isAssigning && <Loader2 className="h-4 w-4 animate-spin" />}
               <Button
                 size="icon"
                 variant="ghost"
@@ -297,14 +342,30 @@ export function RoleCastingCard({ role, isChild = false, onUpdate }: RoleCasting
               </Button>
             </div>
           ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSearch(true)}
-            >
-              <UserPlus className="h-4 w-4 ml-2" />
-              שיבוץ שחקן
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSearch(true)}
+              >
+                <UserPlus className="h-4 w-4 ml-2" />
+                שיבוץ שחקן
+              </Button>
+              
+              {/* Delete role button (only for manual roles without casting) */}
+              {role.source === "manual" && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleDeleteRole}
+                  disabled={isUpdating}
+                  className="text-destructive hover:text-destructive"
+                  title="מחק תפקיד"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>

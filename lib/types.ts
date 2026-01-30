@@ -227,3 +227,70 @@ export const ROLE_TYPE_LABELS: Record<ExtractedRoleType, string> = {
   group: "קבוצתי",
   ambiguous: "לא ברור",
 }
+
+// ===================================
+// Role Casting Types (New System)
+// ===================================
+
+export type CastingStatus = "באודישן" | "בליהוק" | "מלוהק"
+
+export const CASTING_STATUS_LIST: CastingStatus[] = ["באודישן", "בליהוק", "מלוהק"]
+
+export const CASTING_STATUS_COLORS: Record<CastingStatus, string> = {
+  "באודישן": "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+  "בליהוק": "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "מלוהק": "bg-green-500/10 text-green-600 border-green-500/20",
+}
+
+export interface RoleCastingActor {
+  id: string
+  name: string
+  image_url?: string
+  voice_sample_url?: string
+}
+
+export interface RoleCasting {
+  id: string
+  role_id: string
+  actor: RoleCastingActor
+  status: CastingStatus
+  replicas_planned?: number
+  replicas_final?: number
+  notes?: string
+  created_at: string
+}
+
+export interface ProjectRole {
+  id: string
+  project_id: string
+  role_name: string
+  parent_role_id?: string | null
+  replicas_count: number
+  source?: "manual" | "script"
+  created_at: string
+}
+
+export interface ProjectRoleWithCasting extends ProjectRole {
+  casting: RoleCasting | null
+  children?: ProjectRoleWithCasting[]
+}
+
+export interface RoleConflict {
+  id: string
+  project_id: string
+  role_1_id: string
+  role_2_id: string
+  role_1_name?: string
+  role_2_name?: string
+  scene_reference?: string
+  notes?: string
+}
+
+export interface CastingActionResult {
+  success: boolean
+  data?: RoleCasting
+  error?: {
+    code: "CASTING_CONFLICT" | "NOT_FOUND" | "UNKNOWN"
+    message_he: string
+  }
+}

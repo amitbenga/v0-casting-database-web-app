@@ -4,8 +4,13 @@ import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, Loader2 } from "lucide-react"
-import { searchActors } from "@/lib/projects/api"
-import type { ActorBasic } from "@/lib/projects/types"
+import { searchActors } from "@/lib/actions/casting-actions"
+
+interface ActorBasic {
+  id: string
+  name: string
+  image_url?: string
+}
 
 interface ActorSearchAutocompleteProps {
   onSelect: (actor: ActorBasic) => void

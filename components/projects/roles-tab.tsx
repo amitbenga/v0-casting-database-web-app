@@ -10,20 +10,34 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2 } from "lucide-react"
+import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2, Plus } from "lucide-react"
 import { RoleCastingCard } from "./role-casting-card"
-import { getProjectRolesWithCasting } from "@/lib/projects/api"
-import type { ProjectRoleWithCasting, RolesFilterState } from "@/lib/projects/types"
+import { getProjectRolesWithCasting, createManualRole } from "@/lib/actions/casting-actions"
+import type { ProjectRoleWithCasting, RoleConflict } from "@/lib/types"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
+
+interface RolesFilterState {
+  search: string
+  showOnlyUnassigned: boolean
+  sortByReplicas: "asc" | "desc" | null
+}
 
 interface RolesTabProps {
   projectId: string
 }
 
 export function RolesTab({ projectId }: RolesTabProps) {
+  const { toast } = useToast()
   const [roles, setRoles] = useState<ProjectRoleWithCasting[]>([])
+  const [conflicts, setConflicts] = useState<RoleConflict[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set())
+  const [showAddRoleDialog, setShowAddRoleDialog] = useState(false)
+  const [newRoleName, setNewRoleName] = useState("")
+  const [newRoleReplicas, setNewRoleReplicas] = useState(0)
+  const [isCreatingRole, setIsCreatingRole] = useState(false)
   const [filters, setFilters] = useState<RolesFilterState>({
     search: "",
     showOnlyUnassigned: false,
@@ -36,6 +50,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
       setError(null)
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
+      setConflicts(response.conflicts)
       
       // Expand all parent roles by default
       const parentIds = response.roles
@@ -47,6 +62,34 @@ export function RolesTab({ projectId }: RolesTabProps) {
       console.error("Error loading roles:", err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCreateRole = async () => {
+    if (!newRoleName.trim()) return
+
+    try {
+      setIsCreatingRole(true)
+      const result = await createManualRole(projectId, newRoleName.trim(), undefined, newRoleReplicas)
+      
+      if (result.success) {
+        toast({
+          title: "התפקיד נוצר בהצלחה",
+          description: `התפקיד "${newRoleName}" נוסף לפרויקט`,
+        })
+        setShowAddRoleDialog(false)
+        setNewRoleName("")
+        setNewRoleReplicas(0)
+        loadRoles()
+      } else {
+        toast({
+          title: "שגיאה",
+          description: result.error || "שגיאה ביצירת התפקיד",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsCreatingRole(false)
     }
   }
 
@@ -214,6 +257,55 @@ export function RolesTab({ projectId }: RolesTabProps) {
             <span className="mr-1">({filters.sortByReplicas === "desc" ? "יורד" : "עולה"})</span>
           )}
         </Button>
+
+        <Dialog open={showAddRoleDialog} onOpenChange={setShowAddRoleDialog}>
+          <DialogTrigger asChild>
+            <Button size="sm">
+              <Plus className="h-4 w-4 ml-2" />
+              הוסף תפקיד
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>הוספת תפקיד חדש</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="role-name">שם התפקיד</Label>
+                <Input
+                  id="role-name"
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  placeholder="לדוגמה: PADDINGTON"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role-replicas">מספר רפליקות משוער</Label>
+                <Input
+                  id="role-replicas"
+                  type="number"
+                  min={0}
+                  value={newRoleReplicas}
+                  onChange={(e) => setNewRoleReplicas(Number(e.target.value))}
+                />
+              </div>
+              <Button
+                onClick={handleCreateRole}
+                disabled={!newRoleName.trim() || isCreatingRole}
+                className="w-full"
+              >
+                {isCreatingRole ? (
+                  <>
+                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                    יוצר...
+                  </>
+                ) : (
+                  "צור תפקיד"
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Roles List */}
@@ -252,7 +344,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
                     <CollapsibleContent className="space-y-2">
                       {/* Parent role card if it has its own casting */}
                       {role.casting && (
-                        <RoleCastingCard role={role} onUpdate={loadRoles} />
+                        <RoleCastingCard role={role} conflicts={conflicts} onUpdate={loadRoles} />
                       )}
                       
                       {/* Child roles */}
@@ -260,6 +352,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
                         <RoleCastingCard
                           key={child.id}
                           role={child}
+                          conflicts={conflicts}
                           isChild
                           onUpdate={loadRoles}
                         />
@@ -272,7 +365,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
 
             // Regular role without children
             return (
-              <RoleCastingCard key={role.id} role={role} onUpdate={loadRoles} />
+              <RoleCastingCard key={role.id} role={role} conflicts={conflicts} onUpdate={loadRoles} />
             )
           })}
         </div>
