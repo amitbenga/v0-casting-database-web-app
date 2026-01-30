@@ -1,16 +1,44 @@
 export type ScriptProcessingStatus = "uploaded" | "processing" | "completed" | "error"
 export type ExtractedRoleType = "regular" | "combined" | "group" | "ambiguous"
+export type VatStatus = "ptor" | "murshe" | "artist_salary"
+export type Gender = "male" | "female" | "other"
+
+export type SingingStyleLevel = "basic" | "medium" | "high"
+export type SingingStyle = "opera" | "pop" | "rock" | "jazz" | "classical" | "musical" | "folk" | "other"
+
+export interface SingingStyleWithLevel {
+  style: SingingStyle
+  level: SingingStyleLevel
+}
+
+export interface SingingStyleOther {
+  name: string
+  level: SingingStyleLevel
+}
+
+export interface Skill {
+  id: string
+  key: string
+  label: string
+}
+
+export interface Language {
+  id: string
+  key: string
+  label: string
+}
 
 export interface Actor {
   id: string
   full_name: string
   image_url?: string
-  gender: "male" | "female" | "other"
+  gender: Gender
   birth_year?: number
   email?: string
   phone?: string
   voice_sample_url?: string
   created_at: string
+  vat_status: VatStatus
 }
 
 export interface Project {
@@ -100,3 +128,56 @@ export const ROLE_TYPE_LABELS: Record<ExtractedRoleType, string> = {
   group: "קבוצתי",
   ambiguous: "לא ברור",
 }
+
+export const VAT_STATUS_LABELS: Record<VatStatus, string> = {
+  ptor: "פטור",
+  murshe: "מורשה",
+  artist_salary: "שכר אמנים",
+}
+
+export const SINGING_STYLE_LEVEL_LABELS: Record<SingingStyleLevel, string> = {
+  basic: "בסיסי",
+  medium: "בינוני",
+  high: "גבוה",
+}
+
+export const SINGING_STYLES_LIST: { key: SingingStyle; label: string }[] = [
+  { key: "opera", label: "אופרה" },
+  { key: "pop", label: "פופ" },
+  { key: "rock", label: "רוק" },
+  { key: "jazz", label: "ג׳אז" },
+  { key: "classical", label: "קלאסי" },
+  { key: "musical", label: "מחזמר" },
+  { key: "folk", label: "פולק" },
+  { key: "other", label: "אחר" },
+]
+
+export const SKILLS_LIST: Skill[] = [
+  { id: "1", key: "acting", label: "משחק" },
+  { id: "2", key: "singing", label: "שירה" },
+  { id: "3", key: "voice_acting", label: "קריינות" },
+  { id: "4", key: "carpentry", label: "נגרות" },
+  { id: "5", key: "russian_accent", label: "מבטא רוסי" },
+  { id: "6", key: "any_accent", label: "כל מבטא אפשרי" },
+]
+
+export const LANGUAGES_LIST: Language[] = [
+  { id: "1", key: "hebrew", label: "עברית" },
+  { id: "2", key: "english", label: "אנגלית" },
+  { id: "3", key: "russian", label: "רוסית" },
+  { id: "4", key: "arabic", label: "ערבית" },
+  { id: "5", key: "french", label: "צרפתית" },
+  { id: "6", key: "spanish", label: "ספרדית" },
+  { id: "7", key: "german", label: "גרמנית" },
+  { id: "8", key: "italian", label: "איטלקית" },
+  { id: "9", key: "amharic", label: "אמהרית" },
+  { id: "10", key: "yiddish", label: "יידיש" },
+  { id: "11", key: "portuguese", label: "פורטוגזית" },
+  { id: "12", key: "romanian", label: "רומנית" },
+]
+
+export const DUBBING_EXPERIENCE_RANGES = [
+  { key: "0-1", label: "0-1 שנים", min: 0, max: 1 },
+  { key: "2-4", label: "2-4 שנים", min: 2, max: 4 },
+  { key: "5+", label: "5+ שנים", min: 5, max: 999 },
+]
