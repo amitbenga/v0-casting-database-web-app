@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { applyParsedScript } from "@/lib/actions/casting-actions"
+import { triggerScriptProcessing } from "@/lib/actions/script-processing"
 import type { ScriptProcessingStatus } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -76,6 +77,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [scripts, setScripts] = useState<ProjectScript[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [processingScriptId, setProcessingScriptId] = useState<string | null>(null)
   const [applyingScriptId, setApplyingScriptId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -142,6 +144,54 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
+    }
+  }
+
+  const handleProcessScript = async (scriptId: string) => {
+    setProcessingScriptId(scriptId)
+
+    // Update local state to show processing
+    setScripts((prev) =>
+      prev.map((s) =>
+        s.id === scriptId ? { ...s, processing_status: "processing" as ScriptProcessingStatus } : s
+      )
+    )
+
+    try {
+      const result = await triggerScriptProcessing(scriptId)
+
+      if (result.success) {
+        toast({
+          title: "התסריט עובד בהצלחה",
+          description: `זוהו ${result.data?.roles.length || 0} תפקידים ו-${result.data?.conflicts.length || 0} קונפליקטים`,
+        })
+
+        // Refresh scripts list to get updated status
+        await loadScripts()
+      } else {
+        toast({
+          title: "שגיאה בעיבוד התסריט",
+          description: result.error,
+          variant: "destructive",
+        })
+
+        // Update local state to show error
+        setScripts((prev) =>
+          prev.map((s) =>
+            s.id === scriptId
+              ? { ...s, processing_status: "error" as ScriptProcessingStatus, processing_error: result.error }
+              : s
+          )
+        )
+      }
+    } catch (error) {
+      console.error("Error processing script:", error)
+      toast({
+        title: "שגיאה בעיבוד התסריט",
+        variant: "destructive",
+      })
+    } finally {
+      setProcessingScriptId(null)
     }
   }
 
@@ -301,6 +351,21 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
+                          {script.processing_status === "uploaded" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleProcessScript(script.id)}
+                              disabled={processingScriptId === script.id}
+                            >
+                              {processingScriptId === script.id ? (
+                                <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                              ) : (
+                                <Play className="h-4 w-4 ml-2" />
+                              )}
+                              עבד עם AI
+                            </Button>
+                          )}
                           {canApply && (
                             <Button
                               size="sm"
@@ -312,7 +377,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                               ) : (
                                 <Play className="h-4 w-4 ml-2" />
                               )}
-                              החלה על הפרויקט
+                              החל על הפרויקט
                             </Button>
                           )}
                           <Button
@@ -320,7 +385,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                             variant="ghost"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleDeleteScript(script.id)}
-                            disabled={isApplying}
+                            disabled={isApplying || processingScriptId === script.id}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -363,9 +428,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <div className="text-sm">
               <p className="font-medium">איך זה עובד?</p>
               <ol className="mt-2 space-y-1 text-muted-foreground list-decimal list-inside">
-                <li>העלה קובץ תסריט (PDF, DOC, DOCX או TXT)</li>
-                <li>המערכת תעבד את הקובץ ותחלץ תפקידים</li>
-                <li>כשהסטטוס "הושלם" - לחץ על "החלה על הפרויקט"</li>
+                <li>העלה קובץ תסריט (TXT מומלץ)</li>
+                <li>לחץ על "עבד עם AI" - המערכת תחלץ תפקידים וקונפליקטים</li>
+                <li>כשהסטטוס "הושלם" - לחץ על "החל על הפרויקט"</li>
                 <li>התפקידים יועברו לטאב "תפקידים" ותוכל לשבץ שחקנים</li>
               </ol>
             </div>
