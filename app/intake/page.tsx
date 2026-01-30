@@ -13,10 +13,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { normalizeEmail, normalizePhone } from "@/lib/normalizers"
 
-const SKILLS_OPTIONS = ["משחק", "שירה", "ריקוד", "אומנויות לחימה", "אקרובטיקה", "מוזיקה", "קומדיה", "דרמה"]
+const SKILLS_OPTIONS = ["משחק", "שירה", "ריקוד", "אומנויות לחימה", "אקרובטיקה", "מוזיקה", "קומדיה", "דרמה", "אחר"]
 
-const LANGUAGES_OPTIONS = ["עברית", "אנגלית", "ערבית", "רוסית", "צרפתית", "ספרדית", "גרמנית", "איטלקית"]
+const LANGUAGES_OPTIONS = ["עברית", "אנגלית", "ערבית", "רוסית", "צרפתית", "ספרדית", "גרמנית", "איטלקית", "אחר"]
 
 export default function ActorIntakePage() {
   const router = useRouter()
@@ -26,6 +27,8 @@ export default function ActorIntakePage() {
   const [uploadedAudio, setUploadedAudio] = useState<string>("")
   const [skills, setSkills] = useState<string[]>([])
   const [languages, setLanguages] = useState<string[]>([])
+  const [skillsOther, setSkillsOther] = useState<string>("")
+  const [languagesOther, setLanguagesOther] = useState<string>("")
 
   const [formData, setFormData] = useState({
     full_name: "",
@@ -79,9 +82,11 @@ export default function ActorIntakePage() {
       const supabase = createBrowserClient()
 
       const submissionData = {
-        full_name: formData.full_name,
-        email: formData.email || null,
-        phone: formData.phone || null,
+        full_name: formData.full_name.trim(),
+        email: formData.email.trim() || null,
+        phone: formData.phone.trim() || null,
+        normalized_email: normalizeEmail(formData.email),
+        normalized_phone: normalizePhone(formData.phone),
         gender: formData.gender,
         birth_year: formData.birth_year ? Number.parseInt(formData.birth_year) : null,
         notes: formData.notes || null,
@@ -89,10 +94,22 @@ export default function ActorIntakePage() {
         is_course_graduate: formData.is_course_graduate,
         vat_status: formData.vat_status || null,
         skills: skills.length > 0 ? skills : null,
+        skills_other: skillsOther || null,
         languages: languages.length > 0 ? languages : null,
+        languages_other: languagesOther || null,
         image_url: uploadedPhoto || null,
         voice_sample_url: uploadedAudio || null,
-        status: "pending",
+        review_status: "pending",
+        match_status: "pending",
+        matched_actor_id: null,
+        raw_payload: {
+          ...formData,
+          skills,
+          skills_other: skillsOther,
+          languages,
+          languages_other: languagesOther,
+          submitted_at: new Date().toISOString(),
+        },
       }
 
       const { error } = await supabase.from("actor_submissions").insert([submissionData])
@@ -347,6 +364,15 @@ export default function ActorIntakePage() {
                         </Badge>
                       ))}
                     </div>
+                    {skills.includes("אחר") && (
+                      <div className="mt-2">
+                        <Input
+                          value={skillsOther}
+                          onChange={(e) => setSkillsOther(e.target.value)}
+                          placeholder="פרט כישורים נוספים..."
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -363,6 +389,15 @@ export default function ActorIntakePage() {
                         </Badge>
                       ))}
                     </div>
+                    {languages.includes("אחר") && (
+                      <div className="mt-2">
+                        <Input
+                          value={languagesOther}
+                          onChange={(e) => setLanguagesOther(e.target.value)}
+                          placeholder="פרט שפות נוספות..."
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>

@@ -16,6 +16,8 @@ import {
   GraduationCap,
   FileText,
   Clock,
+  AlertTriangle,
+  Link2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -25,6 +27,18 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+
+interface ExistingActor {
+  id: string
+  full_name: string
+  email?: string
+  phone?: string
+}
+
+interface DuplicateMatch {
+  actor: ExistingActor
+  matchType: "email" | "phone" | "both"
+}
 
 interface ActorSubmission {
   id: string
@@ -55,6 +69,8 @@ interface ActorSubmission {
 
 function AdminPageContent() {
   const [submissions, setSubmissions] = useState<ActorSubmission[]>([])
+  const [existingActors, setExistingActors] = useState<ExistingActor[]>([])
+  const [duplicatesMap, setDuplicatesMap] = useState<Record<string, DuplicateMatch[]>>({})
   const [loading, setLoading] = useState(true)
   const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
@@ -71,15 +87,57 @@ function AdminPageContent() {
     try {
       const supabase = createBrowserClient()
 
-      const { data, error } = await supabase
+      // טען submissions
+      const { data: submissionsData, error: submissionsError } = await supabase
         .from("actor_submissions")
         .select("*")
         .order("created_at", { ascending: false })
 
-      if (error) throw error
+      if (submissionsError) throw submissionsError
 
-      console.log("[v0] Loaded submissions:", data)
-      setSubmissions(data || [])
+      // טען שחקנים קיימים לבדיקת כפילויות
+      const { data: actorsData, error: actorsError } = await supabase
+        .from("actors")
+        .select("id, full_name, email, phone")
+
+      if (actorsError) throw actorsError
+
+      setSubmissions(submissionsData || [])
+      setExistingActors(actorsData || [])
+
+      // בדוק כפילויות
+      const duplicates: Record<string, DuplicateMatch[]> = {}
+      
+      for (const submission of submissionsData || []) {
+        const matches: DuplicateMatch[] = []
+        
+        for (const actor of actorsData || []) {
+          const normalizedSubmissionEmail = submission.normalized_email || submission.email?.toLowerCase().trim()
+          const normalizedSubmissionPhone = submission.normalized_phone || submission.phone?.replace(/\D/g, "")
+          
+          const normalizedActorEmail = actor.email?.toLowerCase().trim()
+          const normalizedActorPhone = actor.phone?.replace(/\D/g, "")
+          
+          const emailMatch = normalizedSubmissionEmail && normalizedActorEmail && 
+                           normalizedSubmissionEmail === normalizedActorEmail
+          const phoneMatch = normalizedSubmissionPhone && normalizedActorPhone && 
+                           normalizedSubmissionPhone === normalizedActorPhone
+
+          if (emailMatch && phoneMatch) {
+            matches.push({ actor, matchType: "both" })
+          } else if (emailMatch) {
+            matches.push({ actor, matchType: "email" })
+          } else if (phoneMatch) {
+            matches.push({ actor, matchType: "phone" })
+          }
+        }
+        
+        if (matches.length > 0) {
+          duplicates[submission.id] = matches
+        }
+      }
+      
+      setDuplicatesMap(duplicates)
     } catch (error) {
       console.error("[v0] Error loading submissions:", error)
     } finally {
@@ -239,6 +297,7 @@ function AdminPageContent() {
                 <SubmissionCard
                   key={submission.id}
                   submission={submission}
+                  duplicates={duplicatesMap[submission.id]}
                   onReview={(action) => {
                     setSelectedSubmission(submission)
                     setReviewAction(action)
@@ -338,11 +397,13 @@ function AdminPageContent() {
 
 function SubmissionCard({
   submission,
+  duplicates,
   onReview,
   onPlayAudio,
   isPlaying,
 }: {
   submission: ActorSubmission
+  duplicates?: DuplicateMatch[]
   onReview?: (action: "approve" | "reject") => void
   onPlayAudio: (url: string, id: string, e: React.MouseEvent) => void
   isPlaying: boolean
@@ -460,6 +521,40 @@ function SubmissionCard({
               )}
             </div>
           </div>
+
+          {/* Duplicate Warning */}
+          {duplicates && duplicates.length > 0 && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    זוהו התאמות אפשריות במערכת
+                  </p>
+                  {duplicates.map((match, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm">
+                      <Link2 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <span className="text-amber-700 dark:text-amber-300">
+                        <strong>{match.actor.full_name}</strong>
+                        {" - "}
+                        {match.matchType === "both" && "התאמת אימייל וטלפון"}
+                        {match.matchType === "email" && "התאמת אימייל"}
+                        {match.matchType === "phone" && "התאמת טלפון"}
+                      </span>
+                      <a
+                        href={`/actors/${match.actor.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        (צפה בפרופיל)
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           {submission.notes && (
