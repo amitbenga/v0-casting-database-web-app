@@ -14,7 +14,7 @@ import { RolesTab } from "@/components/projects/roles-tab"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
 import { createBrowserClient } from "@/lib/supabase/client"
-import { PROJECT_STATUS_LABELS } from "@/lib/types"
+import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 
 const PROJECT_STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
