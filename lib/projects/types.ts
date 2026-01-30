@@ -13,6 +13,14 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   completed: "הושלם",
 }
 
+export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
+  not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  completed: "bg-green-500/10 text-green-500 border-green-500/20",
+}
+
 // סטטוס שיבוץ שחקן לתפקיד
 export type CastingStatus = "באודישן" | "בליהוק" | "מלוהק"
 

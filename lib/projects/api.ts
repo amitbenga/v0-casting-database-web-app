@@ -549,3 +549,33 @@ export async function getProjectCastings(projectId: string): Promise<
 
   return Array.from(actorMap.values())
 }
+
+// ===================================
+// Export API Object
+// ===================================
+
+export const projectApi = {
+  // Projects
+  getProject,
+  deleteProject,
+  
+  // Roles
+  getRoles,
+  createRole,
+  deleteRole,
+  
+  // Castings
+  getCastings,
+  assignActor,
+  updateCastingStatus,
+  removeCasting,
+  
+  // Scripts
+  getScripts,
+  getExtractedRoles,
+  applyExtractedRoles,
+  
+  // Actors
+  searchActors,
+  getProjectActors,
+}
