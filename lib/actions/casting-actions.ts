@@ -410,3 +410,102 @@ export async function createManualRole(
     return { success: false, error: error.message || "שגיאה ביצירת תפקיד" }
   }
 }
+
+/**
+ * Gets unique actors assigned to a project and their roles.
+ */
+export async function getProjectActorsFromCastings(projectId: string) {
+  const supabase = await createClient()
+
+  try {
+    // 1. Get all roles for this project
+    const { data: roles } = await supabase
+      .from("project_roles")
+      .select("id, role_name")
+      .eq("project_id", projectId)
+
+    if (!roles || roles.length === 0) return []
+    const roleIds = roles.map(r => r.id)
+
+    // 2. Get all castings for these roles
+    const { data: castings, error } = await supabase
+      .from("role_castings")
+      .select(`
+        role_id,
+        actor_id,
+        status,
+        replicas_planned,
+        replicas_final,
+        actors (
+          id,
+          full_name,
+          image_url,
+          voice_sample_url
+        )
+      `)
+      .in("role_id", roleIds)
+
+    if (error) throw error
+    if (!castings) return []
+
+    // 3. Group by actor
+    const actorMap = new Map<string, any>()
+    const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]))
+
+    for (const c of castings) {
+      const actor = c.actors as any
+      if (!actor) continue
+
+      if (!actorMap.has(actor.id)) {
+        actorMap.set(actor.id, {
+          actor: {
+            id: actor.id,
+            name: actor.full_name,
+            image_url: actor.image_url,
+            voice_sample_url: actor.voice_sample_url
+          },
+          roles: []
+        })
+      }
+
+      actorMap.get(actor.id).roles.push({
+        role_id: c.role_id,
+        role_name: roleIdToName.get(c.role_id),
+        status: c.status,
+        replicas_planned: c.replicas_planned,
+        replicas_final: c.replicas_final
+      })
+    }
+
+    return Array.from(actorMap.values())
+  } catch (error) {
+    console.error("Error in getProjectActorsFromCastings:", error)
+    return []
+  }
+}
+
+/**
+ * Searches for actors by name.
+ */
+export async function searchActors(query: string) {
+  const supabase = await createClient()
+
+  try {
+    const { data, error } = await supabase
+      .from("actors")
+      .select("id, full_name, image_url")
+      .ilike("full_name", `%${query}%`)
+      .limit(10)
+
+    if (error) throw error
+
+    return (data || []).map(a => ({
+      id: a.id,
+      name: a.full_name,
+      image_url: a.image_url
+    }))
+  } catch (error) {
+    console.error("Error in searchActors:", error)
+    return []
+  }
+}
