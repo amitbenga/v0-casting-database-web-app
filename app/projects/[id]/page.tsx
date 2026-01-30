@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, Edit, MoreVertical, Users, Calendar, Film, UserCircle, Clapperboard, FileText } from "lucide-react"
+import { ArrowLeft, Edit, MoreVertical, Users, Calendar, Film, UserCircle, Clapperboard, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,9 +13,34 @@ import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { RolesTab } from "@/components/projects/roles-tab"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
-import { projectApi } from "@/lib/projects/api"
-import type { Project, ProjectRole, RoleCasting, ScriptFile, ExtractedRole } from "@/lib/projects/types"
-import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/projects/types"
+import { createBrowserClient } from "@/lib/supabase/client"
+import { PROJECT_STATUS_LABELS } from "@/lib/types"
+
+const PROJECT_STATUS_COLORS: Record<string, string> = {
+  not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  completed: "bg-green-500/10 text-green-500 border-green-500/20",
+}
+
+interface Project {
+  id: string
+  name: string
+  status: string
+  notes?: string
+  director?: string
+  casting_director?: string
+  project_date?: string
+  created_at: string
+  updated_at: string
+}
+
+interface ProjectStats {
+  rolesCount: number
+  actorsCount: number
+  scriptsCount: number
+}
 
 export default function ProjectDetailPage() {
   const router = useRouter()
@@ -23,32 +48,59 @@ export default function ProjectDetailPage() {
   const projectId = typeof params?.id === "string" ? params.id : null
 
   const [project, setProject] = useState<Project | null>(null)
-  const [roles, setRoles] = useState<ProjectRole[]>([])
-  const [castings, setCastings] = useState<RoleCasting[]>([])
-  const [scripts, setScripts] = useState<ScriptFile[]>([])
-  const [extractedRoles, setExtractedRoles] = useState<ExtractedRole[]>([])
+  const [stats, setStats] = useState<ProjectStats>({ rolesCount: 0, actorsCount: 0, scriptsCount: 0 })
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("roles")
   const [showEditProjectDialog, setShowEditProjectDialog] = useState(false)
 
-  // Load all data
+  // Load project and stats
   const loadData = useCallback(async () => {
     if (!projectId) return
     
     setLoading(true)
     try {
-      const [projectData, rolesData, castingsData, scriptsData, extractedData] = await Promise.all([
-        projectApi.getProject(projectId),
-        projectApi.getRoles(projectId),
-        projectApi.getCastings(projectId),
-        projectApi.getScripts(projectId),
-        projectApi.getExtractedRoles(projectId),
+      const supabase = createBrowserClient()
+      
+      // Load project
+      const { data: projectData, error: projectError } = await supabase
+        .from("casting_projects")
+        .select("*")
+        .eq("id", projectId)
+        .single()
+
+      if (projectError) throw projectError
+      setProject(projectData)
+
+      // Load stats
+      const [rolesResult, castingsResult, scriptsResult] = await Promise.all([
+        supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
+        supabase.from("role_castings").select("actor_id").eq("role_id", projectId), // This will be fixed below
+        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
       ])
 
-      setProject(projectData)
-      setRoles(rolesData)
-      setCastings(castingsData)
-      setScripts(scriptsData)
-      setExtractedRoles(extractedData)
+      // Get unique actors from role_castings via roles
+      const { data: roleIds } = await supabase
+        .from("project_roles")
+        .select("id")
+        .eq("project_id", projectId)
+
+      let actorsCount = 0
+      if (roleIds && roleIds.length > 0) {
+        const { data: castings } = await supabase
+          .from("role_castings")
+          .select("actor_id")
+          .in("role_id", roleIds.map(r => r.id))
+        
+        if (castings) {
+          actorsCount = new Set(castings.map(c => c.actor_id)).size
+        }
+      }
+
+      setStats({
+        rolesCount: rolesResult.count || 0,
+        actorsCount,
+        scriptsCount: scriptsResult.count || 0,
+      })
     } catch (error) {
       console.error("Error loading project data:", error)
     } finally {
@@ -60,42 +112,19 @@ export default function ProjectDetailPage() {
     loadData()
   }, [loadData])
 
-  // Refresh functions
-  const refreshRoles = useCallback(async () => {
-    if (!projectId) return
-    const data = await projectApi.getRoles(projectId)
-    setRoles(data)
-  }, [projectId])
-
-  const refreshCastings = useCallback(async () => {
-    if (!projectId) return
-    const data = await projectApi.getCastings(projectId)
-    setCastings(data)
-  }, [projectId])
-
-  const refreshScripts = useCallback(async () => {
-    if (!projectId) return
-    const [scriptsData, extractedData] = await Promise.all([
-      projectApi.getScripts(projectId),
-      projectApi.getExtractedRoles(projectId),
-    ])
-    setScripts(scriptsData)
-    setExtractedRoles(extractedData)
-  }, [projectId])
-
-  const refreshProject = useCallback(async () => {
-    if (!projectId) return
-    const data = await projectApi.getProject(projectId)
-    if (data) setProject(data)
-  }, [projectId])
-
   // Delete project
   async function deleteProject() {
     if (!confirm("האם אתה בטוח שברצונך למחוק את הפרויקט? פעולה זו בלתי הפיכה.")) return
     if (!projectId) return
 
     try {
-      await projectApi.deleteProject(projectId)
+      const supabase = createBrowserClient()
+      const { error } = await supabase
+        .from("casting_projects")
+        .delete()
+        .eq("id", projectId)
+
+      if (error) throw error
       router.push("/projects")
     } catch (error) {
       console.error("Error deleting project:", error)
@@ -103,15 +132,11 @@ export default function ProjectDetailPage() {
     }
   }
 
-  // Compute stats
-  const totalActors = new Set(castings.map(c => c.actor_id)).size
-  const confirmedCastings = castings.filter(c => c.status === "confirmed").length
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground">טוען פרויקט...</p>
         </div>
       </div>
@@ -142,8 +167,8 @@ export default function ProjectDetailPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-xl md:text-2xl font-semibold truncate">{project.name}</h1>
-                  <Badge variant="outline" className={PROJECT_STATUS_COLORS[project.status]}>
-                    {PROJECT_STATUS_LABELS[project.status]}
+                  <Badge variant="outline" className={PROJECT_STATUS_COLORS[project.status] || ""}>
+                    {PROJECT_STATUS_LABELS[project.status as keyof typeof PROJECT_STATUS_LABELS] || project.status}
                   </Badge>
                 </div>
               </div>
@@ -228,7 +253,7 @@ export default function ProjectDetailPage() {
                   <Clapperboard className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div className="flex-1">
                     <p className="text-xs text-muted-foreground">תפקידים</p>
-                    <p className="text-sm font-medium">{roles.length}</p>
+                    <p className="text-sm font-medium">{stats.rolesCount}</p>
                   </div>
                 </div>
 
@@ -236,7 +261,7 @@ export default function ProjectDetailPage() {
                   <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div className="flex-1">
                     <p className="text-xs text-muted-foreground">שחקנים בפרויקט</p>
-                    <p className="text-sm font-medium">{totalActors}</p>
+                    <p className="text-sm font-medium">{stats.actorsCount}</p>
                   </div>
                 </div>
 
@@ -244,7 +269,7 @@ export default function ProjectDetailPage() {
                   <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div className="flex-1">
                     <p className="text-xs text-muted-foreground">תסריטים</p>
-                    <p className="text-sm font-medium">{scripts.length}</p>
+                    <p className="text-sm font-medium">{stats.scriptsCount}</p>
                   </div>
                 </div>
               </div>
@@ -261,47 +286,35 @@ export default function ProjectDetailPage() {
 
           {/* Main Content */}
           <div className="lg:col-span-3 space-y-6">
-            <Tabs defaultValue="roles" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="roles">
-                  תפקידים ({roles.length})
+                  תפקידים ({stats.rolesCount})
                 </TabsTrigger>
                 <TabsTrigger value="scripts">
-                  תסריטים ({scripts.length})
+                  תסריטים ({stats.scriptsCount})
                 </TabsTrigger>
                 <TabsTrigger value="actors">
-                  שחקנים ({totalActors})
+                  שחקנים ({stats.actorsCount})
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <RolesTab
-                  projectId={project.id}
-                  roles={roles}
-                  castings={castings}
-                  onRolesChange={refreshRoles}
-                  onCastingsChange={refreshCastings}
-                />
+                <RolesTab projectId={project.id} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">
-                <ScriptsTab
-                  projectId={project.id}
-                  scripts={scripts}
-                  extractedRoles={extractedRoles}
-                  existingRoles={roles}
-                  onScriptsChange={refreshScripts}
-                  onRolesChange={refreshRoles}
+                <ScriptsTab 
+                  projectId={project.id} 
+                  onScriptApplied={() => {
+                    setActiveTab("roles")
+                    loadData()
+                  }}
                 />
               </TabsContent>
 
               <TabsContent value="actors" className="mt-6">
-                <ActorsTab
-                  projectId={project.id}
-                  roles={roles}
-                  castings={castings}
-                  onCastingsChange={refreshCastings}
-                />
+                <ActorsTab projectId={project.id} />
               </TabsContent>
             </Tabs>
           </div>
@@ -311,11 +324,18 @@ export default function ProjectDetailPage() {
       {/* Edit Project Dialog */}
       {showEditProjectDialog && project && (
         <EditProjectDialog
-          project={project}
+          project={{
+            id: project.id,
+            name: project.name,
+            status: project.status as any,
+            notes: project.notes || "",
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+          }}
           open={showEditProjectDialog}
           onOpenChange={setShowEditProjectDialog}
           onSuccess={() => {
-            refreshProject()
+            loadData()
             setShowEditProjectDialog(false)
           }}
         />

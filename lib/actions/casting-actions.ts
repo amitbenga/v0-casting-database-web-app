@@ -1,6 +1,6 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import type { 
   ProjectRoleWithCasting, 
   RoleCasting, 
@@ -16,7 +16,7 @@ import type {
 export async function getProjectRolesWithCasting(
   projectId: string
 ): Promise<{ roles: ProjectRoleWithCasting[]; conflicts: RoleConflict[] }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   // Get all roles for the project
   const { data: roles, error: rolesError } = await supabase
@@ -123,7 +123,7 @@ export async function assignActorToRole(
   roleId: string,
   actorId: string
 ): Promise<CastingActionResult> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   // Get the role to find project_id
   const { data: role, error: roleError } = await supabase
@@ -275,7 +275,7 @@ export async function assignActorToRole(
 export async function unassignActorFromRole(
   roleId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from("role_castings")
@@ -298,7 +298,7 @@ export async function updateCastingStatus(
   roleId: string,
   status: CastingStatus
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from("role_castings")
@@ -325,7 +325,7 @@ export async function updateCastingDetails(
     notes?: string
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from("role_castings")
@@ -347,7 +347,7 @@ export async function updateCastingDetails(
 export async function applyParsedScript(
   scriptId: string
 ): Promise<{ success: boolean; rolesCreated: number; conflictsCreated: number; error?: string }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   // Get the script and its extracted roles
   const { data: script, error: scriptError } = await supabase
@@ -460,7 +460,7 @@ export async function searchActors(
 ): Promise<{ id: string; name: string; image_url?: string }[]> {
   if (!query || query.length < 2) return []
 
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from("actors")
@@ -490,7 +490,7 @@ export async function getProjectActorsFromCastings(projectId: string): Promise<
     roles: { role_id: string; role_name: string; status: CastingStatus; replicas_planned?: number }[]
   }[]
 > {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const { data: castings, error } = await supabase
     .from("role_castings")
@@ -559,7 +559,7 @@ export async function createManualRole(
   parentRoleId?: string,
   replicasCount?: number
 ): Promise<{ success: boolean; role?: ProjectRoleWithCasting; error?: string }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from("project_roles")
@@ -595,7 +595,7 @@ export async function createManualRole(
 export async function deleteRole(
   roleId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   // First delete any castings
   await supabase.from("role_castings").delete().eq("role_id", roleId)

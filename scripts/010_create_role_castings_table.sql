@@ -46,24 +46,30 @@ CREATE INDEX IF NOT EXISTS idx_role_castings_actor ON role_castings(actor_id);
 -- 3. Create role_conflicts table
 -- ===================================
 
-CREATE TABLE IF NOT EXISTS role_conflicts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES casting_projects(id) ON DELETE CASCADE,
-    role_1_id UUID REFERENCES project_roles(id) ON DELETE CASCADE,
-    role_2_id UUID REFERENCES project_roles(id) ON DELETE CASCADE,
-    role_1_name TEXT,
-    role_2_name TEXT,
-    scene_reference TEXT,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    -- Prevent duplicate conflicts
-    UNIQUE (project_id, role_1_id, role_2_id)
-);
-
--- Index for conflict lookups
-CREATE INDEX IF NOT EXISTS idx_role_conflicts_project ON role_conflicts(project_id);
-CREATE INDEX IF NOT EXISTS idx_role_conflicts_roles ON role_conflicts(role_1_id, role_2_id);
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE tablename = 'role_conflicts') THEN
+        CREATE TABLE role_conflicts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            project_id UUID NOT NULL REFERENCES casting_projects(id) ON DELETE CASCADE,
+            role_1_id UUID REFERENCES project_roles(id) ON DELETE CASCADE,
+            role_2_id UUID REFERENCES project_roles(id) ON DELETE CASCADE,
+            role_1_name TEXT,
+            role_2_name TEXT,
+            scene_reference TEXT,
+            notes TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        
+        -- Add unique constraint after table creation
+        ALTER TABLE role_conflicts ADD CONSTRAINT role_conflicts_unique 
+            UNIQUE (project_id, role_1_id, role_2_id);
+            
+        -- Create indexes after table exists
+        CREATE INDEX idx_role_conflicts_project ON role_conflicts(project_id);
+        CREATE INDEX idx_role_conflicts_roles ON role_conflicts(role_1_id, role_2_id);
+    END IF;
+END $$;
 
 -- ===================================
 -- 4. Enable RLS
@@ -87,23 +93,31 @@ CREATE POLICY "Allow all role_conflicts access" ON role_conflicts
 -- ===================================
 
 -- Migrate from project_actors to role_castings (only if project_actors has role_id)
-INSERT INTO role_castings (role_id, actor_id, status, replicas_planned, replicas_final, notes, created_at)
-SELECT 
-    pa.role_id,
-    pa.actor_id,
-    CASE 
-        WHEN pa.status IN ('באודישן', 'בליהוק', 'מלוהק') THEN pa.status
-        ELSE 'באודישן'
-    END,
-    pa.replicas_planned,
-    pa.replicas_final,
-    pa.notes,
-    pa.created_at
-FROM project_actors pa
-WHERE pa.role_id IS NOT NULL
-AND NOT EXISTS (
-    SELECT 1 FROM role_castings rc WHERE rc.role_id = pa.role_id
-);
+-- Check if status column exists and migrate accordingly
+DO $$
+BEGIN
+    -- Only migrate if there's data to migrate
+    IF EXISTS (
+        SELECT 1 FROM project_actors pa 
+        WHERE pa.role_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM role_castings rc WHERE rc.role_id = pa.role_id)
+    ) THEN
+        INSERT INTO role_castings (role_id, actor_id, status, replicas_planned, replicas_final, notes, created_at)
+        SELECT 
+            pa.role_id,
+            pa.actor_id,
+            'באודישן', -- Default status
+            pa.replicas_planned,
+            pa.replicas_final,
+            pa.notes,
+            pa.created_at
+        FROM project_actors pa
+        WHERE pa.role_id IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM role_castings rc WHERE rc.role_id = pa.role_id
+        );
+    END IF;
+END $$;
 
 -- ===================================
 -- 6. Add comments for documentation
