@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { revalidatePath } from "next/cache"
 import type { 
   ProjectRoleWithCasting, 
   RoleCasting, 
@@ -9,607 +10,393 @@ import type {
   RoleConflict 
 } from "@/lib/types"
 
-// ===================================
-// Get Project Roles with Casting
-// ===================================
-
-export async function getProjectRolesWithCasting(
-  projectId: string
-): Promise<{ roles: ProjectRoleWithCasting[]; conflicts: RoleConflict[] }> {
+/**
+ * Applies a parsed script to the project.
+ * Maps raw extracted roles to project_roles and warnings to role_conflicts.
+ */
+export async function applyParsedScript(projectId: string, scriptId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
-  // Get all roles for the project
-  const { data: roles, error: rolesError } = await supabase
-    .from("project_roles")
-    .select("*")
-    .eq("project_id", projectId)
-    .order("role_name")
+  try {
+    // 1. Get raw extracted roles
+    const { data: rawRoles, error: rolesError } = await supabase
+      .from("script_extracted_roles")
+      .select("*")
+      .eq("script_id", scriptId)
 
-  if (rolesError) {
-    console.error("[v0] Error fetching roles:", rolesError)
-    return { roles: [], conflicts: [] }
-  }
+    if (rolesError) throw rolesError
 
-  // Get all castings for these roles
-  const roleIds = roles?.map((r) => r.id) || []
-  const { data: castings, error: castingsError } = await supabase
-    .from("role_castings")
-    .select(`
-      *,
-      actors:actor_id (
-        id,
-        full_name,
-        image_url,
-        voice_sample_url
-      )
-    `)
-    .in("role_id", roleIds)
+    // 2. Upsert to project_roles
+    for (const rawRole of rawRoles || []) {
+      const normalizedName = rawRole.role_name.trim().toLowerCase()
+      
+      // Check if role exists
+      const { data: existingRole } = await supabase
+        .from("project_roles")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("role_name", rawRole.role_name)
+        .maybeSingle()
 
-  if (castingsError) {
-    console.error("[v0] Error fetching castings:", castingsError)
-  }
-
-  // Get role conflicts
-  const { data: conflicts, error: conflictsError } = await supabase
-    .from("role_conflicts")
-    .select("*")
-    .eq("project_id", projectId)
-
-  if (conflictsError) {
-    console.error("[v0] Error fetching conflicts:", conflictsError)
-  }
-
-  // Map castings by role_id
-  const castingsByRoleId: Record<string, RoleCasting> = {}
-  for (const casting of castings || []) {
-    if (casting.actors) {
-      castingsByRoleId[casting.role_id] = {
-        id: casting.id,
-        role_id: casting.role_id,
-        actor: {
-          id: casting.actors.id,
-          name: casting.actors.full_name,
-          image_url: casting.actors.image_url,
-          voice_sample_url: casting.actors.voice_sample_url,
-        },
-        status: casting.status || "באודישן",
-        replicas_planned: casting.replicas_planned,
-        replicas_final: casting.replicas_final,
-        notes: casting.notes,
-        created_at: casting.created_at,
+      if (existingRole) {
+        // Update existing role
+        await supabase
+          .from("project_roles")
+          .update({
+            role_name_normalized: normalizedName,
+            replicas_needed: rawRole.replicas_count,
+            source: "script"
+          })
+          .eq("id", existingRole.id)
+      } else {
+        // Create new role
+        await supabase
+          .from("project_roles")
+          .insert({
+            project_id: projectId,
+            role_name: rawRole.role_name,
+            role_name_normalized: normalizedName,
+            replicas_needed: rawRole.replicas_count,
+            source: "script"
+          })
       }
     }
-  }
 
-  // Build roles with casting
-  const rolesWithCasting: ProjectRoleWithCasting[] = (roles || []).map((role) => ({
-    id: role.id,
-    project_id: role.project_id,
-    role_name: role.role_name,
-    parent_role_id: role.parent_role_id,
-    replicas_count: role.replicas_count || role.replicas_needed || 0,
-    source: role.source || "manual",
-    created_at: role.created_at,
-    casting: castingsByRoleId[role.id] || null,
-    children: [],
-  }))
+    // 3. Map warnings to role_conflicts
+    const { data: rawWarnings, error: warningsError } = await supabase
+      .from("script_casting_warnings")
+      .select("*")
+      .eq("project_id", projectId)
 
-  // Build hierarchy
-  const rootRoles: ProjectRoleWithCasting[] = []
-  const roleMap = new Map<string, ProjectRoleWithCasting>()
+    if (warningsError) throw warningsError
 
-  for (const role of rolesWithCasting) {
-    roleMap.set(role.id, role)
-  }
+    // Get all roles for this project to map names to IDs
+    const { data: projectRoles } = await supabase
+      .from("project_roles")
+      .select("id, role_name")
+      .eq("project_id", projectId)
 
-  for (const role of rolesWithCasting) {
-    if (role.parent_role_id && roleMap.has(role.parent_role_id)) {
-      const parent = roleMap.get(role.parent_role_id)!
-      if (!parent.children) parent.children = []
-      parent.children.push(role)
-    } else {
-      rootRoles.push(role)
+    const roleMap = new Map(projectRoles?.map(r => [r.role_name, r.id]))
+
+    for (const warning of rawWarnings || []) {
+      const roleIdA = roleMap.get(warning.role_1_name)
+      const roleIdB = roleMap.get(warning.role_2_name)
+
+      if (roleIdA && roleIdB) {
+        // Ensure roleIdA < roleIdB
+        const [id1, id2] = roleIdA < roleIdB ? [roleIdA, roleIdB] : [roleIdB, roleIdA]
+
+        await supabase
+          .from("role_conflicts")
+          .upsert({
+            project_id: projectId,
+            role_id_a: id1,
+            role_id_b: id2,
+            warning_type: warning.warning_type,
+            scene_reference: warning.scene_reference,
+          }, {
+            onConflict: "project_id, role_id_a, role_id_b"
+          })
+      }
     }
-  }
 
-  return { roles: rootRoles, conflicts: conflicts || [] }
+    // 4. Mark script as applied
+    await supabase
+      .from("project_scripts")
+      .update({
+        applied_at: new Date().toISOString()
+      })
+      .eq("id", scriptId)
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error applying script:", error)
+    return { success: false, error: error.message || "שגיאה בהחלת התסריט" }
+  }
 }
 
-// ===================================
-// Assign Actor to Role
-// ===================================
+/**
+ * Assigns an actor to a role, checking for conflicts.
+ */
+export async function assignActorToRole(roleId: string, actorId: string): Promise<CastingActionResult> {
+  const supabase = await createClient()
 
-export async function assignActorToRole(
-  roleId: string,
-  actorId: string
+  try {
+    // Get role to find project_id
+    const { data: role, error: roleError } = await supabase
+      .from("project_roles")
+      .select("project_id")
+      .eq("id", roleId)
+      .single()
+    
+    if (roleError || !role) throw new Error("Role not found")
+    const projectId = role.project_id
+
+    // 1. Check for conflicts
+    // Get all roles this actor is already assigned to in this project
+    const { data: currentAssignments } = await supabase
+      .from("role_castings")
+      .select("role_id")
+      .eq("project_id", projectId)
+      .eq("actor_id", actorId)
+
+    if (currentAssignments && currentAssignments.length > 0) {
+      const assignedRoleIds = currentAssignments.map(a => a.role_id)
+
+      // Check if any of these roles conflict with the new roleId
+      const { data: conflicts } = await supabase
+        .from("role_conflicts")
+        .select("*")
+        .or(`and(role_id_a.eq.${roleId},role_id_b.in.(${assignedRoleIds.join(',')})),and(role_id_b.eq.${roleId},role_id_a.in.(${assignedRoleIds.join(',')}))`)
+
+      if (conflicts && conflicts.length > 0) {
+        // Find the name of the conflicting role for a better error message
+        const conflictingId = conflicts[0].role_id_a === roleId ? conflicts[0].role_id_b : conflicts[0].role_id_a
+        const { data: conflictingRole } = await supabase
+          .from("project_roles")
+          .select("role_name")
+          .eq("id", conflictingId)
+          .single()
+
+        return { 
+          success: false, 
+          error: `השחקן כבר משובץ לתפקיד "${conflictingRole?.role_name}" שמתנגש עם תפקיד זה.`,
+          message_he: `השחקן כבר משובץ לתפקיד "${conflictingRole?.role_name}" שמתנגש עם תפקיד זה.`
+        }
+      }
+    }
+
+    // 2. Perform upsert
+    const { error } = await supabase
+      .from("role_castings")
+      .upsert({
+        project_id: projectId,
+        role_id: roleId,
+        actor_id: actorId,
+        status: "מלוהק",
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: "role_id"
+      })
+
+    if (error) throw error
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error assigning actor:", error)
+    return { success: false, error: error.message || "שגיאה בשיבוץ שחקן" }
+  }
+}
+
+/**
+ * Unassigns an actor from a role.
+ */
+export async function unassignActorFromRole(roleId: string): Promise<CastingActionResult> {
+  const supabase = await createClient()
+
+  try {
+    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    
+    const { error } = await supabase
+      .from("role_castings")
+      .delete()
+      .eq("role_id", roleId)
+
+    if (error) throw error
+
+    if (role) revalidatePath(`/projects/${role.project_id}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error unassigning actor:", error)
+    return { success: false, error: error.message || "שגיאה בהסרת שיבוץ" }
+  }
+}
+
+/**
+ * Updates casting status.
+ */
+export async function updateCastingStatus(roleId: string, status: CastingStatus): Promise<CastingActionResult> {
+  const supabase = await createClient()
+
+  try {
+    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    
+    const { error } = await supabase
+      .from("role_castings")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("role_id", roleId)
+
+    if (error) throw error
+
+    if (role) revalidatePath(`/projects/${role.project_id}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating status:", error)
+    return { success: false, error: error.message || "שגיאה בעדכון סטטוס" }
+  }
+}
+
+/**
+ * Updates casting details.
+ */
+export async function updateCastingDetails(
+  roleId: string, 
+  details: { notes?: string, replicas_planned?: number, replicas_final?: number }
 ): Promise<CastingActionResult> {
   const supabase = await createClient()
 
-  // Get the role to find project_id
-  const { data: role, error: roleError } = await supabase
-    .from("project_roles")
-    .select("id, project_id, role_name")
-    .eq("id", roleId)
-    .single()
+  try {
+    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    
+    const { error } = await supabase
+      .from("role_castings")
+      .update({ 
+        ...details,
+        updated_at: new Date().toISOString() 
+      })
+      .eq("role_id", roleId)
 
-  if (roleError || !role) {
-    return {
-      success: false,
-      error: {
-        code: "NOT_FOUND",
-        message_he: "התפקיד לא נמצא",
-      },
-    }
+    if (error) throw error
+
+    if (role) revalidatePath(`/projects/${role.project_id}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating details:", error)
+    return { success: false, error: error.message || "שגיאה בעדכון פרטים" }
   }
+}
 
-  // Check for conflicts - get all roles this actor is cast in for this project
-  const { data: existingCastings } = await supabase
-    .from("role_castings")
-    .select(`
-      role_id,
-      project_roles!inner (
-        id,
-        project_id,
-        role_name
-      )
-    `)
-    .eq("actor_id", actorId)
-    .eq("project_roles.project_id", role.project_id)
+/**
+ * Deletes a role.
+ */
+export async function deleteRole(roleId: string): Promise<CastingActionResult> {
+  const supabase = await createClient()
 
-  if (existingCastings && existingCastings.length > 0) {
-    // Check if any of these roles conflict with the target role
-    const existingRoleIds = existingCastings.map((c) => c.role_id)
+  try {
+    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    
+    const { error } = await supabase
+      .from("project_roles")
+      .delete()
+      .eq("id", roleId)
 
-    const { data: conflicts } = await supabase
+    if (error) throw error
+
+    if (role) revalidatePath(`/projects/${role.project_id}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error deleting role:", error)
+    return { success: false, error: error.message || "שגיאה במחיקת תפקיד" }
+  }
+}
+
+/**
+ * Gets project roles with their casting information.
+ */
+export async function getProjectRolesWithCasting(
+  projectId: string
+): Promise<{ success: boolean; roles: ProjectRoleWithCasting[]; conflicts: RoleConflict[]; error?: string }> {
+  const supabase = await createClient()
+
+  try {
+    // Get roles with casting
+    const { data: roles, error: rolesError } = await supabase
+      .from("project_roles")
+      .select(`
+        *,
+        role_castings (
+          id,
+          actor_id,
+          status,
+          notes,
+          replicas_planned,
+          replicas_final,
+          actors (
+            id,
+            full_name,
+            image_url,
+            gender,
+            voice_sample_url
+          )
+        )
+      `)
+      .eq("project_id", projectId)
+      .order("created_at")
+
+    if (rolesError) throw rolesError
+
+    // Get conflicts
+    const { data: conflicts, error: conflictsError } = await supabase
       .from("role_conflicts")
       .select("*")
-      .eq("project_id", role.project_id)
-      .or(
-        `and(role_1_id.eq.${roleId},role_2_id.in.(${existingRoleIds.join(",")})),and(role_2_id.eq.${roleId},role_1_id.in.(${existingRoleIds.join(",")}))`
-      )
+      .eq("project_id", projectId)
 
-    if (conflicts && conflicts.length > 0) {
-      const conflictingRole = existingCastings.find(
-        (c) =>
-          conflicts.some(
-            (conf) =>
-              (conf.role_1_id === roleId && conf.role_2_id === c.role_id) ||
-              (conf.role_2_id === roleId && conf.role_1_id === c.role_id)
-          )
-      )
+    if (conflictsError) throw conflictsError
 
+    // Transform roles to handle children and legacy casting naming
+    const transformedRoles = roles.map(role => {
+      const casting = role.role_castings && role.role_castings.length > 0 ? {
+        ...role.role_castings[0],
+        actor: role.role_castings[0].actors,
+        name: role.role_castings[0].actors?.full_name // for v0 UI
+      } : null;
+      
       return {
-        success: false,
-        error: {
-          code: "CASTING_CONFLICT",
-          message_he: `אי אפשר לשבץ את השחקן לתפקיד הזה כי הוא כבר משויך לתפקיד מתנגש (${(conflictingRole as any)?.project_roles?.role_name || "תפקיד אחר"})`,
-        },
+        ...role,
+        casting,
+        replicas_count: role.replicas_needed || 0
       }
+    });
+
+    // Group children under parents
+    const parentRoles = transformedRoles.filter(r => !r.parent_role_id);
+    const resultRoles = parentRoles.map(parent => ({
+      ...parent,
+      children: transformedRoles.filter(r => r.parent_role_id === parent.id)
+    }));
+
+    return { 
+      success: true, 
+      roles: resultRoles as ProjectRoleWithCasting[], 
+      conflicts: conflicts as RoleConflict[] 
     }
-  }
-
-  // Check if there's already a casting for this role
-  const { data: existingCasting } = await supabase
-    .from("role_castings")
-    .select("id")
-    .eq("role_id", roleId)
-    .single()
-
-  let result
-  if (existingCasting) {
-    // Update existing
-    result = await supabase
-      .from("role_castings")
-      .update({
-        actor_id: actorId,
-        status: "באודישן",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existingCasting.id)
-      .select(`
-        *,
-        actors:actor_id (
-          id,
-          full_name,
-          image_url,
-          voice_sample_url
-        )
-      `)
-      .single()
-  } else {
-    // Insert new
-    result = await supabase
-      .from("role_castings")
-      .insert({
-        role_id: roleId,
-        actor_id: actorId,
-        status: "באודישן",
-      })
-      .select(`
-        *,
-        actors:actor_id (
-          id,
-          full_name,
-          image_url,
-          voice_sample_url
-        )
-      `)
-      .single()
-  }
-
-  if (result.error) {
-    console.error("[v0] Error assigning actor:", result.error)
-    return {
-      success: false,
-      error: {
-        code: "UNKNOWN",
-        message_he: "שגיאה בשיבוץ השחקן",
-      },
-    }
-  }
-
-  return {
-    success: true,
-    data: {
-      id: result.data.id,
-      role_id: result.data.role_id,
-      actor: {
-        id: result.data.actors.id,
-        name: result.data.actors.full_name,
-        image_url: result.data.actors.image_url,
-        voice_sample_url: result.data.actors.voice_sample_url,
-      },
-      status: result.data.status,
-      replicas_planned: result.data.replicas_planned,
-      replicas_final: result.data.replicas_final,
-      notes: result.data.notes,
-      created_at: result.data.created_at,
-    },
+  } catch (error: any) {
+    console.error("Error fetching roles with casting:", error)
+    return { success: false, error: error.message || "שגיאה בטעינת תפקידים", roles: [], conflicts: [] }
   }
 }
 
-// ===================================
-// Unassign Actor from Role
-// ===================================
-
-export async function unassignActorFromRole(
-  roleId: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const { error } = await supabase
-    .from("role_castings")
-    .delete()
-    .eq("role_id", roleId)
-
-  if (error) {
-    console.error("[v0] Error unassigning actor:", error)
-    return { success: false, error: "שגיאה בהסרת השיבוץ" }
-  }
-
-  return { success: true }
-}
-
-// ===================================
-// Update Casting Status
-// ===================================
-
-export async function updateCastingStatus(
-  roleId: string,
-  status: CastingStatus
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const { error } = await supabase
-    .from("role_castings")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("role_id", roleId)
-
-  if (error) {
-    console.error("[v0] Error updating status:", error)
-    return { success: false, error: "שגיאה בעדכון הסטטוס" }
-  }
-
-  return { success: true }
-}
-
-// ===================================
-// Update Casting Details
-// ===================================
-
-export async function updateCastingDetails(
-  roleId: string,
-  updates: {
-    replicas_planned?: number
-    replicas_final?: number
-    notes?: string
-  }
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const { error } = await supabase
-    .from("role_castings")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("role_id", roleId)
-
-  if (error) {
-    console.error("[v0] Error updating casting details:", error)
-    return { success: false, error: "שגיאה בעדכון הפרטים" }
-  }
-
-  return { success: true }
-}
-
-// ===================================
-// Apply Parsed Script
-// ===================================
-
-export async function applyParsedScript(
-  scriptId: string
-): Promise<{ success: boolean; rolesCreated: number; conflictsCreated: number; error?: string }> {
-  const supabase = await createClient()
-
-  // Get the script and its extracted roles
-  const { data: script, error: scriptError } = await supabase
-    .from("project_scripts")
-    .select("id, project_id, processing_status")
-    .eq("id", scriptId)
-    .single()
-
-  if (scriptError || !script) {
-    return { success: false, rolesCreated: 0, conflictsCreated: 0, error: "התסריט לא נמצא" }
-  }
-
-  if (script.processing_status !== "completed") {
-    return { success: false, rolesCreated: 0, conflictsCreated: 0, error: "התסריט עדיין לא עובד" }
-  }
-
-  // Get extracted roles
-  const { data: extractedRoles, error: extractedError } = await supabase
-    .from("script_extracted_roles")
-    .select("*")
-    .eq("script_id", scriptId)
-
-  if (extractedError) {
-    return { success: false, rolesCreated: 0, conflictsCreated: 0, error: "שגיאה בטעינת התפקידים" }
-  }
-
-  // Get existing roles for this project to avoid duplicates
-  const { data: existingRoles } = await supabase
-    .from("project_roles")
-    .select("role_name")
-    .eq("project_id", script.project_id)
-
-  const existingRoleNames = new Set(existingRoles?.map((r) => r.role_name.toLowerCase()) || [])
-
-  // Insert new roles
-  const newRoles = (extractedRoles || [])
-    .filter((r) => !existingRoleNames.has(r.role_name.toLowerCase()))
-    .map((r) => ({
-      project_id: script.project_id,
-      role_name: r.role_name,
-      replicas_count: r.replicas_count || 0,
-      source: "script",
-    }))
-
-  let rolesCreated = 0
-  if (newRoles.length > 0) {
-    const { data: insertedRoles, error: insertError } = await supabase
-      .from("project_roles")
-      .insert(newRoles)
-      .select()
-
-    if (insertError) {
-      console.error("[v0] Error inserting roles:", insertError)
-    } else {
-      rolesCreated = insertedRoles?.length || 0
-    }
-  }
-
-  // Get casting warnings and create conflicts
-  const { data: warnings } = await supabase
-    .from("script_casting_warnings")
-    .select("*")
-    .eq("project_id", script.project_id)
-
-  let conflictsCreated = 0
-  if (warnings && warnings.length > 0) {
-    // Get all roles to map names to IDs
-    const { data: allRoles } = await supabase
-      .from("project_roles")
-      .select("id, role_name")
-      .eq("project_id", script.project_id)
-
-    const roleNameToId = new Map(allRoles?.map((r) => [r.role_name.toLowerCase(), r.id]) || [])
-
-    const conflicts = warnings
-      .map((w) => ({
-        project_id: script.project_id,
-        role_1_id: roleNameToId.get(w.role_1_name.toLowerCase()),
-        role_2_id: roleNameToId.get(w.role_2_name.toLowerCase()),
-        role_1_name: w.role_1_name,
-        role_2_name: w.role_2_name,
-        scene_reference: w.scene_reference,
-        notes: w.notes,
-      }))
-      .filter((c) => c.role_1_id && c.role_2_id)
-
-    if (conflicts.length > 0) {
-      const { data: insertedConflicts, error: conflictError } = await supabase
-        .from("role_conflicts")
-        .insert(conflicts)
-        .select()
-
-      if (conflictError) {
-        console.error("[v0] Error inserting conflicts:", conflictError)
-      } else {
-        conflictsCreated = insertedConflicts?.length || 0
-      }
-    }
-  }
-
-  return { success: true, rolesCreated, conflictsCreated }
-}
-
-// ===================================
-// Search Actors
-// ===================================
-
-export async function searchActors(
-  query: string
-): Promise<{ id: string; name: string; image_url?: string }[]> {
-  if (!query || query.length < 2) return []
-
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from("actors")
-    .select("id, full_name, image_url")
-    .or(`full_name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
-    .limit(10)
-
-  if (error) {
-    console.error("[v0] Error searching actors:", error)
-    return []
-  }
-
-  return (data || []).map((a) => ({
-    id: a.id,
-    name: a.full_name,
-    image_url: a.image_url,
-  }))
-}
-
-// ===================================
-// Get All Project Actors (from role_castings)
-// ===================================
-
-export async function getProjectActorsFromCastings(projectId: string): Promise<
-  {
-    actor: { id: string; name: string; image_url?: string }
-    roles: { role_id: string; role_name: string; status: CastingStatus; replicas_planned?: number }[]
-  }[]
-> {
-  const supabase = await createClient()
-
-  const { data: castings, error } = await supabase
-    .from("role_castings")
-    .select(`
-      *,
-      actors:actor_id (
-        id,
-        full_name,
-        image_url
-      ),
-      project_roles!inner (
-        id,
-        project_id,
-        role_name
-      )
-    `)
-    .eq("project_roles.project_id", projectId)
-
-  if (error) {
-    console.error("[v0] Error fetching project actors:", error)
-    return []
-  }
-
-  // Group by actor
-  const actorMap = new Map<
-    string,
-    {
-      actor: { id: string; name: string; image_url?: string }
-      roles: { role_id: string; role_name: string; status: CastingStatus; replicas_planned?: number }[]
-    }
-  >()
-
-  for (const casting of castings || []) {
-    if (!casting.actors) continue
-
-    const actorId = casting.actors.id
-    if (!actorMap.has(actorId)) {
-      actorMap.set(actorId, {
-        actor: {
-          id: casting.actors.id,
-          name: casting.actors.full_name,
-          image_url: casting.actors.image_url,
-        },
-        roles: [],
-      })
-    }
-
-    actorMap.get(actorId)!.roles.push({
-      role_id: casting.role_id,
-      role_name: (casting.project_roles as any).role_name,
-      status: casting.status,
-      replicas_planned: casting.replicas_planned,
-    })
-  }
-
-  return Array.from(actorMap.values())
-}
-
-// ===================================
-// Create Manual Role
-// ===================================
-
+/**
+ * Creates a role manually.
+ */
 export async function createManualRole(
-  projectId: string,
-  roleName: string,
-  parentRoleId?: string,
-  replicasCount?: number
-): Promise<{ success: boolean; role?: ProjectRoleWithCasting; error?: string }> {
+  projectId: string, 
+  roleName: string, 
+  description?: string, 
+  replicasNeeded: number = 0
+): Promise<CastingActionResult> {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
-    .from("project_roles")
-    .insert({
-      project_id: projectId,
-      role_name: roleName,
-      parent_role_id: parentRoleId || null,
-      replicas_count: replicasCount || 0,
-      source: "manual",
-    })
-    .select()
-    .single()
+  try {
+    const { error } = await supabase
+      .from("project_roles")
+      .insert({
+        project_id: projectId,
+        role_name: roleName,
+        role_name_normalized: roleName.trim().toLowerCase(),
+        description,
+        replicas_needed: replicasNeeded,
+        source: "manual"
+      })
 
-  if (error) {
-    console.error("[v0] Error creating role:", error)
-    return { success: false, error: "שגיאה ביצירת התפקיד" }
+    if (error) throw error
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error creating role:", error)
+    return { success: false, error: error.message || "שגיאה ביצירת תפקיד" }
   }
-
-  return {
-    success: true,
-    role: {
-      ...data,
-      casting: null,
-      children: [],
-    },
-  }
-}
-
-// ===================================
-// Delete Role
-// ===================================
-
-export async function deleteRole(
-  roleId: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  // First delete any castings
-  await supabase.from("role_castings").delete().eq("role_id", roleId)
-
-  // Then delete the role
-  const { error } = await supabase
-    .from("project_roles")
-    .delete()
-    .eq("id", roleId)
-
-  if (error) {
-    console.error("[v0] Error deleting role:", error)
-    return { success: false, error: "שגיאה במחיקת התפקיד" }
-  }
-
-  return { success: true }
 }

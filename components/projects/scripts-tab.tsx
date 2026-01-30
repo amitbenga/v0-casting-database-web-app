@@ -38,6 +38,7 @@ interface ProjectScript {
   file_size_bytes?: number
   processing_status: ScriptProcessingStatus
   processing_error?: string
+  applied_at?: string
   created_at: string
 }
 
@@ -225,12 +226,12 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     setApplyingScriptId(scriptId)
 
     try {
-      const result = await applyParsedScript(scriptId)
+      const result = await applyParsedScript(projectId, scriptId)
 
       if (result.success) {
         toast({
           title: "התסריט הוחל בהצלחה",
-          description: `נוצרו ${result.rolesCreated} תפקידים ו-${result.conflictsCreated} אזהרות קונפליקט`,
+          description: "התפקידים והקונפליקטים נוספו לפרויקט",
         })
 
         // Refresh scripts list
@@ -324,7 +325,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                 {scripts.map((script) => {
                   const statusConfig = STATUS_CONFIG[script.processing_status]
                   const isApplying = applyingScriptId === script.id
-                  const canApply = script.processing_status === "completed"
+                  const canApply = script.processing_status === "completed" && !script.applied_at
 
                   return (
                     <TableRow key={script.id}>
@@ -344,6 +345,12 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                           <p className="text-xs text-red-500 mt-1">
                             {script.processing_error}
                           </p>
+                        )}
+                        {script.applied_at && (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1 mt-1">
+                            <CheckCircle className="h-3 w-3" />
+                            הוחל
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell>
