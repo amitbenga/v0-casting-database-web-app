@@ -9,10 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import type { Actor } from "@/lib/types"
+import type { Actor, FilterState } from "@/lib/types"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { AppHeader } from "@/components/app-header"
-import type { FilterState } from "@/lib/types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
@@ -49,6 +48,10 @@ function mapActor(actor: any): Actor {
     other_lang_text: actor.other_lang_text || "",
     created_at: actor.created_at,
     updated_at: actor.updated_at,
+    // שדות חדשים - דיבוב ושירה
+    dubbing_experience_years: actor.dubbing_experience_years || 0,
+    singing_styles: Array.isArray(actor.singing_styles) ? actor.singing_styles : [],
+    singing_styles_other: Array.isArray(actor.singing_styles_other) ? actor.singing_styles_other : [],
   }
 }
 
@@ -106,6 +109,8 @@ function ActorsDatabaseContent() {
     languages: [],
     vatStatus: [],
     sortBy: "newest",
+    dubbingExperience: [],
+    singingStyles: [],
   })
   const [bulkFolderDialogOpen, setBulkFolderDialogOpen] = useState(false)
   const [loading, setLoading] = useState(false) // Declare the loading variable
@@ -362,6 +367,26 @@ function ActorsDatabaseContent() {
 
       if (filters.vatStatus.length > 0 && !filters.vatStatus.includes(actor.vat_status)) {
         return false
+      }
+
+      // סינון לפי ניסיון בדיבוב
+      if (filters.dubbingExperience && filters.dubbingExperience.length > 0) {
+        const actorYears = actor.dubbing_experience_years || 0
+        const matchesRange = filters.dubbingExperience.some((range) => {
+          if (range === "0-1") return actorYears >= 0 && actorYears <= 1
+          if (range === "2-4") return actorYears >= 2 && actorYears <= 4
+          if (range === "5+") return actorYears >= 5
+          return false
+        })
+        if (!matchesRange) return false
+      }
+
+      // סינון לפי סגנונות שירה
+      if (filters.singingStyles && filters.singingStyles.length > 0) {
+        const actorStyles = (actor.singing_styles || []) as { style: string; level: string }[]
+        const actorStyleKeys = actorStyles.map(s => s.style)
+        const hasMatchingStyle = filters.singingStyles.some(style => actorStyleKeys.includes(style))
+        if (!hasMatchingStyle) return false
       }
 
       return true

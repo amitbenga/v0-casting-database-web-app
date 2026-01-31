@@ -48,6 +48,8 @@ import type {
   ExtractedRoleType
 } from "@/lib/types"
 import { SCRIPT_STATUS_LABELS, ROLE_TYPE_LABELS } from "@/lib/types"
+import { applyParsedScript } from "@/lib/actions/casting-actions"
+import { toast } from "sonner"
 
 interface ProjectScriptsSectionProps {
   projectId: string
@@ -59,6 +61,7 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
   const [castingWarnings, setCastingWarnings] = useState<ScriptCastingWarning[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [applying, setApplying] = useState<string | null>(null)
   const [showWarnings, setShowWarnings] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -142,6 +145,32 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
+    }
+  }
+
+  // Apply parsed script
+  const handleApplyScript = async (scriptId: string) => {
+    setApplying(scriptId)
+    try {
+      const result = await applyParsedScript(projectId, scriptId)
+      if (result.success) {
+        toast.success("התפקידים והאזהרות הוחלו על הפרויקט בהצלחה")
+        // Refresh scripts to show updated status
+        const supabase = createClient()
+        const { data: scriptsData } = await supabase
+          .from("project_scripts")
+          .select("*")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+        if (scriptsData) setScripts(scriptsData as ProjectScript[])
+      } else {
+        toast.error(`שגיאה בהחלת התסריט: ${result.error}`)
+      }
+    } catch (error) {
+      console.error("Error applying script:", error)
+      toast.error("שגיאה בלתי צפויה בהחלת התסריט")
+    } finally {
+      setApplying(null)
     }
   }
 
@@ -281,14 +310,31 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
                       {new Date(script.created_at).toLocaleDateString("he-IL")}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteScript(script.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {script.processing_status === "completed" ? (
+                          <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100">
+                            הוחל
+                          </Badge>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => handleApplyScript(script.id)}
+                            disabled={applying === script.id || script.processing_status === "error"}
+                          >
+                            {applying === script.id ? "מחיל..." : "החל על הפרויקט"}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteScript(script.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

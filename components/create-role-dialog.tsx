@@ -40,6 +40,7 @@ export function CreateRoleDialog({ open, onOpenChange, projectId, onRoleCreated 
       const { error } = await supabase.from("project_roles").insert({
         project_id: projectId,
         role_name: roleName.trim(),
+        role_name_normalized: roleName.trim().toLowerCase(),
         description: description.trim() || null,
         replicas_needed: replicasNeeded ? Number.parseInt(replicasNeeded) : 0,
       })

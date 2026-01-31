@@ -1,6 +1,20 @@
+export type ScriptProcessingStatus = "uploaded" | "processing" | "completed" | "error"
+export type ExtractedRoleType = "regular" | "combined" | "group" | "ambiguous"
 export type VatStatus = "ptor" | "murshe" | "artist_salary"
-export type ProjectStatus = "not_started" | "casting" | "casted" | "recording" | "completed"
-export type Gender = "male" | "female"
+export type Gender = "male" | "female" | "other"
+
+export type SingingStyleLevel = "basic" | "medium" | "high"
+export type SingingStyle = "opera" | "pop" | "rock" | "jazz" | "classical" | "musical" | "folk" | "other"
+
+export interface SingingStyleWithLevel {
+  style: SingingStyle
+  level: SingingStyleLevel
+}
+
+export interface SingingStyleOther {
+  name: string
+  level: SingingStyleLevel
+}
 
 export interface Skill {
   id: string
@@ -16,59 +30,130 @@ export interface Language {
 
 export interface Actor {
   id: string
-  created_at: string
-  updated_at: string
   full_name: string
+  image_url?: string
   gender: Gender
-  birth_year: number
-  phone: string
-  email: string
-  is_singer: boolean
-  is_course_grad: boolean
-  vat_status: VatStatus
-  image_url: string
+  birth_year?: number
+  email?: string
+  phone?: string
   voice_sample_url?: string
-  other_lang_text?: string
-  notes: string
-  city?: string
-  skills: Skill[]
-  languages: Language[]
+  created_at: string
+  vat_status: VatStatus
 }
 
-export interface CastingProject {
+export interface Project {
   id: string
   name: string
-  status: ProjectStatus
-  notes: string
+  status: string
+  notes?: string
+  director?: string
+  casting_director?: string
+  project_date?: string
   created_at: string
   updated_at: string
 }
 
-export interface ProjectActor {
+export interface ProjectRole {
   id: string
   project_id: string
-  actor_id: string
   role_name: string
-  replicas_planned: number
-  replicas_final: number
-  notes: string
-  actor?: Actor
-}
-
-export interface Folder {
-  id: string
-  name: string
+  role_name_normalized?: string
+  parent_role_id?: string
+  description?: string
+  replicas_needed: number
+  source: "manual" | "script"
   created_at: string
-  actor_count?: number
 }
 
-export interface Favorite {
+export interface RoleCasting {
   id: string
+  project_id: string
+  role_id: string
   actor_id: string
-  user_id: "leni" | "father"
+  status: CastingStatus
+  notes?: string
+  replicas_planned?: number
+  replicas_final?: number
+  created_at: string
+  updated_at: string
+  actors?: Actor
+  actor?: any // for v0 UI compatibility
 }
 
-// Predefined lists as per specification
+export interface RoleConflict {
+  id: string
+  project_id: string
+  role_id_a: string
+  role_id_b: string
+  role_a_name?: string
+  role_b_name?: string
+  warning_type: string
+  scene_reference?: string
+  evidence_json?: any
+  created_at: string
+}
+
+export interface ProjectRoleWithCasting extends ProjectRole {
+  casting?: RoleCasting | null
+  children?: ProjectRoleWithCasting[]
+  replicas_count: number // for v0 UI compatibility
+}
+
+export type CastingStatus = "באודישן" | "בליהוק" | "מלוהק"
+
+export const CASTING_STATUS_LIST: CastingStatus[] = ["באודישן", "בליהוק", "מלוהק"]
+
+export const CASTING_STATUS_COLORS: Record<CastingStatus, string> = {
+  "באודישן": "bg-amber-100 text-amber-700 border-amber-200",
+  "בליהוק": "bg-blue-100 text-blue-700 border-blue-200",
+  "מלוהק": "bg-green-100 text-green-700 border-green-200",
+}
+
+export interface CastingActionResult {
+  success: boolean
+  error?: string
+  message_he?: string
+  rolesCreated?: number
+  conflictsCreated?: number
+}
+
+export const SCRIPT_STATUS_LABELS: Record<ScriptProcessingStatus, string> = {
+  uploaded: "הועלה",
+  processing: "בעיבוד",
+  completed: "הושלם",
+  error: "שגיאה",
+}
+
+export const ROLE_TYPE_LABELS: Record<ExtractedRoleType, string> = {
+  regular: "רגיל",
+  combined: "משולב",
+  group: "קבוצתי",
+  ambiguous: "לא ברור",
+}
+
+export const VAT_STATUS_LABELS: Record<VatStatus, string> = {
+  ptor: "פטור",
+  murshe: "מורשה",
+  artist_salary: "שכר אמנים",
+}
+
+export const SINGING_STYLE_LEVEL_LABELS: Record<SingingStyleLevel, string> = {
+  basic: "בסיסי",
+  medium: "בינוני",
+  high: "גבוה",
+}
+
+export const SINGING_STYLES_LIST: { key: SingingStyle; label: string }[] = [
+  { key: "opera", label: "אופרה" },
+  { key: "pop", label: "פופ" },
+  { key: "rock", label: "רוק" },
+  { key: "jazz", label: "ג׳אז" },
+  { key: "classical", label: "קלאסי" },
+  { key: "musical", label: "מחזמר" },
+  { key: "folk", label: "פולק" },
+  { key: "other", label: "אחר" },
+]
+
 export const SKILLS_LIST: Skill[] = [
   { id: "1", key: "acting", label: "משחק" },
   { id: "2", key: "singing", label: "שירה" },
@@ -93,81 +178,8 @@ export const LANGUAGES_LIST: Language[] = [
   { id: "12", key: "romanian", label: "רומנית" },
 ]
 
-export const VAT_STATUS_LABELS: Record<VatStatus, string> = {
-  ptor: "פטור",
-  murshe: "מורשה",
-  artist_salary: "שכר אמנים",
-}
-
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  not_started: "טרם התחיל",
-  casting: "בקאסטינג",
-  casted: "נבחרו שחקנים",
-  recording: "בהקלטה",
-  completed: "הושלם",
-}
-
-export const GENDER_LABELS: Record<Gender, string> = {
-  male: "זכר",
-  female: "נקבה",
-}
-
-export function getDefaultAvatar(gender: Gender): string {
-  return gender === "male" ? "/male-silhouette-professional.jpg" : "/female-silhouette-professional.jpg"
-}
-
-// Script Processing Types
-export type ScriptProcessingStatus = "uploaded" | "processing" | "completed" | "error"
-export type ExtractedRoleType = "regular" | "combined" | "group" | "ambiguous"
-export type CastingWarningType = "same_scene" | "other"
-
-export interface ProjectScript {
-  id: string
-  project_id: string
-  file_name: string
-  file_url?: string
-  file_type?: string
-  file_size_bytes?: number
-  processing_status: ScriptProcessingStatus
-  processing_error?: string
-  processed_at?: string
-  created_at: string
-  updated_at: string
-}
-
-export interface ScriptExtractedRole {
-  id: string
-  project_id: string
-  script_id?: string
-  role_name: string
-  role_type: ExtractedRoleType
-  replicas_count: number
-  first_appearance_script?: string
-  notes?: string
-  created_at: string
-}
-
-export interface ScriptCastingWarning {
-  id: string
-  project_id: string
-  role_1_name: string
-  role_2_name: string
-  scene_reference?: string
-  warning_type: CastingWarningType
-  notes?: string
-  created_at: string
-}
-
-export const SCRIPT_STATUS_LABELS: Record<ScriptProcessingStatus, string> = {
-  uploaded: "הועלה",
-  processing: "בעיבוד",
-  completed: "עובד בהצלחה",
-  error: "שגיאה",
-}
-
-export const ROLE_TYPE_LABELS: Record<ExtractedRoleType, string> = {
-  regular: "רגיל",
-  combined: "משולב",
-  group: "קבוצתי",
-  ambiguous: "לא ברור",
-}
+export const DUBBING_EXPERIENCE_RANGES = [
+  { key: "0-1", label: "0-1 שנים", min: 0, max: 1 },
+  { key: "2-4", label: "2-4 שנים", min: 2, max: 4 },
+  { key: "5+", label: "5+ שנים", min: 5, max: 999 },
+]

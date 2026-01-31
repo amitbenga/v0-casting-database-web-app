@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ActorComments } from "@/components/actor-comments"
 import { ActorEditForm } from "@/components/actor-edit-form"
 import { createClient } from "@/lib/supabase/client"
-import { VAT_STATUS_LABELS, type Actor } from "@/lib/types"
+import { VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { AppHeader } from "@/components/app-header"
 import { exportActor } from "@/lib/export-utils"
 
@@ -88,6 +88,10 @@ export default function ActorProfile() {
             other_lang_text: data.other_lang_text || "",
             created_at: data.created_at,
             updated_at: data.updated_at,
+            // שדות חדשים - דיבוב ושירה
+            dubbing_experience_years: data.dubbing_experience_years || 0,
+            singing_styles: Array.isArray(data.singing_styles) ? data.singing_styles : [],
+            singing_styles_other: Array.isArray(data.singing_styles_other) ? data.singing_styles_other : [],
           }
           setActor(mappedActor)
         }
@@ -345,6 +349,48 @@ export default function ActorProfile() {
                     <p className="text-sm text-muted-foreground leading-relaxed">{actor.notes}</p>
                   </Card>
                 )}
+
+                <Card className="p-4 md:p-6">
+                  <h3 className="font-semibold mb-4">ניסיון בדיבוב</h3>
+                  <p className="text-sm">
+                    {actor.dubbing_experience_years && actor.dubbing_experience_years > 0 
+                      ? `${actor.dubbing_experience_years} שנים` 
+                      : "לא צוין"}
+                  </p>
+                </Card>
+
+                <Card className="p-4 md:p-6">
+                  <h3 className="font-semibold mb-4">סגנונות שירה</h3>
+                  <div className="space-y-4">
+                    {actor.singing_styles && actor.singing_styles.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {(actor.singing_styles as SingingStyleWithLevel[]).map((item, index) => {
+                          const styleInfo = SINGING_STYLES_LIST.find(s => s.key === item.style)
+                          return styleInfo ? (
+                            <Badge key={index} variant="outline">
+                              {styleInfo.label} ({SINGING_STYLE_LEVEL_LABELS[item.level]})
+                            </Badge>
+                          ) : null
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">לא צוינו סגנונות שירה</p>
+                    )}
+
+                    {actor.singing_styles_other && actor.singing_styles_other.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium mb-2">סגנונות נוספים</p>
+                        <div className="flex flex-wrap gap-2">
+                          {actor.singing_styles_other.map((item: SingingStyleOther, index: number) => (
+                            <Badge key={index} variant="secondary">
+                              {item.name} ({SINGING_STYLE_LEVEL_LABELS[item.level]})
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
 
                 <Card className="p-4 md:p-6">
                   <h3 className="font-semibold mb-4">כישורים</h3>

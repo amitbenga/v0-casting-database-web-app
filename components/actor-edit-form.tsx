@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef } from "react"
-import { ArrowRight, Save, Upload, X, MusicIcon } from "lucide-react"
+import { ArrowRight, Save, Upload, X, MusicIcon, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, type Actor } from "@/lib/types"
+import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleLevel, type SingingStyle, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 
 interface ActorEditFormProps {
@@ -51,6 +51,10 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
           skills: formData.skills,
           languages: formData.languages,
           other_lang_text: formData.other_lang_text,
+          // שדות חדשים - דיבוב ושירה
+          dubbing_experience_years: formData.dubbing_experience_years || 0,
+          singing_styles: formData.singing_styles || [],
+          singing_styles_other: formData.singing_styles_other || [],
           updated_at: new Date().toISOString(),
         })
         .eq("id", actor.id)
@@ -380,6 +384,147 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </Card>
+
+          {/* Dubbing Experience */}
+          <Card className="p-4 md:p-6 space-y-6">
+            <h3 className="font-semibold">ניסיון בדיבוב</h3>
+            <Separator />
+
+            <div className="space-y-2">
+              <Label htmlFor="dubbing_experience_years">ניסיון בדיבוב (בשנים)</Label>
+              <Input
+                id="dubbing_experience_years"
+                type="number"
+                min="0"
+                value={formData.dubbing_experience_years || 0}
+                onChange={(e) => handleChange("dubbing_experience_years", Number.parseInt(e.target.value) || 0)}
+                placeholder="0"
+              />
+            </div>
+          </Card>
+
+          {/* Singing Styles */}
+          <Card className="p-4 md:p-6 space-y-6">
+            <h3 className="font-semibold">סגנונות שירה</h3>
+            <Separator />
+
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">בחר סגנונות שירה והגדר רמה לכל סגנון</p>
+              
+              <div className="space-y-3">
+                {SINGING_STYLES_LIST.filter(style => style.key !== "other").map((style) => {
+                  const currentStyles = (formData.singing_styles || []) as SingingStyleWithLevel[]
+                  const existingStyle = currentStyles.find((s) => s.style === style.key)
+                  const isSelected = !!existingStyle
+
+                  return (
+                    <div key={style.key} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Checkbox
+                        id={`singing-style-${style.key}`}
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            handleChange("singing_styles", [...currentStyles, { style: style.key, level: "basic" as SingingStyleLevel }])
+                          } else {
+                            handleChange("singing_styles", currentStyles.filter((s) => s.style !== style.key))
+                          }
+                        }}
+                      />
+                      <Label htmlFor={`singing-style-${style.key}`} className="cursor-pointer text-sm flex-1">
+                        {style.label}
+                      </Label>
+                      {isSelected && (
+                        <Select
+                          value={existingStyle.level}
+                          onValueChange={(value) => {
+                            const newStyles = currentStyles.map((s) =>
+                              s.style === style.key ? { ...s, level: value as SingingStyleLevel } : s
+                            )
+                            handleChange("singing_styles", newStyles)
+                          }}
+                        >
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(SINGING_STYLE_LEVEL_LABELS).map(([key, label]) => (
+                              <SelectItem key={key} value={key}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Other singing styles */}
+              <div className="space-y-3 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <Label>סגנונות שירה נוספים (אחר)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const currentOther = formData.singing_styles_other || []
+                      handleChange("singing_styles_other", [...currentOther, { name: "", level: "basic" as SingingStyleLevel }])
+                    }}
+                  >
+                    <Plus className="h-4 w-4 ml-1" />
+                    הוסף
+                  </Button>
+                </div>
+                
+                {(formData.singing_styles_other || []).map((item: SingingStyleOther, index: number) => (
+                  <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                    <Input
+                      value={item.name}
+                      onChange={(e) => {
+                        const newOther = [...(formData.singing_styles_other || [])]
+                        newOther[index] = { ...newOther[index], name: e.target.value }
+                        handleChange("singing_styles_other", newOther)
+                      }}
+                      placeholder="שם הסגנון"
+                      className="flex-1"
+                    />
+                    <Select
+                      value={item.level}
+                      onValueChange={(value) => {
+                        const newOther = [...(formData.singing_styles_other || [])]
+                        newOther[index] = { ...newOther[index], level: value as SingingStyleLevel }
+                        handleChange("singing_styles_other", newOther)
+                      }}
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(SINGING_STYLE_LEVEL_LABELS).map(([key, label]) => (
+                          <SelectItem key={key} value={key}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        const newOther = (formData.singing_styles_other || []).filter((_: SingingStyleOther, i: number) => i !== index)
+                        handleChange("singing_styles_other", newOther)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
           </Card>

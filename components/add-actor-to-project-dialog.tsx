@@ -12,6 +12,8 @@ import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { assignActorToRole } from "@/lib/actions/casting-actions"
+import { toast } from "sonner"
 
 interface AddActorToProjectDialogProps {
   open: boolean
@@ -125,49 +127,36 @@ export function AddActorToProjectDialog({
         roleId = newRole.id
       }
 
-      const { data: existingAssignments } = await supabase
-        .from("project_actors")
-        .select("actor_id")
-        .eq("role_id", roleId)
-        .in("actor_id", selectedActors)
+      // Use the new assignActorToRole action for each selected actor
+      // This handles conflict checking and role_castings table
+      let successCount = 0
+      let errorMessages: string[] = []
 
-      const existingActorIds = new Set(existingAssignments?.map((a) => a.actor_id) || [])
-      const newActorIds = selectedActors.filter((id) => !existingActorIds.has(id))
-
-      if (newActorIds.length === 0) {
-        alert("כל השחקנים שנבחרו כבר משויכים לתפקיד זה")
-        return
-      }
-
-      if (existingActorIds.size > 0) {
-        const skippedCount = existingActorIds.size
-        if (
-          !confirm(
-            `${skippedCount} ${skippedCount === 1 ? "שחקן כבר משויך" : "שחקנים כבר משויכים"} לתפקיד זה ויידלג. להמשיך?`,
-          )
-        ) {
-          return
+      for (const actorId of selectedActors) {
+        const result = await assignActorToRole(roleId!, actorId, projectId)
+        if (result.success) {
+          successCount++
+        } else {
+          const actorName = actors.find(a => a.id === actorId)?.full_name || actorId
+          errorMessages.push(`${actorName}: ${result.error}`)
         }
       }
 
-      const projectActorRecords = newActorIds.map((actorId) => ({
-        project_id: projectId,
-        actor_id: actorId,
-        role_id: roleId,
-        role_name: roleName,
-        replicas_planned: replicasPlanned ? Number.parseInt(replicasPlanned) : null,
-        notes: notes || null,
-      }))
+      if (successCount > 0) {
+        toast.success(`שויכו ${successCount} שחקנים בהצלחה`)
+      }
 
-      const { error } = await supabase.from("project_actors").insert(projectActorRecords)
+      if (errorMessages.length > 0) {
+        alert("חלק מהשחקנים לא שויכו עקב התנגשויות:\n\n" + errorMessages.join("\n"))
+      }
 
-      if (error) throw error
-
-      onActorsAdded?.()
-      onOpenChange(false)
+      if (successCount > 0) {
+        onActorsAdded?.()
+        onOpenChange(false)
+      }
     } catch (error) {
       console.error("[v0] Error adding actors to project:", error)
-      alert("שגיאה בהוספת שחקנים לפרויקט: " + (error as any).message)
+      toast.error("שגיאה בהוספת שחקנים לפרויקט")
     }
   }
 

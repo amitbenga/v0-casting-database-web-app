@@ -9,19 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Slider } from "@/components/ui/slider"
-import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS } from "@/lib/types"
-
-export interface FilterState {
-  gender: string[]
-  ageMin: number
-  ageMax: number
-  isSinger: boolean | null
-  isCourseGrad: boolean | null
-  skills: string[]
-  languages: string[]
-  vatStatus: string[]
-  sortBy: string
-}
+import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, DUBBING_EXPERIENCE_RANGES, SINGING_STYLES_LIST, type SingingStyle, type FilterState } from "@/lib/types"
 
 interface FilterPanelProps {
   onFilterChange?: (filters: FilterState) => void
@@ -40,6 +28,8 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
     languages: [],
     vatStatus: [],
     sortBy: "newest",
+    dubbingExperience: [],
+    singingStyles: [],
   })
 
   const updateFilters = (newFilters: Partial<FilterState>) => {
@@ -68,6 +58,20 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
     updateFilters({ vatStatus: newVat })
   }
 
+  const handleDubbingExperienceChange = (rangeKey: string, checked: boolean) => {
+    const newRanges = checked 
+      ? [...filters.dubbingExperience, rangeKey] 
+      : filters.dubbingExperience.filter((r) => r !== rangeKey)
+    updateFilters({ dubbingExperience: newRanges })
+  }
+
+  const handleSingingStyleChange = (style: SingingStyle, checked: boolean) => {
+    const newStyles = checked 
+      ? [...filters.singingStyles, style] 
+      : filters.singingStyles.filter((s) => s !== style)
+    updateFilters({ singingStyles: newStyles })
+  }
+
   return (
     <Card className="p-3 md:p-4 md:sticky md:top-4">
       <div className="space-y-3 md:space-y-4">
@@ -87,6 +91,8 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
                 languages: [],
                 vatStatus: [],
                 sortBy: "newest",
+                dubbingExperience: [],
+                singingStyles: [],
               }
               setFilters(defaultFilters)
               onFilterChange?.(defaultFilters)
@@ -159,8 +165,50 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
             </AccordionContent>
           </AccordionItem>
 
+          <AccordionItem value="dubbing">
+            <AccordionTrigger className="text-xs md:text-sm font-medium py-2 md:py-3">ניסיון בדיבוב (בשנים)</AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 md:space-y-3">
+                {DUBBING_EXPERIENCE_RANGES.map((range) => (
+                  <div key={range.key} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`dubbing-${range.key}`}
+                      checked={filters.dubbingExperience.includes(range.key)}
+                      onCheckedChange={(checked) => handleDubbingExperienceChange(range.key, checked as boolean)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor={`dubbing-${range.key}`} className="text-xs md:text-sm font-normal cursor-pointer">
+                      {range.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="singing-styles">
+            <AccordionTrigger className="text-xs md:text-sm font-medium py-2 md:py-3">סגנונות שירה</AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 md:space-y-3 max-h-48 overflow-y-auto">
+                {SINGING_STYLES_LIST.filter(style => style.key !== "other").map((style) => (
+                  <div key={style.key} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`singing-style-${style.key}`}
+                      checked={filters.singingStyles.includes(style.key)}
+                      onCheckedChange={(checked) => handleSingingStyleChange(style.key, checked as boolean)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor={`singing-style-${style.key}`} className="text-xs md:text-sm font-normal cursor-pointer">
+                      {style.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
           <AccordionItem value="singer">
-            <AccordionTrigger className="text-xs md:text-sm font-medium py-2 md:py-3">שירה</AccordionTrigger>
+            <AccordionTrigger className="text-xs md:text-sm font-medium py-2 md:py-3">זמר/ת</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2 md:space-y-3">
                 <div className="flex items-center gap-2">
