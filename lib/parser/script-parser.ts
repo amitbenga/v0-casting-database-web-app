@@ -116,21 +116,23 @@ function findBaseCharacter(name: string): string | null {
 }
 
 /**
- * Main character name extraction regex
+ * Main character name extraction
  * Looks for lines that are:
  * - All uppercase (or mostly)
  * - Not too long (character names are usually short)
  * - May have leading whitespace (centered)
  * - May have parenthetical notes
+ * 
+ * Multiple patterns are tried to catch different screenplay formats
  */
-function extractCharacterFromLine(line: string): string | null {
+function extractCharacterFromLine(line: string, lineIndex: number): string | null {
   const trimmed = line.trim()
   
   // Skip empty lines
   if (!trimmed) return null
   
   // Skip lines that are too long (likely not a character name)
-  if (trimmed.length > 50) return null
+  if (trimmed.length > 60) return null
   
   // Skip scene headings (INT., EXT., etc.)
   if (/^(INT\.?|EXT\.?|INT\.?\/EXT\.?|I\/E\.?)\s/i.test(trimmed)) return null
@@ -145,32 +147,61 @@ function extractCharacterFromLine(line: string): string | null {
   // Skip numbered scene headers
   if (/^\d+[\.\)]\s/.test(trimmed)) return null
   
-  // Character name pattern:
-  // - Starts with uppercase letter
-  // - Contains uppercase letters, spaces, hyphens, apostrophes
-  // - May end with parenthetical (V.O.), (O.S.), etc.
-  const characterPattern = /^([A-Z][A-Z\s\-''\.\,]+)(\s*\([^)]+\))?$/
+  // Skip lines that look like dialogue or action (lowercase words)
+  const words = trimmed.split(/\s+/)
+  const lowercaseWordCount = words.filter(w => /^[a-z]/.test(w)).length
+  if (lowercaseWordCount > words.length * 0.3) return null
   
   // Check if line has significant leading whitespace (centered)
-  // This is a common indicator of character names in screenplays
   const leadingSpaces = line.length - line.trimStart().length
-  const hasCenterIndicator = leadingSpaces >= 15 // Typical character cue indentation
+  const hasCenterIndicator = leadingSpaces >= 10
   
-  const match = trimmed.match(characterPattern)
+  // Pattern 1: Standard - All uppercase with optional parenthetical
+  // JOHN or JOHN (V.O.) or JOHN (CONT'D)
+  const pattern1 = /^([A-Z][A-Z0-9\s\-''\.\,#]+)(\s*\([^)]+\))?$/
+  
+  // Pattern 2: With colon - CHARACTER NAME: (some scripts use this)
+  const pattern2 = /^([A-Z][A-Z0-9\s\-''\.]+):\s*$/
+  
+  // Pattern 3: Numbered character - CHARACTER #1 or CHARACTER 1
+  const pattern3 = /^([A-Z][A-Z\s\-''\.]+)\s*[#]?\d+(\s*\([^)]+\))?$/
+  
+  // Pattern 4: Tab-indented character name (common in some formats)
+  const pattern4 = /^\t+([A-Z][A-Z0-9\s\-''\.]+)(\s*\([^)]+\))?$/
+  
+  // Try each pattern
+  let match = trimmed.match(pattern1)
+  if (!match) match = trimmed.match(pattern2)
+  if (!match) match = line.match(pattern4) // Use original line for tab pattern
+  if (!match) match = trimmed.match(pattern3)
+  
   if (match) {
-    const potentialName = match[1].trim()
+    let potentialName = match[1].trim()
     
-    // Additional validation
+    // Remove trailing colon if present
+    potentialName = potentialName.replace(/:$/, "").trim()
+    
     // Must have at least 2 characters
     if (potentialName.length < 2) return null
     
     // Should not be all numbers
     if (/^\d+$/.test(potentialName)) return null
     
-    // If it's a short common word and not centered, skip
-    const commonWords = ["THE", "AND", "BUT", "FOR", "NOT", "YOU", "ALL", "CAN", "HAD", "HER", "WAS", "ONE", "OUR", "OUT"]
+    // Skip very short common words unless centered
+    const commonWords = ["THE", "AND", "BUT", "FOR", "NOT", "YOU", "ALL", "CAN", "HAD", "HER", "WAS", "ONE", "OUR", "OUT", "END", "DAY", "MAN", "BOY"]
     if (!hasCenterIndicator && potentialName.length <= 3 && commonWords.includes(potentialName)) {
       return null
+    }
+    
+    // Skip if it looks like a scene direction
+    const sceneDirections = ["ANGLE ON", "CLOSE ON", "WIDE ON", "BACK TO", "LATER", "NIGHT", "MORNING", "EVENING", "CONTINUOUS"]
+    if (sceneDirections.some(d => potentialName.startsWith(d))) {
+      return null
+    }
+    
+    // Debug log for first 50 detected characters
+    if (lineIndex < 500) {
+      console.log(`[v0] Line ${lineIndex}: Detected character "${potentialName}" from "${trimmed.substring(0, 40)}"`)
     }
     
     return potentialName
@@ -185,7 +216,16 @@ function extractCharacterFromLine(line: string): string | null {
 export function parseScript(text: string): ScriptParseResult {
   const startTime = Date.now()
   
+  // Debug: log first part of text
+  console.log("[v0] parseScript called with text length:", text.length)
+  console.log("[v0] First 500 chars:", text.substring(0, 500))
+  
   const lines = text.split(/\r?\n/)
+  console.log("[v0] Total lines:", lines.length)
+  
+  // Debug: log some sample lines
+  const sampleLines = lines.slice(0, 30).map((l, i) => `${i}: "${l.substring(0, 60)}"`).join("\n")
+  console.log("[v0] First 30 lines:\n", sampleLines)
   const characterMap = new Map<string, ExtractedCharacter>()
   const warnings: ParserWarning[] = []
   const interactions: Interaction[] = []
@@ -205,7 +245,7 @@ export function parseScript(text: string): ScriptParseResult {
     }
     
     // Try to extract character name
-    const rawName = extractCharacterFromLine(line)
+    const rawName = extractCharacterFromLine(line, lineNumber)
     if (!rawName) continue
     
     const normalizedName = normalizeCharacterName(rawName)
