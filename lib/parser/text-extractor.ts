@@ -148,6 +148,99 @@ export async function extractTextFromTXT(file: File): Promise<string> {
 }
 
 /**
+ * Extract text from a DOC file (old Word format)
+ * DOC is a binary format - we use a simplified extraction approach
+ * that looks for text content within the binary structure
+ */
+export async function extractTextFromDOC(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer()
+  const uint8Array = new Uint8Array(arrayBuffer)
+  
+  // DOC files have a compound document structure
+  // We'll look for text content by finding readable ASCII/Unicode sequences
+  
+  const textParts: string[] = []
+  let currentText = ""
+  let consecutiveReadable = 0
+  
+  // First pass: try to find Unicode text (UTF-16LE which DOC uses)
+  for (let i = 0; i < uint8Array.length - 1; i += 2) {
+    const char = uint8Array[i] | (uint8Array[i + 1] << 8)
+    
+    // Check if it's a printable character or common control char
+    if ((char >= 32 && char < 127) || char === 9 || char === 10 || char === 13) {
+      currentText += String.fromCharCode(char)
+      consecutiveReadable++
+    } else if (char === 0 && consecutiveReadable > 0) {
+      // Null character often appears between words in DOC
+      continue
+    } else {
+      if (consecutiveReadable > 20) {
+        // Only keep sequences of at least 20 readable chars
+        textParts.push(currentText.trim())
+      }
+      currentText = ""
+      consecutiveReadable = 0
+    }
+  }
+  
+  if (consecutiveReadable > 20) {
+    textParts.push(currentText.trim())
+  }
+  
+  // If we didn't find much Unicode text, try ASCII extraction
+  if (textParts.join("").length < 500) {
+    textParts.length = 0
+    currentText = ""
+    consecutiveReadable = 0
+    
+    for (let i = 0; i < uint8Array.length; i++) {
+      const byte = uint8Array[i]
+      
+      if ((byte >= 32 && byte < 127) || byte === 9 || byte === 10 || byte === 13) {
+        currentText += String.fromCharCode(byte)
+        consecutiveReadable++
+      } else {
+        if (consecutiveReadable > 30) {
+          textParts.push(currentText.trim())
+        }
+        currentText = ""
+        consecutiveReadable = 0
+      }
+    }
+    
+    if (consecutiveReadable > 30) {
+      textParts.push(currentText.trim())
+    }
+  }
+  
+  // Filter out binary garbage and metadata
+  const cleanedParts = textParts.filter(part => {
+    // Skip parts that look like metadata or binary
+    if (part.includes("Root Entry") || part.includes("Microsoft")) return false
+    if (part.includes("WordDocument") || part.includes("CompObj")) return false
+    if (/^[A-Za-z]{1,3}$/.test(part)) return false // Single letters
+    // Keep parts that have at least some sentence-like structure
+    return part.length > 50 || /[.!?]/.test(part) || /^[A-Z]{2,}/.test(part)
+  })
+  
+  let result = cleanedParts.join("\n\n")
+  
+  // Clean up the text
+  result = result
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+  
+  if (result.length < 100) {
+    throw new Error("Could not extract meaningful text from DOC file. Please convert to DOCX or TXT format for better results.")
+  }
+  
+  return result
+}
+
+/**
  * Extract text from any supported file type
  */
 export async function extractText(file: File): Promise<{ text: string; warnings: string[] }> {
@@ -185,7 +278,14 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         break
         
       case "doc":
-        throw new Error("DOC format is not supported. Please convert to DOCX or TXT.")
+        try {
+          text = await extractTextFromDOC(file)
+          warnings.push("DOC format extraction may be less accurate. Consider converting to DOCX for better results.")
+        } catch (docError) {
+          console.error("DOC extraction error:", docError)
+          throw new Error("Failed to extract text from DOC. Please convert to DOCX or TXT format.")
+        }
+        break
         
       default:
         throw new Error(`Unsupported file format: .${extension}`)
@@ -221,7 +321,7 @@ export function getFileInfo(file: File): {
   supported: boolean
 } {
   const extension = file.name.split(".").pop()?.toLowerCase() || ""
-  const supported = ["txt", "pdf", "docx"].includes(extension)
+  const supported = ["txt", "pdf", "docx", "doc"].includes(extension)
   
   let size: string
   if (file.size < 1024) {
