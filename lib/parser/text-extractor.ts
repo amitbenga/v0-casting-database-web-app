@@ -12,14 +12,16 @@
  * Note: This runs client-side due to PDF.js requirements
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
-  // Dynamic import of PDF.js to avoid server-side issues
-  const pdfjsLib = await import("pdfjs-dist")
-  
-  // Set worker path
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+  // Dynamic import of PDF.js legacy build to avoid worker issues
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
   
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ 
+    data: arrayBuffer,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true
+  }).promise
   
   const textParts: string[] = []
   
