@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 interface ExistingActor {
@@ -75,7 +75,7 @@ function AdminPageContent() {
   const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
   const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null)
-  const [rejectReason, setRejectReason] = useState("")
+
   const [isPlaying, setIsPlaying] = useState<string | null>(null)
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
 
@@ -162,9 +162,9 @@ function AdminPageContent() {
         voice_sample_url: submission.voice_sample_url,
         is_singer: submission.is_singer || false,
         is_course_grad: submission.is_course_graduate || false,
-        vat_status: submission.vat_status,
-        skills: submission.skills,
-        languages: submission.languages,
+        vat_status: submission.vat_status || "exempt",
+        skills: submission.skills || [],
+        languages: submission.languages || [],
         notes: submission.notes,
       })
 
@@ -196,7 +196,6 @@ function AdminPageContent() {
         .from("actor_submissions")
         .update({
           review_status: "rejected",
-          notes: rejectReason ? `${submission.notes || ""}\n\nסיבת דחייה: ${rejectReason}` : submission.notes,
         })
         .eq("id", submission.id)
 
@@ -205,7 +204,6 @@ function AdminPageContent() {
       await loadSubmissions()
       setIsReviewDialogOpen(false)
       setSelectedSubmission(null)
-      setRejectReason("")
     } catch (error) {
       console.error("[v0] Error rejecting submission:", error)
       alert("שגיאה בדחיית הבקשה")
@@ -358,17 +356,7 @@ function AdminPageContent() {
                 ? `האם אתה בטוח שברצונך לאשר את הבקשה של ${selectedSubmission?.full_name}?`
                 : `האם אתה בטוח שברצונך לדחות את הבקשה של ${selectedSubmission?.full_name}?`}
             </p>
-            {reviewAction === "reject" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">סיבת הדחייה (אופציונלי)</label>
-                <Textarea
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="הוסף הערה על סיבת הדחייה..."
-                  rows={4}
-                />
-              </div>
-            )}
+
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
