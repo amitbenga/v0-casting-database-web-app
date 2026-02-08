@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EditProjectDialog } from "@/components/edit-project-dialog"
-import { RolesTab } from "@/components/projects/roles-tab"
+import { CastingWorkspace } from "@/components/projects/casting-workspace"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -284,7 +284,7 @@ export default function ProjectDetailPage() {
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <RolesTab projectId={project.id} />
+                <CastingWorkspace projectId={project.id} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">
