@@ -95,17 +95,17 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
       const result = await assignActorToRole(role.id, actor.id)
       if (!result.success) {
         toast({
-          title: "Casting Error",
-          description: result.message_he || result.error || "Error assigning actor",
+          title: "שגיאת ליהוק",
+          description: result.message_he || result.error || "שגיאה בשיוך שחקן",
           variant: "destructive",
         })
         return
       }
-      toast({ title: `${actor.name} assigned to ${role.role_name}` })
+      toast({ title: `${actor.name} שובץ ל-${role.role_name}` })
       setShowSearch(false)
       onUpdate()
     } catch {
-      toast({ title: "Error", description: "Failed to assign actor", variant: "destructive" })
+      toast({ title: "שגיאה", description: "שיבוץ השחקן נכשל", variant: "destructive" })
     } finally {
       setIsAssigning(false)
     }
@@ -116,7 +116,7 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
     try {
       const result = await unassignActorFromRole(role.id)
       if (result.success) {
-        toast({ title: `${role.role_name} is now unassigned` })
+        toast({ title: `${role.role_name} - שיוך בוטל` })
         onUpdate()
       }
     } finally {
@@ -135,12 +135,12 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
   }
 
   const handleDeleteRole = async () => {
-    if (!confirm(`Delete role "${role.role_name}"?`)) return
+    if (!confirm(`למחוק את התפקיד "${role.role_name}"?`)) return
     setIsUpdating(true)
     try {
       const result = await deleteRole(role.id)
       if (result.success) {
-        toast({ title: "Role deleted" })
+        toast({ title: "התפקיד נמחק" })
         onUpdate()
       }
     } finally {
@@ -176,7 +176,7 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
         </span>
         {role.source === "script" && (
           <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 flex-shrink-0">
-            script
+            תסריט
           </Badge>
         )}
       </div>
@@ -236,7 +236,7 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
             <ActorSearchAutocomplete
               onSelect={handleAssignActor}
               disabled={isAssigning}
-              placeholder="Search actor..."
+              placeholder="חיפוש שחקן..."
             />
             {isAssigning && <Loader2 className="h-4 w-4 animate-spin" />}
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSearch(false)}>
@@ -252,7 +252,7 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
               onClick={() => setShowSearch(true)}
             >
               <UserPlus className="h-3.5 w-3.5 ml-1.5" />
-              Assign
+              שיבוץ
             </Button>
             {role.source === "manual" && (
               <Button
@@ -318,7 +318,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         .map((r) => r.id)
       setExpandedGroups(new Set(parentIds))
     } catch (err) {
-      setError("Error loading roles")
+      setError("שגיאה בטעינת תפקידים")
       console.error(err)
     } finally {
       setLoading(false)
@@ -335,7 +335,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     try {
       const result = await createManualRole(projectId, newRoleName.trim(), undefined, newRoleReplicas)
       if (result.success) {
-        toast({ title: `Role "${newRoleName}" created` })
+        toast({ title: `התפקיד "${newRoleName}" נוצר` })
         setShowAddRole(false)
         setNewRoleName("")
         setNewRoleReplicas(0)
@@ -417,7 +417,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     return (
       <div className="text-center py-16">
         <p className="text-destructive mb-4">{error}</p>
-        <Button onClick={loadRoles} variant="outline">Try again</Button>
+        <Button onClick={loadRoles} variant="outline">נסה שוב</Button>
       </div>
     )
   }
@@ -429,7 +429,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-sm font-medium">
-              {stats.assignedRoles} / {stats.totalRoles} roles assigned
+              {stats.assignedRoles} / {stats.totalRoles} תפקידים שובצו
             </span>
             <span className="text-sm text-muted-foreground">{stats.pct}%</span>
           </div>
@@ -443,11 +443,11 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         <div className="flex items-center gap-4 text-sm text-muted-foreground flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <Clapperboard className="h-4 w-4" />
-            <span>{stats.totalReplicas.toLocaleString()} replicas</span>
+            <span>{stats.totalReplicas.toLocaleString()} רפליקות</span>
           </div>
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span>{conflicts.length} conflicts</span>
+            <span>{conflicts.length} קונפליקטים</span>
           </div>
         </div>
       </div>
@@ -459,7 +459,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search roles or actors..."
+            placeholder="חיפוש תפקידים או שחקנים..."
             className="pr-10 h-9"
           />
         </div>
@@ -471,7 +471,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
             onCheckedChange={(c) => setShowOnlyUnassigned(c === true)}
           />
           <Label htmlFor="unassigned-only" className="text-sm cursor-pointer whitespace-nowrap">
-            Unassigned only
+            לא משובצים בלבד
           </Label>
         </div>
 
@@ -484,9 +484,9 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
           }
         >
           <ArrowUpDown className="h-3.5 w-3.5 ml-1.5" />
-          Replicas
+          רפליקות
           {sortByReplicas && (
-            <span className="text-xs mr-1">({sortByReplicas === "desc" ? "high" : "low"})</span>
+            <span className="text-xs mr-1">({sortByReplicas === "desc" ? "גבוה" : "נמוך"})</span>
           )}
         </Button>
 
@@ -496,26 +496,26 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
           <DialogTrigger asChild>
             <Button size="sm" className="h-9">
               <Plus className="h-3.5 w-3.5 ml-1.5" />
-              Add Role
+              הוסף תפקיד
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New Role</DialogTitle>
+              <DialogTitle>הוספת תפקיד חדש</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="role-name">Role Name</Label>
+                <Label htmlFor="role-name">שם התפקיד</Label>
                 <Input
                   id="role-name"
                   value={newRoleName}
                   onChange={(e) => setNewRoleName(e.target.value)}
-                  placeholder="e.g. PADDINGTON"
+                  placeholder="לדוגמה: PADDINGTON"
                   onKeyDown={(e) => e.key === "Enter" && handleCreateRole()}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role-replicas">Estimated Replicas</Label>
+                <Label htmlFor="role-replicas">רפליקות משוערות</Label>
                 <Input
                   id="role-replicas"
                   type="number"
@@ -526,7 +526,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
               </div>
               <Button onClick={handleCreateRole} disabled={!newRoleName.trim() || isCreatingRole} className="w-full">
                 {isCreatingRole ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : null}
-                {isCreatingRole ? "Creating..." : "Create Role"}
+                {isCreatingRole ? "יוצר..." : "צור תפקיד"}
               </Button>
             </div>
           </DialogContent>
@@ -536,9 +536,9 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       {/* Column headers */}
       <div className="flex items-center gap-3 px-4 py-2 text-xs text-muted-foreground font-medium border-b border-border">
         <div className="w-4 flex-shrink-0" />
-        <div className="min-w-[180px] max-w-[240px]">Role</div>
-        <div className="w-16 text-center flex-shrink-0">Replicas</div>
-        <div className="flex-1 text-left">Actor / Assignment</div>
+        <div className="min-w-[180px] max-w-[240px]">תפקיד</div>
+        <div className="w-16 text-center flex-shrink-0">רפליקות</div>
+        <div className="flex-1 text-left">שחקן / שיבוץ</div>
         <div className="w-4 flex-shrink-0" />
       </div>
 
@@ -548,11 +548,11 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
           {roles.length === 0 ? (
             <div className="space-y-3">
               <Users className="h-12 w-12 mx-auto text-muted-foreground/40" />
-              <p className="text-lg font-medium">No roles yet</p>
-              <p className="text-sm">Upload a script to extract roles, or add them manually.</p>
+              <p className="text-lg font-medium">אין תפקידים עדיין</p>
+              <p className="text-sm">העלה תסריט לחילוץ תפקידים, או הוסף ידנית.</p>
             </div>
           ) : (
-            <p>No roles match current filters</p>
+            <p>אין תפקידים התואמים את הסינון</p>
           )}
         </div>
       ) : (
@@ -576,10 +576,10 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
                         </div>
                         <span className="font-semibold text-sm">{role.role_name}</span>
                         <Badge variant="secondary" className="text-[10px] h-5">
-                          {role.children!.length} variants
+                          {role.children!.length} גרסאות
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          {role.replicas_count} replicas
+                          {role.replicas_count} רפליקות
                         </span>
                       </div>
                     </CollapsibleTrigger>
