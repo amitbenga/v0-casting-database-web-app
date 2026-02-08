@@ -7,7 +7,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Select,
@@ -17,25 +16,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
-import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Search,
   ChevronDown,
@@ -46,11 +38,8 @@ import {
   UserPlus,
   X,
   RefreshCw,
-  FileText,
-  Play,
   Trash2,
   AlertTriangle,
-  Filter,
   CheckCircle2,
   Circle,
   Users,
@@ -63,31 +52,86 @@ import {
   assignActorToRole,
   unassignActorFromRole,
   updateCastingStatus,
-  updateCastingDetails,
   deleteRole,
 } from "@/lib/actions/casting-actions"
 import type { ProjectRoleWithCasting, RoleConflict, CastingStatus } from "@/lib/types"
 import { CASTING_STATUS_LIST, CASTING_STATUS_COLORS } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
-// ---------- Sub-components ----------
+// ---------- Conflict Tooltip ----------
+
+function ConflictTooltip({
+  roleId,
+  conflicts,
+  allRoles,
+}: {
+  roleId: string
+  conflicts: RoleConflict[]
+  allRoles: ProjectRoleWithCasting[]
+}) {
+  const roleConflicts = conflicts.filter(
+    (c) => c.role_id_a === roleId || c.role_id_b === roleId
+  )
+  if (roleConflicts.length === 0) return null
+
+  // Build a flat lookup of all roles including children
+  const roleLookup = new Map<string, string>()
+  for (const r of allRoles) {
+    roleLookup.set(r.id, r.role_name)
+    r.children?.forEach((c) => roleLookup.set(c.id, c.role_name))
+  }
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-1 cursor-help flex-shrink-0">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <span className="text-[10px] text-amber-500 font-medium">{roleConflicts.length}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right" align="start" className="max-w-[320px] p-3">
+          <p className="text-xs font-semibold mb-2">
+            קונפליקטים ({roleConflicts.length})
+          </p>
+          <div className="space-y-2">
+            {roleConflicts.map((c) => {
+              const otherId = c.role_id_a === roleId ? c.role_id_b : c.role_id_a
+              const otherName = roleLookup.get(otherId) || "Unknown"
+              return (
+                <div key={c.id || `${c.role_id_a}-${c.role_id_b}`} className="text-xs space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                    <span className="font-medium">{otherName}</span>
+                  </div>
+                  {c.scene_reference && (
+                    <p className="text-muted-foreground pr-4">{c.scene_reference}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+// ---------- Role Row ----------
 
 interface RoleRowProps {
   role: ProjectRoleWithCasting
   conflicts: RoleConflict[]
+  allRoles: ProjectRoleWithCasting[]
   isChild?: boolean
   onUpdate: () => void
 }
 
-function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
+function RoleRow({ role, conflicts, allRoles, isChild = false, onUpdate }: RoleRowProps) {
   const { toast } = useToast()
   const [showSearch, setShowSearch] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
-
-  const roleConflicts = conflicts.filter(
-    (c) => c.role_id_a === role.id || c.role_id_b === role.id
-  )
 
   const handleAssignActor = async (actor: { id: string; name: string; image_url?: string }) => {
     setIsAssigning(true)
@@ -156,8 +200,8 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
         group flex items-center gap-3 px-4 py-2.5 
         border-b border-border/50 last:border-b-0
         hover:bg-muted/40 transition-colors
-        ${isChild ? "pr-12" : ""}
-        ${isCasted ? "bg-transparent" : "bg-muted/20"}
+        ${isChild ? "pr-14 bg-muted/10" : ""}
+        ${isCasted ? "bg-transparent" : isChild ? "bg-muted/10" : "bg-muted/20"}
       `}
     >
       {/* Status indicator */}
@@ -169,9 +213,9 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
         )}
       </div>
 
-      {/* Role name + replicas */}
-      <div className="flex items-center gap-2 min-w-[180px] max-w-[240px]">
-        <span className={`text-sm font-medium truncate ${isCasted ? "text-foreground" : "text-muted-foreground"}`}>
+      {/* Role name */}
+      <div className="flex items-center gap-2 min-w-[180px] max-w-[260px]">
+        <span className={`text-sm font-medium truncate ${isCasted ? "text-foreground" : "text-muted-foreground"} ${isChild ? "text-xs" : ""}`}>
           {role.role_name}
         </span>
         {role.source === "script" && (
@@ -186,11 +230,13 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
         <span className="text-xs text-muted-foreground">{role.replicas_count}</span>
       </div>
 
-      {/* Casting section - takes remaining space */}
+      {/* Conflict indicator */}
+      <ConflictTooltip roleId={role.id} conflicts={conflicts} allRoles={allRoles} />
+
+      {/* Casting section */}
       <div className="flex-1 flex items-center justify-end gap-2">
         {role.casting ? (
           <>
-            {/* Assigned actor */}
             <div className="flex items-center gap-2 px-2 py-1 bg-muted/60 rounded-md">
               <Avatar className="h-6 w-6">
                 <AvatarImage src={role.casting.actor?.image_url} alt={role.casting.actor?.full_name} />
@@ -199,11 +245,10 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
                 </AvatarFallback>
               </Avatar>
               <span className="text-sm font-medium max-w-[140px] truncate">
-                {role.casting.actor?.full_name || "Actor"}
+                {role.casting.actor?.full_name || "שחקן"}
               </span>
             </div>
 
-            {/* Status */}
             <Select
               value={role.casting.status}
               onValueChange={(v) => handleStatusChange(v as CastingStatus)}
@@ -221,12 +266,11 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
               </SelectContent>
             </Select>
 
-            {/* Actions - visible on hover */}
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSearch(true)} disabled={isUpdating} title="Replace">
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSearch(true)} disabled={isUpdating} title="החלף שחקן">
                 <RefreshCw className="h-3.5 w-3.5" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={handleUnassign} disabled={isUpdating} title="Unassign">
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={handleUnassign} disabled={isUpdating} title="בטל שיבוץ">
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -268,13 +312,6 @@ function RoleRow({ role, conflicts, isChild = false, onUpdate }: RoleRowProps) {
           </div>
         )}
       </div>
-
-      {/* Conflict indicator */}
-      {roleConflicts.length > 0 && (
-        <div className="flex-shrink-0" title={`${roleConflicts.length} conflict(s)`}>
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-        </div>
-      )}
     </div>
   )
 }
@@ -365,7 +402,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         const matchesParent = r.role_name.toLowerCase().includes(q)
         const matchesChild = r.children?.some((c) => c.role_name.toLowerCase().includes(q))
         const matchesActor = r.casting?.actor?.full_name?.toLowerCase().includes(q)
-        return matchesParent || matchesChild || matchesActor
+        const matchesChildActor = r.children?.some((c) => c.casting?.actor?.full_name?.toLowerCase().includes(q))
+        return matchesParent || matchesChild || matchesActor || matchesChildActor
       })
     }
 
@@ -445,10 +483,12 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
             <Clapperboard className="h-4 w-4" />
             <span>{stats.totalReplicas.toLocaleString()} רפליקות</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span>{conflicts.length} קונפליקטים</span>
-          </div>
+          {conflicts.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <span>{conflicts.length} קונפליקטים</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -536,10 +576,10 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       {/* Column headers */}
       <div className="flex items-center gap-3 px-4 py-2 text-xs text-muted-foreground font-medium border-b border-border">
         <div className="w-4 flex-shrink-0" />
-        <div className="min-w-[180px] max-w-[240px]">תפקיד</div>
+        <div className="min-w-[180px] max-w-[260px]">תפקיד</div>
         <div className="w-16 text-center flex-shrink-0">רפליקות</div>
+        <div className="w-8 flex-shrink-0" />
         <div className="flex-1 text-left">שחקן / שיבוץ</div>
-        <div className="w-4 flex-shrink-0" />
       </div>
 
       {/* Roles list */}
@@ -563,40 +603,52 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
               const isExpanded = expandedGroups.has(role.id)
 
               if (hasChildren) {
+                // Parent role WITH variants
+                // The parent itself is castable (it's the main version)
+                // Children are variant versions (e.g. YOUNG ALDRIC)
                 return (
-                  <Collapsible key={role.id} open={isExpanded} onOpenChange={() => toggleGroup(role.id)}>
-                    <CollapsibleTrigger asChild>
-                      <div className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/40 transition-colors bg-muted/20">
-                        <div className="flex-shrink-0">
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </div>
-                        <span className="font-semibold text-sm">{role.role_name}</span>
-                        <Badge variant="secondary" className="text-[10px] h-5">
-                          {role.children!.length} גרסאות
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {role.replicas_count} רפליקות
-                        </span>
+                  <div key={role.id}>
+                    {/* Parent row - castable + expandable */}
+                    <div className="flex items-center">
+                      {/* Expand toggle */}
+                      <button
+                        onClick={() => toggleGroup(role.id)}
+                        className="flex items-center justify-center w-10 h-full py-2.5 hover:bg-muted/60 transition-colors flex-shrink-0"
+                        aria-label={isExpanded ? "סגור גרסאות" : "פתח גרסאות"}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      {/* The actual castable row for the parent */}
+                      <div className="flex-1">
+                        <RoleRow role={role} conflicts={conflicts} allRoles={roles} onUpdate={loadRoles} />
                       </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      {/* Parent casting row if it has its own */}
-                      {role.casting && (
-                        <RoleRow role={role} conflicts={conflicts} onUpdate={loadRoles} />
-                      )}
-                      {role.children?.map((child) => (
-                        <RoleRow key={child.id} role={child} conflicts={conflicts} isChild onUpdate={loadRoles} />
-                      ))}
-                    </CollapsibleContent>
-                  </Collapsible>
+                    </div>
+
+                    {/* Children (variants) */}
+                    {isExpanded && (
+                      <div className="border-r-2 border-primary/20 mr-5">
+                        {role.children!.map((child) => (
+                          <RoleRow
+                            key={child.id}
+                            role={child}
+                            conflicts={conflicts}
+                            allRoles={roles}
+                            isChild
+                            onUpdate={loadRoles}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )
               }
 
-              return <RoleRow key={role.id} role={role} conflicts={conflicts} onUpdate={loadRoles} />
+              // Simple role without variants
+              return <RoleRow key={role.id} role={role} conflicts={conflicts} allRoles={roles} onUpdate={loadRoles} />
             })}
           </div>
         </Card>
