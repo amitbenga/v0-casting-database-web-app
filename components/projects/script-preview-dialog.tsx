@@ -258,7 +258,7 @@ export function ScriptPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -379,7 +379,7 @@ export function ScriptPreviewDialog({
         </div>
 
         {/* Characters Table */}
-        <ScrollArea className="flex-1 min-h-0">
+        <ScrollArea className="flex-1 min-h-0 max-h-[40vh] border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
@@ -523,7 +523,7 @@ export function ScriptPreviewDialog({
           </Collapsible>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             ביטול
           </Button>
