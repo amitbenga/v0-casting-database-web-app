@@ -465,10 +465,6 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       })
     }
   }
-    } finally {
-      setIsCreatingRole(false)
-    }
-  }
 
   const toggleGroup = (id: string) => {
     setExpandedGroups((prev) => {
