@@ -499,6 +499,11 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           onOpenChange={setShowPreview}
           parseResult={parseResult}
           projectId={projectId}
+          fileInfo={pendingFiles.map(pf => ({
+            name: pf.file.name,
+            type: pf.file.type || pf.file.name.split('.').pop() || 'unknown',
+            size: pf.file.size,
+          }))}
           onApplied={() => {
             setShowPreview(false)
             setPendingFiles([])

@@ -51,7 +51,7 @@ import {
 import type { ParsedScriptBundle, ExtractedCharacter } from "@/lib/parser"
 import { applyUserEdits, convertToDbFormat, type UserEdit } from "@/lib/parser"
 import { useToast } from "@/hooks/use-toast"
-import { applyParsedRoles } from "@/lib/actions/script-actions"
+import { applyParsedRoles, saveScriptRecord } from "@/lib/actions/script-actions"
 
 interface ScriptPreviewDialogProps {
   open: boolean
@@ -59,6 +59,8 @@ interface ScriptPreviewDialogProps {
   parseResult: ParsedScriptBundle
   projectId: string
   onApplied: () => void
+  /** Info about the files that were parsed, for saving the script record */
+  fileInfo?: { name: string; type: string; size: number }[]
 }
 
 export function ScriptPreviewDialog({
@@ -67,6 +69,7 @@ export function ScriptPreviewDialog({
   parseResult,
   projectId,
   onApplied,
+  fileInfo,
 }: ScriptPreviewDialogProps) {
   const { toast } = useToast()
   const [editedResult, setEditedResult] = useState(parseResult)
@@ -196,6 +199,18 @@ export function ScriptPreviewDialog({
       const result = await applyParsedRoles(projectId, roles, conflicts)
 
       if (result.success) {
+        // Save script record(s) to project_scripts table
+        if (fileInfo && fileInfo.length > 0) {
+          for (const file of fileInfo) {
+            await saveScriptRecord(
+              projectId,
+              file.name,
+              file.type,
+              file.size
+            )
+          }
+        }
+
         toast({
           title: "התפקידים נוספו בהצלחה",
           description: `${result.rolesCreated} תפקידים ו-${result.conflictsCreated} קונפליקטים נוספו לפרויקט`,
