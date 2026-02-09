@@ -1,27 +1,36 @@
 import * as XLSX from "xlsx";
-import type { ProjectRole, ProjectActor } from "@/lib/types";
+import type { ProjectRoleWithCasting } from "@/lib/types";
 
 /**
  * ייצוא ליהוק לאקסל
  * כל תפקיד בשורה עם השחקן המשובץ
  */
 export async function exportCastingToExcel(
-  roles: ProjectRole[],
-  projectName: string,
-  actors: Map<string, ProjectActor> // מפה של actor_id -> actor
+  roles: ProjectRoleWithCasting[],
+  projectName: string
 ) {
   try {
+    // Flatten roles including children
+    const allRoles: ProjectRoleWithCasting[] = [];
+    for (const role of roles) {
+      allRoles.push(role);
+      if (role.children) {
+        allRoles.push(...role.children);
+      }
+    }
+
     // הכנת הנתונים - כל תפקיד = שורה
-    const data = roles.map((role) => {
-      const actorId = role.assigned_actor_id;
-      const actor = actorId ? actors.get(actorId) : null;
+    const data = allRoles.map((role) => {
+      const actor = role.casting?.actor || role.casting?.actors;
+      const actorName = actor?.full_name || null;
 
       return {
         "תפקיד": role.role_name,
         "סוג": role.parent_role_id ? "גרסה" : "ראשי",
-        "רפליקות": role.replicas_count || 0,
-        "שחקן": actor ? actor.full_name : "לא משובץ",
-        "קשור לתפקיד": role.parent_role_id ? roles.find(r => r.id === role.parent_role_id)?.role_name || "—" : "—",
+        "רפליקות": role.replicas_count || role.replicas_needed || 0,
+        "שחקן": actorName || "לא משובץ",
+        "סטטוס": role.casting?.status || "—",
+        "קשור לתפקיד": role.parent_role_id ? allRoles.find(r => r.id === role.parent_role_id)?.role_name || "—" : "—",
         "מקור": role.source || "ידני",
       };
     });
@@ -34,6 +43,7 @@ export async function exportCastingToExcel(
       { wch: 10 }, // סוג
       { wch: 10 }, // רפליקות
       { wch: 25 }, // שחקן
+      { wch: 12 }, // סטטוס
       { wch: 25 }, // קשור לתפקיד
       { wch: 15 }, // מקור
     ];
@@ -43,13 +53,14 @@ export async function exportCastingToExcel(
     XLSX.utils.book_append_sheet(wb, ws, "ליהוק");
 
     // הוסף גיליון שני עם סטטיסטיקות
+    const assignedCount = allRoles.filter(r => r.casting).length;
     const stats = {
-      "סה״כ תפקידים": roles.length,
-      "תפקידים ראשיים": roles.filter(r => !r.parent_role_id).length,
-      "גרסאות": roles.filter(r => r.parent_role_id).length,
-      "משובצים": roles.filter(r => r.assigned_actor_id).length,
-      "לא משובצים": roles.filter(r => !r.assigned_actor_id).length,
-      "סה״כ רפליקות": roles.reduce((sum, r) => sum + (r.replicas_count || 0), 0),
+      "סה״כ תפקידים": allRoles.length,
+      "תפקידים ראשיים": allRoles.filter(r => !r.parent_role_id).length,
+      "גרסאות": allRoles.filter(r => r.parent_role_id).length,
+      "משובצים": assignedCount,
+      "לא משובצים": allRoles.length - assignedCount,
+      "סה״כ רפליקות": allRoles.reduce((sum, r) => sum + (r.replicas_count || r.replicas_needed || 0), 0),
     };
 
     const statsWs = XLSX.utils.json_to_sheet(
@@ -117,7 +128,6 @@ export async function importCastingFromExcel(file: File): Promise<{
     const roles: Array<{ role_name: string; replicas_count: number }> = [];
 
     // חלץ תפקידים מהשורות
-    // ניתן שם עמודה: "תפקיד", "role", "Role", "role_name", etc.
     rows.forEach((row, index) => {
       // מצא את שם התפקיד
       const roleNameKey = Object.keys(row).find(

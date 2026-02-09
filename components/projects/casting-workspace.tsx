@@ -379,7 +379,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     if (!newRoleName.trim()) return
     setIsCreatingRole(true)
     try {
-      const result = await createManualRole(projectId, newRoleName, newRoleReplicas)
+      const result = await createManualRole(projectId, newRoleName, undefined, newRoleReplicas)
       if (result.success) {
         toast({ title: `התפקיד "${newRoleName}" נוצר` })
         setNewRoleName("")
@@ -403,15 +403,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     
     setIsExporting(true)
     try {
-      // Build actors map from roles
-      const actorsMap = new Map()
-      roles.forEach((role) => {
-        if (role.assigned_actor && role.assigned_actor_id) {
-          actorsMap.set(role.assigned_actor_id, role.assigned_actor)
-        }
-      })
-
-      await exportCastingToExcel(roles, `project-${projectId}`, actorsMap)
+      await exportCastingToExcel(roles, `project-${projectId}`)
       toast({ title: "ליהוק יוצא בהצלחה" })
     } catch (error) {
       toast({
@@ -441,6 +433,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         const result = await createManualRole(
           projectId,
           roleData.role_name,
+          undefined,
           roleData.replicas_count
         )
         if (result.success) created++

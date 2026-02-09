@@ -199,10 +199,6 @@ function extractCharacterFromLine(line: string, lineIndex: number): string | nul
       return null
     }
     
-    // Debug log for first 50 detected characters
-    if (lineIndex < 500) {
-      console.log(`[v0] Line ${lineIndex}: Detected character "${potentialName}" from "${trimmed.substring(0, 40)}"`)
-    }
     
     return potentialName
   }
@@ -216,16 +212,7 @@ function extractCharacterFromLine(line: string, lineIndex: number): string | nul
 export function parseScript(text: string): ScriptParseResult {
   const startTime = Date.now()
   
-  // Debug: log first part of text
-  console.log("[v0] parseScript called with text length:", text.length)
-  console.log("[v0] First 500 chars:", text.substring(0, 500))
-  
   const lines = text.split(/\r?\n/)
-  console.log("[v0] Total lines:", lines.length)
-  
-  // Debug: log some sample lines
-  const sampleLines = lines.slice(0, 30).map((l, i) => `${i}: "${l.substring(0, 60)}"`).join("\n")
-  console.log("[v0] First 30 lines:\n", sampleLines)
   const characterMap = new Map<string, ExtractedCharacter>()
   const warnings: ParserWarning[] = []
   const interactions: Interaction[] = []
