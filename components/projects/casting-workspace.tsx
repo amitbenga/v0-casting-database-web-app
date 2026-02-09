@@ -379,7 +379,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     if (!newRoleName.trim()) return
     setIsCreatingRole(true)
     try {
-      const result = await createProjectRole(projectId, newRoleName, newRoleReplicas)
+      const result = await createManualRole(projectId, newRoleName, newRoleReplicas)
       if (result.success) {
         toast({ title: `התפקיד "${newRoleName}" נוצר` })
         setNewRoleName("")
@@ -438,7 +438,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       // Create roles
       let created = 0
       for (const roleData of importedRoles) {
-        const result = await createProjectRole(
+        const result = await createManualRole(
           projectId,
           roleData.role_name,
           roleData.replicas_count
