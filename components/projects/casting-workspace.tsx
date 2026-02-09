@@ -44,8 +44,15 @@ import {
   Circle,
   Users,
   Clapperboard,
+  Download,
+  Upload,
 } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
+import {
+  exportCastingToExcel,
+  importCastingFromExcel,
+  exportCastingTemplate,
+} from "@/lib/casting-export-import"
 import {
   getProjectRolesWithCasting,
   createManualRole,
@@ -340,6 +347,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
   const [newRoleName, setNewRoleName] = useState("")
   const [newRoleReplicas, setNewRoleReplicas] = useState(0)
   const [isCreatingRole, setIsCreatingRole] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [importError, setImportError] = useState("")
 
   const loadRoles = useCallback(async () => {
     try {
@@ -370,14 +379,99 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     if (!newRoleName.trim()) return
     setIsCreatingRole(true)
     try {
-      const result = await createManualRole(projectId, newRoleName.trim(), undefined, newRoleReplicas)
+      const result = await createProjectRole(projectId, newRoleName, newRoleReplicas)
       if (result.success) {
         toast({ title: `התפקיד "${newRoleName}" נוצר` })
-        setShowAddRole(false)
         setNewRoleName("")
         setNewRoleReplicas(0)
+        setShowAddRole(false)
         loadRoles()
+      } else {
+        toast({ title: "שגיאה", description: result.error, variant: "destructive" })
       }
+    } finally {
+      setIsCreatingRole(false)
+    }
+  }
+
+  // Export to Excel
+  const handleExportCasting = async () => {
+    if (roles.length === 0) {
+      toast({ title: "אין תפקידים לייצוא", variant: "destructive" })
+      return
+    }
+    
+    setIsExporting(true)
+    try {
+      // Build actors map from roles
+      const actorsMap = new Map()
+      roles.forEach((role) => {
+        if (role.assigned_actor && role.assigned_actor_id) {
+          actorsMap.set(role.assigned_actor_id, role.assigned_actor)
+        }
+      })
+
+      await exportCastingToExcel(roles, `project-${projectId}`, actorsMap)
+      toast({ title: "ליהוק יוצא בהצלחה" })
+    } catch (error) {
+      toast({
+        title: "שגיאה בייצוא",
+        description: error instanceof Error ? error.message : "לא ידוע",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Import from Excel
+  const handleImportCasting = async (file: File) => {
+    setImportError("")
+    try {
+      const { roles: importedRoles, warnings } = await importCastingFromExcel(file)
+
+      if (importedRoles.length === 0) {
+        setImportError("לא נחלצו תפקידים מהקובץ")
+        return
+      }
+
+      // Create roles
+      let created = 0
+      for (const roleData of importedRoles) {
+        const result = await createProjectRole(
+          projectId,
+          roleData.role_name,
+          roleData.replicas_count
+        )
+        if (result.success) created++
+      }
+
+      toast({
+        title: `${created} תפקידים נוצרו`,
+        description: warnings.length > 0 ? `${warnings.length} אזהרות` : undefined,
+      })
+
+      loadRoles()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "שגיאה בייבוא"
+      setImportError(msg)
+      toast({ title: "שגיאה בייבוא", description: msg, variant: "destructive" })
+    }
+  }
+
+  // Export template
+  const handleExportTemplate = () => {
+    try {
+      exportCastingTemplate(`project-${projectId}`)
+      toast({ title: "דוגמה יוצאת בהצלחה" })
+    } catch (error) {
+      toast({
+        title: "שגיאה",
+        description: error instanceof Error ? error.message : "לא ידוע",
+        variant: "destructive",
+      })
+    }
+  }
     } finally {
       setIsCreatingRole(false)
     }
@@ -531,6 +625,55 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         </Button>
 
         <div className="flex-1" />
+
+        {/* Export/Import buttons */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={handleExportCasting}
+          disabled={isExporting || roles.length === 0}
+        >
+          {isExporting ? <Loader2 className="h-3.5 w-3.5 ml-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 ml-1.5" />}
+          ייצוא לאקסל
+        </Button>
+
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9">
+              <Upload className="h-3.5 w-3.5 ml-1.5" />
+              ייבוא מאקסל
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>ייבוא תפקידים מאקסל</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {importError && (
+                <div className="p-3 bg-destructive/10 text-destructive text-sm rounded">
+                  {importError}
+                </div>
+              )}
+              <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0]
+                    if (file) {
+                      handleImportCasting(file)
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+              <Button variant="ghost" onClick={handleExportTemplate} className="w-full">
+                הורד דוגמה
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={showAddRole} onOpenChange={setShowAddRole}>
           <DialogTrigger asChild>
