@@ -5,6 +5,7 @@ export type Gender = "male" | "female" | "other"
 
 export type SingingStyleLevel = "basic" | "medium" | "high"
 export type SingingStyle = "opera" | "pop" | "rock" | "jazz" | "classical" | "musical" | "folk" | "other"
+export type Accent = "french" | "italian" | "spanish" | "german"
 
 export interface SingingStyleWithLevel {
   style: SingingStyle
@@ -37,8 +38,40 @@ export interface Actor {
   email?: string
   phone?: string
   voice_sample_url?: string
+  singing_sample_url?: string
+  accents?: Accent[]
   created_at: string
   vat_status: VatStatus
+}
+
+export interface ActorSubmission {
+  id: string
+  full_name: string
+  email?: string
+  phone?: string
+  normalized_email?: string
+  normalized_phone?: string
+  gender?: string
+  birth_year?: number
+  image_url?: string
+  voice_sample_url?: string
+  singing_sample_url?: string
+  is_singer?: boolean
+  is_course_graduate?: boolean
+  vat_status?: string
+  skills?: string[]
+  skills_other?: string
+  languages?: string[]
+  languages_other?: string
+  accents?: Accent[]
+  notes?: string
+  review_status: "pending" | "approved" | "rejected"
+  match_status?: string
+  matched_actor_id?: string
+  merge_report?: any
+  raw_payload?: any
+  deleted_at?: string | null
+  created_at: string
 }
 
 export interface Project {
@@ -60,7 +93,10 @@ export interface ProjectRole {
   role_name_normalized?: string
   parent_role_id?: string
   description?: string
-  replicas_needed: number
+  /** @canonical Source of truth for replica count */
+  replicas_count: number
+  /** @deprecated Use replicas_count instead */
+  replicas_needed?: number
   source: "manual" | "script"
   created_at: string
 }
@@ -72,7 +108,9 @@ export interface RoleCasting {
   actor_id: string
   status: CastingStatus
   notes?: string
+  /** @deprecated Use ProjectRole.replicas_count instead */
   replicas_planned?: number
+  /** @deprecated Use ProjectRole.replicas_count instead */
   replicas_final?: number
   created_at: string
   updated_at: string
@@ -96,7 +134,6 @@ export interface RoleConflict {
 export interface ProjectRoleWithCasting extends ProjectRole {
   casting?: RoleCasting | null
   children?: ProjectRoleWithCasting[]
-  replicas_count: number // for v0 UI compatibility
 }
 
 export type CastingStatus = "באודישן" | "בליהוק" | "מלוהק"
@@ -142,6 +179,20 @@ export const SINGING_STYLE_LEVEL_LABELS: Record<SingingStyleLevel, string> = {
   medium: "בינוני",
   high: "גבוה",
 }
+
+export const ACCENT_LABELS: Record<Accent, string> = {
+  french: "צרפתי",
+  italian: "איטלקי",
+  spanish: "ספרדי",
+  german: "גרמני",
+}
+
+export const ACCENTS_LIST: { key: Accent; label: string }[] = [
+  { key: "french", label: "צרפתי" },
+  { key: "italian", label: "איטלקי" },
+  { key: "spanish", label: "ספרדי" },
+  { key: "german", label: "גרמני" },
+]
 
 export const SINGING_STYLES_LIST: { key: SingingStyle; label: string }[] = [
   { key: "opera", label: "אופרה" },

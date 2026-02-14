@@ -132,6 +132,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
               <SelectContent>
                 <SelectItem value="not_started">טרם התחיל</SelectItem>
                 <SelectItem value="casting">ליהוק</SelectItem>
+                <SelectItem value="voice_testing">בבדיקת קולות</SelectItem>
                 <SelectItem value="casted">אחרי ליהוק</SelectItem>
                 <SelectItem value="recording">הקלטה</SelectItem>
                 <SelectItem value="completed">הושלם</SelectItem>

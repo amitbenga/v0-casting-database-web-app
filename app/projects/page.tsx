@@ -11,6 +11,7 @@ import Link from "next/link"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
 import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
+import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/projects/types"
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
@@ -57,16 +58,11 @@ export default function ProjectsPage() {
   })
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-500/10 text-green-500 border-green-500/20"
-      case "completed":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20"
-      case "draft":
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20"
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20"
-    }
+    return PROJECT_STATUS_COLORS[status as keyof typeof PROJECT_STATUS_COLORS] || "bg-gray-500/10 text-gray-500 border-gray-500/20"
+  }
+
+  const getStatusLabel = (status: string) => {
+    return PROJECT_STATUS_LABELS[status as keyof typeof PROJECT_STATUS_LABELS] || status
   }
 
   const handleDeleteProject = async (id: string) => {
@@ -115,30 +111,17 @@ export default function ProjectsPage() {
               >
                 הכל
               </Button>
-              <Button
-                variant={statusFilter === "active" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("active")}
-                className="text-xs md:text-sm"
-              >
-                פעיל
-              </Button>
-              <Button
-                variant={statusFilter === "draft" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("draft")}
-                className="text-xs md:text-sm"
-              >
-                טיוטה
-              </Button>
-              <Button
-                variant={statusFilter === "completed" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("completed")}
-                className="text-xs md:text-sm"
-              >
-                הושלם
-              </Button>
+              {Object.entries(PROJECT_STATUS_LABELS).map(([key, label]) => (
+                <Button
+                  key={key}
+                  variant={statusFilter === key ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setStatusFilter(key)}
+                  className="text-xs md:text-sm"
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -209,9 +192,7 @@ export default function ProjectsPage() {
 
                 {/* Status Badge */}
                 <Badge variant="outline" className={getStatusColor(project.status)}>
-                  {project.status === "active" && "פעיל"}
-                  {project.status === "completed" && "הושלם"}
-                  {project.status === "draft" && "טיוטה"}
+                  {getStatusLabel(project.status)}
                 </Badge>
 
                 {/* Casting Director */}

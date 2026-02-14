@@ -33,10 +33,11 @@ export async function applyParsedRoles(
         .maybeSingle()
 
       if (existingRole) {
-        // Role exists, just update
+        // Role exists, just update - replicas_count is primary, keep replicas_needed in sync
         await supabase
           .from("project_roles")
           .update({
+            replicas_count: role.replicas_needed,
             replicas_needed: role.replicas_needed,
             source: "script"
           })
@@ -44,13 +45,14 @@ export async function applyParsedRoles(
 
         roleNameToId.set(role.role_name_normalized, existingRole.id)
       } else {
-        // Create new role
+        // Create new role - replicas_count is primary, keep replicas_needed in sync
         const { data: newRole, error } = await supabase
           .from("project_roles")
           .insert({
             project_id: projectId,
             role_name: role.role_name,
             role_name_normalized: role.role_name_normalized,
+            replicas_count: role.replicas_needed,
             replicas_needed: role.replicas_needed,
             source: "script"
           })
@@ -183,7 +185,7 @@ export async function getProjectRolesForPreview(projectId: string) {
       .from("project_roles")
       .select("*")
       .eq("project_id", projectId)
-      .order("replicas_needed", { ascending: false })
+      .order("replicas_count", { ascending: false })
 
     if (rolesError) throw rolesError
 
@@ -260,14 +262,14 @@ export async function mergeRoles(
 
     if (mergeError) throw mergeError
 
-    // Calculate total replicas
-    const totalReplicas = (primaryRole.replicas_needed || 0) +
-      (rolesToMerge || []).reduce((sum, r) => sum + (r.replicas_needed || 0), 0)
+    // Calculate total replicas - use replicas_count as primary, fall back to replicas_needed
+    const totalReplicas = (primaryRole.replicas_count ?? primaryRole.replicas_needed ?? 0) +
+      (rolesToMerge || []).reduce((sum, r) => sum + (r.replicas_count ?? r.replicas_needed ?? 0), 0)
 
-    // Update primary role with combined replicas
+    // Update primary role with combined replicas - keep both in sync
     await supabase
       .from("project_roles")
-      .update({ replicas_needed: totalReplicas })
+      .update({ replicas_count: totalReplicas, replicas_needed: totalReplicas })
       .eq("id", primaryRoleId)
 
     // Update any castings to point to the primary role

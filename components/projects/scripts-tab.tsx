@@ -32,6 +32,8 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { parseScriptFiles, type ParsedScriptBundle } from "@/lib/parser"
 import { ScriptPreviewDialog } from "./script-preview-dialog"
+import { parseExcelFile, isExcelFile, type ExcelParseResult, type ExcelMappedRole } from "@/lib/parser/excel-parser"
+import { ExcelPreviewDialog } from "./excel-preview-dialog"
 
 interface ProjectScript {
   id: string
@@ -66,6 +68,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [isParsing, setIsParsing] = useState(false)
   const [parseResult, setParseResult] = useState<ParsedScriptBundle | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
+  const [showExcelPreview, setShowExcelPreview] = useState(false)
+  const [isApplyingExcel, setIsApplyingExcel] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadScripts = useCallback(async () => {
@@ -90,22 +95,101 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     loadScripts()
   }, [loadScripts])
 
-  const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (!files || files.length === 0) return
-
-    const newPendingFiles: PendingFile[] = Array.from(files).map(file => ({
-      file,
-      id: `${file.name}-${Date.now()}-${Math.random()}`,
-      status: "pending"
-    }))
-
-    setPendingFiles(prev => [...prev, ...newPendingFiles])
-    setParseResult(null)
 
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
+    }
+
+    // Check if any file is Excel
+    const fileArray = Array.from(files)
+    const excelFiles = fileArray.filter(isExcelFile)
+    const scriptFiles = fileArray.filter(f => !isExcelFile(f))
+
+    // Handle Excel files - open Excel preview dialog
+    if (excelFiles.length > 0) {
+      try {
+        const result = await parseExcelFile(excelFiles[0])
+        setExcelResult(result)
+        setShowExcelPreview(true)
+        if (excelFiles.length > 1) {
+          toast({
+            title: "קובץ Excel אחד בלבד",
+            description: "ניתן לייבא קובץ Excel אחד בכל פעם",
+          })
+        }
+      } catch (error) {
+        console.error("Excel parse error:", error)
+        toast({
+          title: "שגיאה בקריאת קובץ Excel",
+          description: error instanceof Error ? error.message : "שגיאה לא ידועה",
+          variant: "destructive",
+        })
+      }
+    }
+
+    // Handle script files - add to pending list
+    if (scriptFiles.length > 0) {
+      const newPendingFiles: PendingFile[] = scriptFiles.map(file => ({
+        file,
+        id: `${file.name}-${Date.now()}-${Math.random()}`,
+        status: "pending"
+      }))
+      setPendingFiles(prev => [...prev, ...newPendingFiles])
+      setParseResult(null)
+    }
+  }
+
+  const handleExcelApply = async (roles: ExcelMappedRole[]) => {
+    setIsApplyingExcel(true)
+    try {
+      const supabase = createBrowserClient()
+
+      // Insert roles into project_roles
+      const rolesToInsert = roles.map(role => ({
+        project_id: projectId,
+        role_name: role.role_name,
+        replicas_count: role.replicas_count,
+        source: "excel" as const,
+      }))
+
+      const { error } = await supabase
+        .from("project_roles")
+        .insert(rolesToInsert)
+
+      if (error) throw error
+
+      // Save script record
+      const fileName = excelResult?.fileName || "excel-import.xlsx"
+      await supabase.from("project_scripts").insert({
+        project_id: projectId,
+        file_name: fileName,
+        file_type: fileName.split(".").pop() || "xlsx",
+        processing_status: "completed",
+        applied_at: new Date().toISOString(),
+      })
+
+      toast({
+        title: "תפקידים יובאו בהצלחה",
+        description: `${roles.length} תפקידים נוספו לפרויקט`,
+      })
+
+      setShowExcelPreview(false)
+      setExcelResult(null)
+      loadScripts()
+      onScriptApplied?.()
+    } catch (error) {
+      console.error("Error applying Excel roles:", error)
+      toast({
+        title: "שגיאה בייבוא תפקידים",
+        description: error instanceof Error ? error.message : "שגיאה לא ידועה",
+        variant: "destructive",
+      })
+    } finally {
+      setIsApplyingExcel(false)
     }
   }
 
@@ -274,7 +358,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.doc,.docx,.txt,.xlsx,.xls"
               multiple
               onChange={handleFilesSelected}
               className="hidden"
@@ -282,7 +366,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm font-medium">לחץ לבחירת קבצים או גרור לכאן</p>
             <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-TXT, PDF, DOC, DOCX
+              תומך ב-TXT, PDF, DOC, DOCX, Excel (XLSX/XLS)
             </p>
           </div>
 
@@ -492,7 +576,18 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
         </CardContent>
       </Card>
 
-      {/* Preview Dialog */}
+      {/* Excel Preview Dialog */}
+      {excelResult && (
+        <ExcelPreviewDialog
+          open={showExcelPreview}
+          onOpenChange={setShowExcelPreview}
+          excelResult={excelResult}
+          onApply={handleExcelApply}
+          isApplying={isApplyingExcel}
+        />
+      )}
+
+      {/* Script Preview Dialog */}
       {parseResult && (
         <ScriptPreviewDialog
           open={showPreview}

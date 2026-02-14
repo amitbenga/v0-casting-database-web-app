@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import {
   ChevronRight,
@@ -18,6 +18,11 @@ import {
   Clock,
   AlertTriangle,
   Link2,
+  Trash2,
+  Merge,
+  UserPlus,
+  CheckSquare,
+  Square,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -25,8 +30,11 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { mergeSubmissionIntoActor, softDeleteSubmissions, type MergeFieldChoices } from "@/lib/actions/submission-actions"
 
 interface ExistingActor {
   id: string
@@ -40,6 +48,13 @@ interface DuplicateMatch {
   matchType: "email" | "phone" | "both"
 }
 
+const ACCENT_LABELS: Record<string, string> = {
+  french: "צרפתי",
+  italian: "איטלקי",
+  spanish: "ספרדי",
+  german: "גרמני",
+}
+
 interface ActorSubmission {
   id: string
   full_name: string
@@ -51,6 +66,7 @@ interface ActorSubmission {
   normalized_phone?: string
   image_url?: string
   voice_sample_url?: string
+  singing_sample_url?: string
   is_singer?: boolean
   is_course_graduate?: boolean
   vat_status?: string
@@ -58,12 +74,14 @@ interface ActorSubmission {
   skills_other?: string
   languages?: string[]
   languages_other?: string
+  accents?: string[]
   notes?: string
   review_status: "pending" | "approved" | "rejected"
   match_status?: string
   matched_actor_id?: string
   merge_report?: any
   raw_payload?: any
+  deleted_at?: string | null
   created_at: string
 }
 
@@ -79,6 +97,16 @@ function AdminPageContent() {
   const [isPlaying, setIsPlaying] = useState<string | null>(null)
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
 
+  // Merge flow state
+  const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [mergeTarget, setMergeTarget] = useState<ExistingActor | null>(null)
+  const [mergeFieldChoices, setMergeFieldChoices] = useState<MergeFieldChoices>({})
+  const [isMerging, setIsMerging] = useState(false)
+
+  // Bulk delete state
+  const [selectedForDelete, setSelectedForDelete] = useState<Set<string>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
+
   useEffect(() => {
     loadSubmissions()
   }, [])
@@ -91,6 +119,7 @@ function AdminPageContent() {
       const { data: submissionsData, error: submissionsError } = await supabase
         .from("actor_submissions")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
 
       if (submissionsError) throw submissionsError
@@ -160,11 +189,13 @@ function AdminPageContent() {
         email: submission.email,
         image_url: submission.image_url,
         voice_sample_url: submission.voice_sample_url,
+        singing_sample_url: submission.singing_sample_url || "",
         is_singer: submission.is_singer || false,
         is_course_grad: submission.is_course_graduate || false,
         vat_status: submission.vat_status || "exempt",
         skills: submission.skills || [],
         languages: submission.languages || [],
+        accents: submission.accents || [],
         notes: submission.notes,
       })
 
@@ -207,6 +238,81 @@ function AdminPageContent() {
     } catch (error) {
       console.error("[v0] Error rejecting submission:", error)
       alert("שגיאה בדחיית הבקשה")
+    }
+  }
+
+  // Merge flow: open merge dialog with a specific target actor
+  function handleStartMerge(submission: ActorSubmission, targetActor: ExistingActor) {
+    setSelectedSubmission(submission)
+    setMergeTarget(targetActor)
+    setMergeFieldChoices({})
+    setShowMergeDialog(true)
+  }
+
+  async function handleConfirmMerge() {
+    if (!selectedSubmission || !mergeTarget) return
+    setIsMerging(true)
+    try {
+      const result = await mergeSubmissionIntoActor(
+        selectedSubmission.id,
+        mergeTarget.id,
+        mergeFieldChoices
+      )
+      if (!result.success) {
+        alert(result.error || "שגיאה במיזוג")
+        return
+      }
+      await loadSubmissions()
+      setShowMergeDialog(false)
+      setSelectedSubmission(null)
+      setMergeTarget(null)
+    } catch (error) {
+      console.error("Merge error:", error)
+      alert("שגיאה במיזוג")
+    } finally {
+      setIsMerging(false)
+    }
+  }
+
+  // Bulk delete for rejected submissions
+  function toggleSelectForDelete(id: string) {
+    setSelectedForDelete(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  function toggleSelectAllRejected() {
+    if (selectedForDelete.size === rejectedSubmissions.length) {
+      setSelectedForDelete(new Set())
+    } else {
+      setSelectedForDelete(new Set(rejectedSubmissions.map(s => s.id)))
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedForDelete.size === 0) return
+    if (!confirm(`האם למחוק ${selectedForDelete.size} בקשות?`)) return
+
+    setIsDeleting(true)
+    try {
+      const result = await softDeleteSubmissions(Array.from(selectedForDelete))
+      if (!result.success) {
+        alert(result.error || "שגיאה במחיקה")
+        return
+      }
+      await loadSubmissions()
+      setSelectedForDelete(new Set())
+    } catch (error) {
+      console.error("Bulk delete error:", error)
+      alert("שגיאה במחיקה")
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -331,50 +437,176 @@ function AdminPageContent() {
                 <p className="text-muted-foreground">אין בקשות שנדחו</p>
               </Card>
             ) : (
-              rejectedSubmissions.map((submission) => (
-                <SubmissionCard
-                  key={submission.id}
-                  submission={submission}
-                  onPlayAudio={handlePlayAudio}
-                  isPlaying={isPlaying === submission.id}
-                />
-              ))
+              <>
+                {/* Bulk actions bar */}
+                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedForDelete.size === rejectedSubmissions.length && rejectedSubmissions.length > 0}
+                      onCheckedChange={toggleSelectAllRejected}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {selectedForDelete.size > 0
+                        ? `נבחרו ${selectedForDelete.size} בקשות`
+                        : "בחר הכל"}
+                    </span>
+                  </div>
+                  {selectedForDelete.size > 0 && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={handleBulkDelete}
+                      disabled={isDeleting}
+                    >
+                      <Trash2 className="h-4 w-4 ml-2" />
+                      {isDeleting ? "מוחק..." : `מחק ${selectedForDelete.size} נבחרות`}
+                    </Button>
+                  )}
+                </div>
+
+                {rejectedSubmissions.map((submission) => (
+                  <div key={submission.id} className="flex items-start gap-3">
+                    <div className="pt-6">
+                      <Checkbox
+                        checked={selectedForDelete.has(submission.id)}
+                        onCheckedChange={() => toggleSelectForDelete(submission.id)}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <SubmissionCard
+                        submission={submission}
+                        onPlayAudio={handlePlayAudio}
+                        isPlaying={isPlaying === submission.id}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </TabsContent>
         </Tabs>
       </main>
 
-      {/* Review Dialog */}
+      {/* Review Dialog - now with 3 options when duplicates exist */}
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
         <DialogContent className="sm:max-w-[500px]" dir="rtl">
           <DialogHeader>
-            <DialogTitle>{reviewAction === "approve" ? "אישור בקשה" : "דחיית בקשה"}</DialogTitle>
+            <DialogTitle>
+              {reviewAction === "approve" ? "אישור בקשה" : "דחיית בקשה"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {reviewAction === "approve"
-                ? `האם אתה בטוח שברצונך לאשר את הבקשה של ${selectedSubmission?.full_name}?`
-                : `האם אתה בטוח שברצונך לדחות את הבקשה של ${selectedSubmission?.full_name}?`}
-            </p>
-
+            {reviewAction === "approve" && selectedSubmission && duplicatesMap[selectedSubmission.id]?.length > 0 ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  נמצאו התאמות אפשריות ל-{selectedSubmission.full_name}. בחר פעולה:
+                </p>
+                <div className="space-y-3">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-3 h-auto py-3"
+                    onClick={() => {
+                      handleReject(selectedSubmission)
+                    }}
+                  >
+                    <X className="h-5 w-5 text-red-500" />
+                    <div className="text-right">
+                      <p className="font-medium">דחה את הבקשה</p>
+                      <p className="text-xs text-muted-foreground">הבקשה תידחה</p>
+                    </div>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-3 h-auto py-3"
+                    onClick={() => {
+                      handleApprove(selectedSubmission)
+                    }}
+                  >
+                    <UserPlus className="h-5 w-5 text-green-500" />
+                    <div className="text-right">
+                      <p className="font-medium">צור שחקן חדש</p>
+                      <p className="text-xs text-muted-foreground">ייצור רשומה נפרדת במאגר</p>
+                    </div>
+                  </Button>
+                  {duplicatesMap[selectedSubmission.id].map((match) => (
+                    <Button
+                      key={match.actor.id}
+                      variant="outline"
+                      className="w-full justify-start gap-3 h-auto py-3"
+                      onClick={() => handleStartMerge(selectedSubmission, match.actor)}
+                    >
+                      <Merge className="h-5 w-5 text-blue-500" />
+                      <div className="text-right">
+                        <p className="font-medium">מזג עם {match.actor.full_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          עדכן שדות חסרים בשחקן הקיים
+                          ({match.matchType === "both" ? "התאמת אימייל וטלפון" : match.matchType === "email" ? "התאמת אימייל" : "התאמת טלפון"})
+                        </p>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {reviewAction === "approve"
+                  ? `האם אתה בטוח שברצונך לאשר את הבקשה של ${selectedSubmission?.full_name}?`
+                  : `האם אתה בטוח שברצונך לדחות את הבקשה של ${selectedSubmission?.full_name}?`}
+              </p>
+            )}
           </div>
+          {/* Only show simple approve/reject buttons when no duplicates */}
+          {!(reviewAction === "approve" && selectedSubmission && duplicatesMap[selectedSubmission.id]?.length > 0) && (
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
+                ביטול
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedSubmission) {
+                    if (reviewAction === "approve") {
+                      handleApprove(selectedSubmission)
+                    } else {
+                      handleReject(selectedSubmission)
+                    }
+                  }
+                }}
+                variant={reviewAction === "approve" ? "default" : "destructive"}
+              >
+                {reviewAction === "approve" ? "אשר" : "דחה"}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Merge Dialog - field-by-field choice */}
+      <Dialog open={showMergeDialog} onOpenChange={setShowMergeDialog}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>מיזוג עם {mergeTarget?.full_name}</DialogTitle>
+          </DialogHeader>
+          {selectedSubmission && mergeTarget && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                שדות חסרים ימולאו אוטומטית. לשדות סותרים, בחר איזה ערך לשמור:
+              </p>
+              <MergeFieldSelector
+                submission={selectedSubmission}
+                targetActorId={mergeTarget.id}
+                fieldChoices={mergeFieldChoices}
+                onFieldChoiceChange={(field, choice) => {
+                  setMergeFieldChoices(prev => ({ ...prev, [field]: choice }))
+                }}
+              />
+            </div>
+          )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setShowMergeDialog(false)}>
               ביטול
             </Button>
-            <Button
-              onClick={() => {
-                if (selectedSubmission) {
-                  if (reviewAction === "approve") {
-                    handleApprove(selectedSubmission)
-                  } else {
-                    handleReject(selectedSubmission)
-                  }
-                }
-              }}
-              variant={reviewAction === "approve" ? "default" : "destructive"}
-            >
-              {reviewAction === "approve" ? "אשר" : "דחה"}
+            <Button onClick={handleConfirmMerge} disabled={isMerging}>
+              {isMerging ? "ממזג..." : "אשר מיזוג"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -507,6 +739,18 @@ function SubmissionCard({
                   </div>
                 </div>
               )}
+              {submission.accents && submission.accents.length > 0 && (
+                <div>
+                  <p className="font-medium mb-1">מבטאים:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {submission.accents.map((accent) => (
+                      <Badge key={accent} variant="secondary" className="text-xs">
+                        {ACCENT_LABELS[accent] || accent}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -557,10 +801,20 @@ function SubmissionCard({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={(e) => onPlayAudio(submission.voice_sample_url!, submission.id, e)}
+                onClick={(e) => onPlayAudio(submission.voice_sample_url!, submission.id + "-voice", e)}
               >
                 <Music className="h-4 w-4 ml-2" />
-                {isPlaying ? "עצור" : "השמע דוגמה"}
+                {isPlaying ? "עצור" : "השמע דיבור"}
+              </Button>
+            )}
+            {submission.singing_sample_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => onPlayAudio(submission.singing_sample_url!, submission.id + "-singing", e)}
+              >
+                <Music className="h-4 w-4 ml-2" />
+                השמע שירה
               </Button>
             )}
             {submission.review_status === "pending" && onReview && (
@@ -579,6 +833,142 @@ function SubmissionCard({
         </div>
       </div>
     </Card>
+  )
+}
+
+/**
+ * MergeFieldSelector - shows conflicting fields between submission and existing actor
+ * For each conflict, user picks which value to keep
+ */
+function MergeFieldSelector({
+  submission,
+  targetActorId,
+  fieldChoices,
+  onFieldChoiceChange,
+}: {
+  submission: ActorSubmission
+  targetActorId: string
+  fieldChoices: MergeFieldChoices
+  onFieldChoiceChange: (field: string, choice: "submission" | "existing") => void
+}) {
+  const [actor, setActor] = useState<Record<string, any> | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadActor() {
+      const supabase = createBrowserClient()
+      const { data } = await supabase
+        .from("actors")
+        .select("*")
+        .eq("id", targetActorId)
+        .single()
+      setActor(data)
+      setLoading(false)
+    }
+    loadActor()
+  }, [targetActorId])
+
+  if (loading || !actor) {
+    return <p className="text-sm text-muted-foreground">טוען נתוני שחקן...</p>
+  }
+
+  const FIELD_LABELS: Record<string, string> = {
+    full_name: "שם מלא",
+    gender: "מין",
+    birth_year: "שנת לידה",
+    phone: "טלפון",
+    email: "אימייל",
+    image_url: "תמונה",
+    voice_sample_url: "דוגמת דיבור",
+    singing_sample_url: "דוגמת שירה",
+    is_singer: "זמר/ת",
+    vat_status: "סטטוס מע"מ",
+    notes: "הערות",
+  }
+
+  // Map submission fields to actor fields
+  const fieldMapping: Record<string, { subKey: string; actorKey: string }> = {
+    full_name: { subKey: "full_name", actorKey: "full_name" },
+    gender: { subKey: "gender", actorKey: "gender" },
+    birth_year: { subKey: "birth_year", actorKey: "birth_year" },
+    phone: { subKey: "phone", actorKey: "phone" },
+    email: { subKey: "email", actorKey: "email" },
+    image_url: { subKey: "image_url", actorKey: "image_url" },
+    voice_sample_url: { subKey: "voice_sample_url", actorKey: "voice_sample_url" },
+    singing_sample_url: { subKey: "singing_sample_url", actorKey: "singing_sample_url" },
+    is_singer: { subKey: "is_singer", actorKey: "is_singer" },
+    vat_status: { subKey: "vat_status", actorKey: "vat_status" },
+    notes: { subKey: "notes", actorKey: "notes" },
+  }
+
+  const conflicts: { field: string; subValue: any; actorValue: any }[] = []
+  const autoFills: { field: string; value: any }[] = []
+
+  for (const [fieldName, mapping] of Object.entries(fieldMapping)) {
+    const subValue = (submission as any)[mapping.subKey]
+    const actorValue = actor[mapping.actorKey]
+
+    if (subValue == null || subValue === "" || subValue === false) continue
+
+    if (actorValue == null || actorValue === "" || actorValue === false) {
+      autoFills.push({ field: fieldName, value: subValue })
+    } else if (String(subValue) !== String(actorValue)) {
+      conflicts.push({ field: fieldName, subValue, actorValue })
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {autoFills.length > 0 && (
+        <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+          <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
+            שדות שימולאו אוטומטית ({autoFills.length})
+          </p>
+          <div className="space-y-1">
+            {autoFills.map((af) => (
+              <div key={af.field} className="flex items-center gap-2 text-sm">
+                <Check className="h-3 w-3 text-green-600" />
+                <span className="text-muted-foreground">{FIELD_LABELS[af.field] || af.field}:</span>
+                <span className="font-medium">{String(af.value).slice(0, 50)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {conflicts.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium">שדות סותרים ({conflicts.length}) - בחר איזה ערך לשמור:</p>
+          {conflicts.map((conflict) => (
+            <div key={conflict.field} className="p-3 border rounded-lg space-y-2">
+              <p className="text-sm font-medium">{FIELD_LABELS[conflict.field] || conflict.field}</p>
+              <RadioGroup
+                value={fieldChoices[conflict.field] || "existing"}
+                onValueChange={(v) => onFieldChoiceChange(conflict.field, v as "submission" | "existing")}
+                className="space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="existing" id={`${conflict.field}-existing`} />
+                  <Label htmlFor={`${conflict.field}-existing`} className="text-sm">
+                    שמור קיים: <span className="font-medium">{String(conflict.actorValue).slice(0, 60)}</span>
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="submission" id={`${conflict.field}-submission`} />
+                  <Label htmlFor={`${conflict.field}-submission`} className="text-sm">
+                    מהגשה: <span className="font-medium">{String(conflict.subValue).slice(0, 60)}</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {conflicts.length === 0 && autoFills.length === 0 && (
+        <p className="text-sm text-muted-foreground">אין שדות למזג. ההגשה תסומן כמאושרת.</p>
+      )}
+    </div>
   )
 }
 

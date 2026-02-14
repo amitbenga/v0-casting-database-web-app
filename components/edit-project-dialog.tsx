@@ -138,6 +138,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
                   <SelectContent>
                     <SelectItem value="not_started">לא התחיל</SelectItem>
                     <SelectItem value="casting">בליהוק</SelectItem>
+                    <SelectItem value="voice_testing">בבדיקת קולות</SelectItem>
                     <SelectItem value="casted">ליהוק הושלם</SelectItem>
                     <SelectItem value="recording">בהקלטה</SelectItem>
                     <SelectItem value="completed">הושלם</SelectItem>

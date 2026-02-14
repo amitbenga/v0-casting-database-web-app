@@ -39,23 +39,25 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
         .maybeSingle()
 
       if (existingRole) {
-        // Update existing role
+        // Update existing role - replicas_count is primary, keep replicas_needed in sync
         await supabase
           .from("project_roles")
           .update({
             role_name_normalized: normalizedName,
+            replicas_count: rawRole.replicas_count,
             replicas_needed: rawRole.replicas_count,
             source: "script"
           })
           .eq("id", existingRole.id)
       } else {
-        // Create new role
+        // Create new role - replicas_count is primary, keep replicas_needed in sync
         await supabase
           .from("project_roles")
           .insert({
             project_id: projectId,
             role_name: rawRole.role_name,
             role_name_normalized: normalizedName,
+            replicas_count: rawRole.replicas_count,
             replicas_needed: rawRole.replicas_count,
             source: "script"
           })
@@ -349,7 +351,8 @@ export async function getProjectRolesWithCasting(
       return {
         ...role,
         casting,
-        replicas_count: role.replicas_needed || 0
+        // Source of truth: replicas_count is primary, fall back to replicas_needed for legacy data
+        replicas_count: role.replicas_count ?? role.replicas_needed ?? 0
       }
     });
 
@@ -380,12 +383,13 @@ export async function getProjectRolesWithCasting(
 
 /**
  * Creates a role manually.
+ * Uses replicas_count as the primary field (source of truth).
  */
 export async function createManualRole(
   projectId: string, 
   roleName: string, 
   description?: string, 
-  replicasNeeded: number = 0
+  replicasCount: number = 0
 ): Promise<CastingActionResult> {
   const supabase = await createClient()
 
@@ -397,7 +401,8 @@ export async function createManualRole(
         role_name: roleName,
         role_name_normalized: roleName.trim().toLowerCase(),
         description,
-        replicas_needed: replicasNeeded,
+        replicas_count: replicasCount,
+        replicas_needed: replicasCount, // Keep in sync for backward compat
         source: "manual"
       })
 
@@ -409,6 +414,58 @@ export async function createManualRole(
     console.error("Error creating role:", error)
     return { success: false, error: error.message || "שגיאה ביצירת תפקיד" }
   }
+}
+
+/**
+ * Compute total replicas for a project (sum of replicas_count across all roles).
+ */
+export async function getProjectTotalReplicas(projectId: string): Promise<number> {
+  const supabase = await createClient()
+  const { data: roles } = await supabase
+    .from("project_roles")
+    .select("replicas_count, replicas_needed")
+    .eq("project_id", projectId)
+  
+  if (!roles) return 0
+  return roles.reduce((sum, r) => sum + (r.replicas_count ?? r.replicas_needed ?? 0), 0)
+}
+
+/**
+ * Compute total replicas per actor within a project.
+ * Returns array of { actor_id, total_replicas } for UI consumption.
+ */
+export async function getActorReplicasInProject(
+  projectId: string
+): Promise<{ actor_id: string; total_replicas: number }[]> {
+  const supabase = await createClient()
+  
+  // Get all roles for this project
+  const { data: roles } = await supabase
+    .from("project_roles")
+    .select("id, replicas_count, replicas_needed")
+    .eq("project_id", projectId)
+  
+  if (!roles || roles.length === 0) return []
+  
+  const roleIds = roles.map(r => r.id)
+  const roleReplicasMap = new Map(roles.map(r => [r.id, r.replicas_count ?? r.replicas_needed ?? 0]))
+  
+  // Get all castings for these roles
+  const { data: castings } = await supabase
+    .from("role_castings")
+    .select("role_id, actor_id")
+    .in("role_id", roleIds)
+  
+  if (!castings) return []
+  
+  const actorTotals = new Map<string, number>()
+  for (const casting of castings) {
+    const replicas = roleReplicasMap.get(casting.role_id) || 0
+    const current = actorTotals.get(casting.actor_id) || 0
+    actorTotals.set(casting.actor_id, current + replicas)
+  }
+  
+  return Array.from(actorTotals.entries()).map(([actor_id, total_replicas]) => ({ actor_id, total_replicas }))
 }
 
 /**
