@@ -330,7 +330,6 @@ function ActorsDatabaseContent() {
   const shuffledActors = useMemo(() => {
     const arr = [...actors]
     if (arr.length <= 1) return arr
-    console.log("[v0] Shuffle input - first 5:", arr.slice(0, 5).map(a => a.full_name), "total:", arr.length, "seed:", shuffleSeed)
     // Simple seeded PRNG (mulberry32)
     let s = Math.floor(shuffleSeed * 2147483647)
     const rand = () => {
@@ -344,9 +343,6 @@ function ActorsDatabaseContent() {
       const j = Math.floor(rand() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]]
     }
-    console.log("[v0] Shuffle output - first 5:", arr.slice(0, 5).map(a => a.full_name))
-    const leniIdx = arr.findIndex(a => a.full_name.includes("לני"))
-    console.log("[v0] Leni position after shuffle:", leniIdx, "out of", arr.length)
     return arr
   }, [actors, shuffleSeed])
 
@@ -447,12 +443,6 @@ function ActorsDatabaseContent() {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       }
     })
-  
-  // Debug: log filteredActors after it's computed
-  console.log("[v0] filteredActors first 5:", filteredActors.slice(0, 5).map(a => a.full_name))
-  const leniFilteredIdx = filteredActors.findIndex(a => a.full_name.includes("לני"))
-  console.log("[v0] Leni position in filteredActors:", leniFilteredIdx, "out of", filteredActors.length)
-
   if (isLoading && !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

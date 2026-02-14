@@ -41,7 +41,10 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 2. Delete existing roles for this project (clean slate for demo)
 DELETE FROM role_conflicts WHERE project_id = p_id;
-DELETE FROM role_castings WHERE project_id = p_id;
+DELETE FROM role_castings
+WHERE role_id IN (
+  SELECT id FROM project_roles WHERE project_id = p_id
+);
 DELETE FROM project_roles WHERE project_id = p_id;
 
 -- 3. Insert main characters
