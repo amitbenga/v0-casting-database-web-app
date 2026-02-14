@@ -330,6 +330,7 @@ function ActorsDatabaseContent() {
   const shuffledActors = useMemo(() => {
     const arr = [...actors]
     if (arr.length <= 1) return arr
+    console.log("[v0] Shuffle input - first 5:", arr.slice(0, 5).map(a => a.full_name), "total:", arr.length, "seed:", shuffleSeed)
     // Simple seeded PRNG (mulberry32)
     let s = Math.floor(shuffleSeed * 2147483647)
     const rand = () => {
@@ -343,6 +344,7 @@ function ActorsDatabaseContent() {
       const j = Math.floor(rand() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]]
     }
+    console.log("[v0] Shuffle output - first 5:", arr.slice(0, 5).map(a => a.full_name))
     return arr
   }, [actors, shuffleSeed])
 
