@@ -37,6 +37,7 @@ export interface Actor {
   email?: string
   phone?: string
   voice_sample_url?: string
+  singing_sample_url?: string
   created_at: string
   vat_status: VatStatus
   is_draft?: boolean

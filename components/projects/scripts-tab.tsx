@@ -32,6 +32,9 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { parseScriptFiles, type ParsedScriptBundle } from "@/lib/parser"
 import { ScriptPreviewDialog } from "./script-preview-dialog"
+import { parseExcelFile, isExcelFile, type ExcelParseResult, type ExcelMappedRole } from "@/lib/parser/excel-parser"
+import { ExcelPreviewDialog } from "./excel-preview-dialog"
+import { FileSpreadsheet } from "lucide-react"
 
 interface ProjectScript {
   id: string
@@ -67,6 +70,10 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [parseResult, setParseResult] = useState<ParsedScriptBundle | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const excelInputRef = useRef<HTMLInputElement>(null)
+  const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
+  const [showExcelPreview, setShowExcelPreview] = useState(false)
+  const [isApplyingExcel, setIsApplyingExcel] = useState(false)
 
   const loadScripts = useCallback(async () => {
     try {
@@ -286,6 +293,37 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             </p>
           </div>
 
+          {/* Excel Import Area */}
+          <div
+            className="border-2 border-dashed border-green-300 dark:border-green-700 rounded-lg p-6 text-center hover:border-green-400 hover:bg-green-50/50 dark:hover:bg-green-950/20 transition-colors cursor-pointer"
+            onClick={() => excelInputRef.current?.click()}
+          >
+            <input
+              ref={excelInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                try {
+                  const result = await parseExcelFile(file)
+                  setExcelResult(result)
+                  setShowExcelPreview(true)
+                  toast({ title: "קובץ Excel נקרא בהצלחה", description: `${result.totalRows} שורות נמצאו` })
+                } catch (err) {
+                  toast({ title: "שגיאה בקריאת קובץ Excel", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
+                }
+                if (excelInputRef.current) excelInputRef.current.value = ""
+              }}
+              className="hidden"
+            />
+            <FileSpreadsheet className="h-10 w-10 mx-auto text-green-600 dark:text-green-400 mb-3" />
+            <p className="text-sm font-medium">ייבוא תפקידים מקובץ Excel</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              תומך ב-XLSX, XLS - מיפוי עמודות ידני
+            </p>
+          </div>
+
           {/* Pending Files List */}
           {pendingFiles.length > 0 && (
             <div className="space-y-3">
@@ -491,6 +529,40 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Excel Preview Dialog */}
+      {excelResult && (
+        <ExcelPreviewDialog
+          open={showExcelPreview}
+          onOpenChange={setShowExcelPreview}
+          excelResult={excelResult}
+          isApplying={isApplyingExcel}
+          onApply={async (roles: ExcelMappedRole[]) => {
+            setIsApplyingExcel(true)
+            try {
+              const supabase = createBrowserClient()
+              const rolesToInsert = roles.map(r => ({
+                project_id: projectId,
+                role_name: r.role_name,
+                role_name_normalized: r.role_name_normalized,
+                replicas_needed: r.replicas_needed,
+                source: r.source,
+              }))
+              const { error } = await supabase.from("project_roles").insert(rolesToInsert)
+              if (error) throw error
+              toast({ title: "תפקידים יובאו בהצלחה", description: `${roles.length} תפקידים נוספו מקובץ Excel` })
+              setShowExcelPreview(false)
+              setExcelResult(null)
+              onScriptApplied?.()
+            } catch (err) {
+              console.error("Excel apply error:", err)
+              toast({ title: "שגיאה בייבוא תפקידים", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
+            } finally {
+              setIsApplyingExcel(false)
+            }
+          }}
+        />
+      )}
 
       {/* Preview Dialog */}
       {parseResult && (

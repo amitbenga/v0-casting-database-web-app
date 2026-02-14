@@ -321,14 +321,72 @@ export async function mergeRoles(
         }
       }
 
-      // Remove conflicts referencing merged-away roles to avoid duplicates/self-conflicts.
-      const roleIdsCsv = otherRoleIds.join(",")
-      const { error: deleteConflictsError } = await supabase
+      // Re-point conflicts from merged roles to primary role (instead of deleting them)
+      for (const mergedId of otherRoleIds) {
+        // Re-point role_id_a references
+        await supabase
+          .from("role_conflicts")
+          .update({ role_id_a: primaryRoleId })
+          .eq("project_id", projectId)
+          .eq("role_id_a", mergedId)
+
+        // Re-point role_id_b references
+        await supabase
+          .from("role_conflicts")
+          .update({ role_id_b: primaryRoleId })
+          .eq("project_id", projectId)
+          .eq("role_id_b", mergedId)
+      }
+
+      // Remove self-conflicts (where role_id_a === role_id_b after re-pointing)
+      await supabase
         .from("role_conflicts")
         .delete()
         .eq("project_id", projectId)
-        .or(`role_id_a.in.(${roleIdsCsv}),role_id_b.in.(${roleIdsCsv})`)
-      if (deleteConflictsError) throw deleteConflictsError
+        .eq("role_id_a", primaryRoleId)
+        .eq("role_id_b", primaryRoleId)
+
+      // Normalize ordering and remove duplicates:
+      // Fetch all conflicts involving the primary role
+      const { data: primaryConflicts } = await supabase
+        .from("role_conflicts")
+        .select("*")
+        .eq("project_id", projectId)
+        .or(`role_id_a.eq.${primaryRoleId},role_id_b.eq.${primaryRoleId}`)
+
+      if (primaryConflicts && primaryConflicts.length > 0) {
+        // Normalize: ensure smaller ID is always in role_id_a
+        const seen = new Set<string>()
+        const toDelete: string[] = []
+
+        for (const c of primaryConflicts) {
+          const [normA, normB] = c.role_id_a < c.role_id_b
+            ? [c.role_id_a, c.role_id_b]
+            : [c.role_id_b, c.role_id_a]
+          const key = `${normA}:${normB}`
+
+          if (seen.has(key)) {
+            toDelete.push(c.id)
+          } else {
+            seen.add(key)
+            // Update ordering if needed
+            if (c.role_id_a !== normA) {
+              await supabase
+                .from("role_conflicts")
+                .update({ role_id_a: normA, role_id_b: normB })
+                .eq("id", c.id)
+            }
+          }
+        }
+
+        // Delete duplicate conflicts
+        if (toDelete.length > 0) {
+          await supabase
+            .from("role_conflicts")
+            .delete()
+            .in("id", toDelete)
+        }
+      }
 
       // Delete merged roles
       const { error: deleteRolesError } = await supabase

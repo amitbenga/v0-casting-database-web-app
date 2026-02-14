@@ -52,6 +52,7 @@ interface ActorSubmission {
   normalized_phone?: string
   image_url?: string
   voice_sample_url?: string
+  singing_sample_url?: string
   is_singer?: boolean
   is_course_graduate?: boolean
   vat_status?: string
@@ -162,6 +163,7 @@ function AdminPageContent() {
         email: submission.email,
         image_url: submission.image_url,
         voice_sample_url: submission.voice_sample_url,
+        singing_sample_url: submission.singing_sample_url || "",
         is_singer: submission.is_singer || false,
         is_course_grad: submission.is_course_graduate || false,
         vat_status: submission.vat_status || "exempt",
@@ -563,6 +565,16 @@ function SubmissionCard({
               >
                 <Music className="h-4 w-4 ml-2" />
                 {isPlaying ? "עצור" : "השמע דוגמה"}
+              </Button>
+            )}
+            {submission.singing_sample_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => onPlayAudio(submission.singing_sample_url!, `${submission.id}-singing`, e)}
+              >
+                <Music className="h-4 w-4 ml-2" />
+                השמע שירה
               </Button>
             )}
             {submission.review_status === "pending" && onReview && (

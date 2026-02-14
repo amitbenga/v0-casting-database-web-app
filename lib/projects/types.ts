@@ -3,11 +3,12 @@
 // ===================================
 
 // סטטוס פרויקט
-export type ProjectStatus = "not_started" | "casting" | "casted" | "recording" | "completed"
+export type ProjectStatus = "not_started" | "casting" | "voice_testing" | "casted" | "recording" | "completed"
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   not_started: "טרם התחיל",
   casting: "בליהוק",
+  voice_testing: "בדיקת קולות",
   casted: "לוהק",
   recording: "בהקלטה",
   completed: "הושלם",
@@ -16,6 +17,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
   casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  voice_testing: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
   casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
   recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
   completed: "bg-green-500/10 text-green-500 border-green-500/20",

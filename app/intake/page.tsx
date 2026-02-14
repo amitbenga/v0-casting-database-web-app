@@ -27,6 +27,7 @@ export default function ActorIntakePage() {
   const [loading, setLoading] = useState(false)
   const [uploadedPhoto, setUploadedPhoto] = useState<string>("")
   const [uploadedAudio, setUploadedAudio] = useState<string>("")
+  const [uploadedSinging, setUploadedSinging] = useState<string>("")
   const [skills, setSkills] = useState<string[]>([])
   const [languages, setLanguages] = useState<string[]>([])
   const [skillsOther, setSkillsOther] = useState<string>("")
@@ -68,6 +69,17 @@ export default function ActorIntakePage() {
     }
   }
 
+  const handleSingingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setUploadedSinging(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const toggleSkill = (skill: string) => {
     setSkills((prev) => (prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]))
   }
@@ -101,6 +113,7 @@ export default function ActorIntakePage() {
         languages_other: languagesOther || null,
         image_url: uploadedPhoto || null,
         voice_sample_url: uploadedAudio || null,
+        singing_sample_url: uploadedSinging || null,
         review_status: "pending",
         match_status: "pending",
         matched_actor_id: null,
@@ -157,6 +170,7 @@ export default function ActorIntakePage() {
         vat_status: formData.vat_status || "none",
         image_url: uploadedPhoto || "",
         voice_sample_url: uploadedAudio || "",
+        singing_sample_url: uploadedSinging || "",
         skills: skills.map(s => ({ key: s, label: s })),
         languages: languages.map(l => ({ key: l, label: l })),
         is_draft: true,
@@ -487,6 +501,38 @@ export default function ActorIntakePage() {
                           />
                           <Button type="button" variant="outline" size="sm">
                             בחר תמונה
+                          </Button>
+                        </Label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Singing Sample */}
+                  <div className="space-y-3">
+                    <Label>דוגמת שירה (אופציונלי)</Label>
+                    {uploadedSinging ? (
+                      <div className="space-y-3">
+                        <audio controls className="w-full" dir="ltr">
+                          <source src={uploadedSinging} />
+                        </audio>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setUploadedSinging("")}>
+                          <X className="h-4 w-4 ml-2" />
+                          הסר קובץ שירה
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                        <Label htmlFor="singing" className="cursor-pointer">
+                          <div className="text-sm text-muted-foreground mb-2">לחץ להעלאת דוגמת שירה</div>
+                          <Input
+                            id="singing"
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={handleSingingUpload}
+                          />
+                          <Button type="button" variant="outline" size="sm">
+                            בחר קובץ שירה
                           </Button>
                         </Label>
                       </div>
