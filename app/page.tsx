@@ -350,11 +350,6 @@ function ActorsDatabaseContent() {
     return arr
   }, [actors, shuffleSeed])
 
-  // Debug: log what filteredActors actually shows
-  console.log("[v0] filteredActors first 5:", filteredActors.slice(0, 5).map(a => a.full_name))
-  const leniFilteredIdx = filteredActors.findIndex(a => a.full_name.includes("לני"))
-  console.log("[v0] Leni position in filteredActors:", leniFilteredIdx)
-
   // Separate draft and non-draft actors
   const draftActors = shuffledActors.filter((actor) => actor.is_draft)
   const nonDraftActors = shuffledActors.filter((actor) => !actor.is_draft)
@@ -452,6 +447,11 @@ function ActorsDatabaseContent() {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       }
     })
+  
+  // Debug: log filteredActors after it's computed
+  console.log("[v0] filteredActors first 5:", filteredActors.slice(0, 5).map(a => a.full_name))
+  const leniFilteredIdx = filteredActors.findIndex(a => a.full_name.includes("לני"))
+  console.log("[v0] Leni position in filteredActors:", leniFilteredIdx, "out of", filteredActors.length)
 
   if (isLoading && !data) {
     return (
