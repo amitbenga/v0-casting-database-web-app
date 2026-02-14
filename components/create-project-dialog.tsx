@@ -23,7 +23,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
     casting_director: "",
     project_date: "",
     notes: "",
-    status: "not_started", // שינוי ברירת המחדל לערך תקין
+    status: "draft",
   })
   const [submitting, setSubmitting] = useState(false)
 
@@ -55,7 +55,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
       console.log("[v0] Project created:", data)
       onOpenChange(false)
-      setFormData({ name: "", director: "", casting_director: "", project_date: "", notes: "", status: "not_started" }) // שינוי לערך תקין
+      setFormData({ name: "", director: "", casting_director: "", project_date: "", notes: "", status: "draft" })
 
       if (onProjectCreated) {
         onProjectCreated()
@@ -130,10 +130,9 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="not_started">טרם התחיל</SelectItem>
-                <SelectItem value="casting">ליהוק</SelectItem>
-                <SelectItem value="casted">אחרי ליהוק</SelectItem>
-                <SelectItem value="recording">הקלטה</SelectItem>
+                <SelectItem value="draft">טיוטה</SelectItem>
+                <SelectItem value="active">פעיל</SelectItem>
+                <SelectItem value="voice_testing">בדיקת קולות</SelectItem>
                 <SelectItem value="completed">הושלם</SelectItem>
               </SelectContent>
             </Select>

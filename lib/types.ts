@@ -160,7 +160,12 @@ export const SKILLS_LIST: Skill[] = [
   { id: "3", key: "voice_acting", label: "קריינות" },
   { id: "4", key: "carpentry", label: "נגרות" },
   { id: "5", key: "russian_accent", label: "מבטא רוסי" },
-  { id: "6", key: "any_accent", label: "כל מבטא אפשרי" },
+  { id: "6", key: "french_accent", label: "מבטא צרפתי" },
+  { id: "7", key: "spanish_accent", label: "מבטא ספרדי" },
+  { id: "8", key: "german_accent", label: "מבטא גרמני" },
+  { id: "9", key: "english_accent", label: "מבטא אנגלי" },
+  { id: "10", key: "italian_accent", label: "מבטא איטלקי" },
+  { id: "11", key: "any_accent", label: "כל מבטא אפשרי" },
 ]
 
 export const LANGUAGES_LIST: Language[] = [
