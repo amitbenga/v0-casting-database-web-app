@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Search, Loader2, Users, LayoutGrid, List, Play } from "lucide-react"
+import { Search, Loader2, Users, LayoutGrid, List, ArrowUpDown } from "lucide-react"
 import { getProjectActorsFromCastings } from "@/lib/actions/casting-actions"
 import type { CastingStatus, CASTING_STATUS_COLORS } from "@/lib/types"
 
@@ -35,6 +35,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
+  const [sortByReplicas, setSortByReplicas] = useState<"asc" | "desc" | null>(null)
 
   useEffect(() => {
     async function loadCastings() {
@@ -52,14 +53,21 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
     loadCastings()
   }, [projectId])
 
-  const filteredCastings = castings.filter((c) => {
-    if (!searchQuery) return true
-    const searchLower = searchQuery.toLowerCase()
-    return (
-      c.actor.name.toLowerCase().includes(searchLower) ||
-      c.roles.some((r) => r.role_name?.toLowerCase().includes(searchLower))
-    )
-  })
+  const filteredCastings = castings
+    .filter((c) => {
+      if (!searchQuery) return true
+      const searchLower = searchQuery.toLowerCase()
+      return (
+        c.actor.name.toLowerCase().includes(searchLower) ||
+        c.roles.some((r) => r.role_name?.toLowerCase().includes(searchLower))
+      )
+    })
+    .sort((a, b) => {
+      if (!sortByReplicas) return 0
+      const totalA = a.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+      const totalB = b.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+      return sortByReplicas === "desc" ? totalB - totalA : totalA - totalB
+    })
 
   // Stats
   const totalActors = castings.length
@@ -114,15 +122,32 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
       </div>
 
       {/* Filters & View Toggle */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-[300px]">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="חיפוש שחקן או תפקיד..."
-            className="pr-10"
-          />
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="relative min-w-[200px] max-w-[300px]">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="חיפוש שחקן או תפקיד..."
+              className="pr-10"
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className={sortByReplicas ? "border-primary text-primary" : ""}
+            onClick={() =>
+              setSortByReplicas((prev) => (prev === "desc" ? "asc" : prev === "asc" ? null : "desc"))
+            }
+          >
+            <ArrowUpDown className="h-3.5 w-3.5 ml-1.5" />
+            רפליקות
+            {sortByReplicas && (
+              <span className="text-xs mr-1">({sortByReplicas === "desc" ? "גבוה" : "נמוך"})</span>
+            )}
+          </Button>
         </div>
 
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
@@ -150,58 +175,56 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="text-right">שחקן</TableHead>
-                <TableHead className="text-right">תפקידים</TableHead>
-                <TableHead className="text-right">רפליקות</TableHead>
+                <TableHead className="text-right">תפקיד</TableHead>
+                <TableHead className="text-right">רפליקות לתפקיד</TableHead>
+                <TableHead className="text-right">סה"כ רפליקות</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCastings.map((casting) => (
-                <TableRow key={casting.actor.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={casting.actor.image_url} alt={casting.actor.name} />
-                        <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div>
+              {filteredCastings.map((casting) => {
+                const actorTotalReplicas = casting.roles.reduce(
+                  (sum, r) => sum + (r.replicas_planned || 0),
+                  0
+                )
+                return (
+                  <TableRow key={casting.actor.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={casting.actor.image_url} alt={casting.actor.name} />
+                          <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
                         <p className="font-medium">{casting.actor.name}</p>
-                        {casting.actor.voice_sample_url && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 px-2 text-xs text-muted-foreground"
-                            onClick={() => {
-                              const audio = new Audio(casting.actor.voice_sample_url)
-                              audio.play()
-                            }}
-                          >
-                            <Play className="h-3 w-3 ml-1" />
-                            האזנה
-                          </Button>
-                        )}
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-2">
-                      {casting.roles.map((role) => (
-                        <Badge
-                          key={role.role_id}
-                          variant="outline"
-                          className={STATUS_COLORS[role.status]}
-                        >
-                          {role.role_name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {casting.roles
-                      .reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
-                      .toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        {casting.roles.map((role) => (
+                          <Badge
+                            key={role.role_id}
+                            variant="outline"
+                            className={STATUS_COLORS[role.status]}
+                          >
+                            {role.role_name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {casting.roles.map((role) => (
+                          <span key={role.role_id} className="text-sm text-muted-foreground">
+                            {role.role_name}: {(role.replicas_planned || 0).toLocaleString()}
+                          </span>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-semibold">{actorTotalReplicas.toLocaleString()}</span>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </Card>
@@ -215,22 +238,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                   <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium truncate">{casting.actor.name}</p>
-                    {casting.actor.voice_sample_url && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 flex-shrink-0"
-                        onClick={() => {
-                          const audio = new Audio(casting.actor.voice_sample_url)
-                          audio.play()
-                        }}
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+                  <p className="font-medium truncate">{casting.actor.name}</p>
                   <p className="text-sm text-muted-foreground">
                     {casting.roles.length} תפקידים |{" "}
                     {casting.roles
@@ -240,15 +248,19 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                   </p>
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 space-y-2">
                 {casting.roles.map((role) => (
-                  <Badge
-                    key={role.role_id}
-                    variant="outline"
-                    className={STATUS_COLORS[role.status]}
-                  >
-                    {role.role_name}
-                  </Badge>
+                  <div key={role.role_id} className="flex items-center justify-between">
+                    <Badge
+                      variant="outline"
+                      className={STATUS_COLORS[role.status]}
+                    >
+                      {role.role_name}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {(role.replicas_planned || 0).toLocaleString()} רפליקות
+                    </span>
+                  </div>
                 ))}
               </div>
             </Card>

@@ -8,7 +8,7 @@ export type ProjectStatus = "not_started" | "casting" | "voice_testing" | "caste
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   not_started: "טרם התחיל",
   casting: "בליהוק",
-  voice_testing: "בבדיקת קולות",
+  voice_testing: "בדיקת קולות",
   casted: "לוהק",
   recording: "בהקלטה",
   completed: "הושלם",
@@ -17,7 +17,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 export const PROJECT_STATUS_COLORS: Record<ProjectStatus, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
   casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  voice_testing: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+  voice_testing: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
   casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
   recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
   completed: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -52,11 +52,8 @@ export interface ProjectRole {
   project_id: string
   role_name: string
   parent_role_id: string | null
-  /** @canonical Source of truth for replica count */
   replicas_count: number
-  /** @deprecated Use replicas_count instead */
   replicas_needed?: number
-  source?: "manual" | "script"
   created_at: string
 }
 
@@ -72,9 +69,7 @@ export interface RoleCasting {
   role_id: string
   actor: ActorBasic
   status: CastingStatus
-  /** @deprecated Use ProjectRole.replicas_count instead */
   replicas_planned?: number
-  /** @deprecated Use ProjectRole.replicas_count instead */
   replicas_final?: number
   notes?: string
   created_at: string

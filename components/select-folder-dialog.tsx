@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { FolderPlus, Folder } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface SelectFolderDialogProps {
   open: boolean
@@ -25,6 +26,7 @@ interface FolderType {
 }
 
 export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, onSuccess }: SelectFolderDialogProps) {
+  const { toast } = useToast()
   const [folders, setFolders] = useState<FolderType[]>([])
   const [loading, setLoading] = useState(false)
   const [showCreateNew, setShowCreateNew] = useState(false)
@@ -66,7 +68,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, o
 
   const handleCreateAndAdd = async () => {
     if (!newFolderName.trim()) {
-      alert("נא להזין שם לתיקייה")
+      toast({ title: "שגיאה", description: "נא להזין שם לתיקייה", variant: "destructive" })
       return
     }
 
@@ -91,7 +93,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, o
       onSuccess?.() // Call onSuccess after adding
     } catch (error) {
       console.error("[v0] Error creating folder:", error)
-      alert("שגיאה ביצירת התיקייה")
+        toast({ title: "שגיאה", description: "שגיאה ביצירת התיקייה", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -111,7 +113,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, o
       const newActorIds = actorIds.filter((id) => !existingIds.has(id))
 
       if (newActorIds.length === 0) {
-        alert("השחקן/ים כבר בתיקייה זו")
+        toast({ title: "כבר קיים", description: "השחקן/ים כבר בתיקייה זו" })
         return
       }
 
@@ -124,7 +126,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, o
 
       if (error) throw error
 
-      alert(`${newActorIds.length} שחקנים נוספו בהצלחה!`)
+        toast({ title: "הצלחה", description: `${newActorIds.length} שחקנים נוספו בהצלחה` })
     } catch (error) {
       console.error("[v0] Error adding actors to folder:", error)
       throw error
@@ -138,7 +140,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, o
       onOpenChange(false)
       onSuccess?.() // Call onSuccess after adding
     } catch (error) {
-      alert("שגיאה בהוספת השחקנים לתיקייה")
+        toast({ title: "שגיאה", description: "שגיאה בהוספת השחקנים לתיקייה", variant: "destructive" })
     } finally {
       setLoading(false)
     }

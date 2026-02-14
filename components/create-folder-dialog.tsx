@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface CreateFolderDialogProps {
   open: boolean
@@ -17,6 +18,7 @@ interface CreateFolderDialogProps {
 }
 
 export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: CreateFolderDialogProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -52,7 +54,7 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
 
       if (error) {
         console.error("[v0] Error creating folder:", error)
-        alert("שגיאה ביצירת התיקייה")
+        toast({ title: "שגיאה", description: "שגיאה ביצירת התיקייה", variant: "destructive" })
         return
       }
 
@@ -65,7 +67,7 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
       }
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה ביצירת התיקייה")
+      toast({ title: "שגיאה", description: "שגיאה ביצירת התיקייה", variant: "destructive" })
     } finally {
       setSubmitting(false)
     }

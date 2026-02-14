@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { useToast } from "@/hooks/use-toast"
 
 import { useState, useEffect, useRef } from "react"
 import { 
@@ -56,6 +57,7 @@ interface ProjectScriptsSectionProps {
 }
 
 export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps) {
+  const { toast } = useToast()
   const [scripts, setScripts] = useState<ProjectScript[]>([])
   const [extractedRoles, setExtractedRoles] = useState<ScriptExtractedRole[]>([])
   const [castingWarnings, setCastingWarnings] = useState<ScriptCastingWarning[]>([])
@@ -139,7 +141,7 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
       }
     } catch (error) {
       console.error("Error uploading script:", error)
-      alert("שגיאה בהעלאת הקובץ")
+      toast({ title: "שגיאה", description: "שגיאה בהעלאת הקובץ", variant: "destructive" })
     } finally {
       setUploading(false)
       if (fileInputRef.current) {
@@ -193,7 +195,7 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
       setExtractedRoles(prev => prev.filter(r => r.script_id !== scriptId))
     } catch (error) {
       console.error("Error deleting script:", error)
-      alert("שגיאה במחיקת התסריט")
+      toast({ title: "שגיאה", description: "שגיאה במחיקת התסריט", variant: "destructive" })
     }
   }
 

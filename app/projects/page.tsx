@@ -11,7 +11,6 @@ import Link from "next/link"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
 import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
-import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/projects/types"
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
@@ -58,11 +57,28 @@ export default function ProjectsPage() {
   })
 
   const getStatusColor = (status: string) => {
-    return PROJECT_STATUS_COLORS[status as keyof typeof PROJECT_STATUS_COLORS] || "bg-gray-500/10 text-gray-500 border-gray-500/20"
+    switch (status) {
+      case "active":
+        return "bg-green-500/10 text-green-500 border-green-500/20"
+      case "completed":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20"
+      case "draft":
+        return "bg-gray-500/10 text-gray-500 border-gray-500/20"
+      case "voice_testing":
+        return "bg-transparent text-orange-500 border-orange-400"
+      default:
+        return "bg-gray-500/10 text-gray-500 border-gray-500/20"
+    }
   }
 
   const getStatusLabel = (status: string) => {
-    return PROJECT_STATUS_LABELS[status as keyof typeof PROJECT_STATUS_LABELS] || status
+    switch (status) {
+      case "active": return "פעיל"
+      case "completed": return "הושלם"
+      case "draft": return "טיוטה"
+      case "voice_testing": return "בדיקת קולות"
+      default: return status
+    }
   }
 
   const handleDeleteProject = async (id: string) => {
@@ -111,17 +127,38 @@ export default function ProjectsPage() {
               >
                 הכל
               </Button>
-              {Object.entries(PROJECT_STATUS_LABELS).map(([key, label]) => (
-                <Button
-                  key={key}
-                  variant={statusFilter === key ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setStatusFilter(key)}
-                  className="text-xs md:text-sm"
-                >
-                  {label}
-                </Button>
-              ))}
+              <Button
+                variant={statusFilter === "active" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("active")}
+                className="text-xs md:text-sm"
+              >
+                פעיל
+              </Button>
+              <Button
+                variant={statusFilter === "draft" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("draft")}
+                className="text-xs md:text-sm"
+              >
+                טיוטה
+              </Button>
+              <Button
+                variant={statusFilter === "completed" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("completed")}
+                className="text-xs md:text-sm"
+              >
+                הושלם
+              </Button>
+              <Button
+                variant={statusFilter === "voice_testing" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStatusFilter("voice_testing")}
+                className={`text-xs md:text-sm ${statusFilter !== "voice_testing" ? "border-orange-400 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20" : ""}`}
+              >
+                בדיקת קולות
+              </Button>
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">

@@ -13,9 +13,11 @@ import { AddActorToFolderDialog } from "@/components/add-actor-to-folder-dialog"
 import { createBrowserClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { exportActors } from "@/lib/export-utils"
+import { useToast } from "@/hooks/use-toast"
 
 export default function FolderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
+  const { toast } = useToast()
   const [folder, setFolder] = useState<any>(null)
   const [actors, setActors] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,7 +79,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       setActors((prev) => prev.filter((a) => a.id !== actorId))
     } catch (error) {
       console.error("[v0] Error removing actor from folder:", error)
-      alert("שגיאה בהסרת שחקן")
+        toast({ title: "שגיאה", description: "שגיאה בהסרת שחקן", variant: "destructive" })
     }
   }
 
@@ -98,13 +100,13 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       router.push("/folders")
     } catch (error) {
       console.error("[v0] Error deleting folder:", error)
-      alert("שגיאה במחיקת תיקייה")
+        toast({ title: "שגיאה", description: "שגיאה במחיקת תיקייה", variant: "destructive" })
     }
   }
 
   function handleExportFolder(format: "pdf" | "excel") {
     if (actors.length === 0) {
-      alert("אין שחקנים בתיקייה לייצוא")
+      toast({ title: "ריק", description: "אין שחקנים בתיקייה לייצוא" })
       return
     }
     const filename = `folder_${folder.name.replace(/\s+/g, "_")}`
@@ -123,7 +125,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
     e.stopPropagation()
 
     if (!voiceUrl) {
-      alert("אין קובץ קול לשחקן זה")
+        toast({ title: "לא זמין", description: "אין קובץ קול לשחקן זה" })
       return
     }
 
@@ -143,7 +145,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       audioRef.current = audio
       audio.play().catch((error) => {
         console.error("[v0] Error playing audio:", error)
-        alert("שגיאה בהשמעת הקול")
+        toast({ title: "שגיאה", description: "שגיאה בהשמעת הקול", variant: "destructive" })
       })
       audio.onended = () => setPlayingAudioId(null)
       setPlayingAudioId(actorId)

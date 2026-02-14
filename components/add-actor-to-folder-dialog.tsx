@@ -11,6 +11,7 @@ import { Search } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface AddActorToFolderDialogProps {
   open: boolean
@@ -20,6 +21,7 @@ interface AddActorToFolderDialogProps {
 }
 
 export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsAdded }: AddActorToFolderDialogProps) {
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [actors, setActors] = useState<any[]>([])
@@ -72,7 +74,7 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
       const newActorIds = selectedActors.filter((id) => !existingActorIds.has(id))
 
       if (newActorIds.length === 0) {
-        alert("כל השחקנים שנבחרו כבר נמצאים בתיקייה")
+        toast({ title: "לא נדרש", description: "כל השחקנים שנבחרו כבר נמצאים בתיקייה" })
         setLoading(false)
         return
       }
@@ -92,7 +94,7 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
       setSearchQuery("")
     } catch (error) {
       console.error("[v0] Error adding actors to folder:", error)
-      alert("שגיאה בהוספת שחקנים לתיקייה: " + (error as any).message)
+      toast({ title: "שגיאה", description: "שגיאה בהוספת שחקנים לתיקייה", variant: "destructive" })
     } finally {
       setLoading(false)
     }

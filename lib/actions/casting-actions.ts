@@ -271,7 +271,7 @@ export async function updateCastingDetails(
 }
 
 /**
- * Deletes a role.
+ * Deletes a role. First removes related castings and conflicts to avoid FK violations.
  */
 export async function deleteRole(roleId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
@@ -279,6 +279,33 @@ export async function deleteRole(roleId: string): Promise<CastingActionResult> {
   try {
     const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
     
+    // 1. Delete related castings first
+    await supabase
+      .from("role_castings")
+      .delete()
+      .eq("role_id", roleId)
+
+    // 2. Delete related conflicts
+    await supabase
+      .from("role_conflicts")
+      .delete()
+      .or(`role_id_a.eq.${roleId},role_id_b.eq.${roleId}`)
+
+    // 3. Delete child roles (if this is a parent)
+    const { data: children } = await supabase
+      .from("project_roles")
+      .select("id")
+      .eq("parent_role_id", roleId)
+
+    if (children && children.length > 0) {
+      for (const child of children) {
+        await supabase.from("role_castings").delete().eq("role_id", child.id)
+        await supabase.from("role_conflicts").delete().or(`role_id_a.eq.${child.id},role_id_b.eq.${child.id}`)
+      }
+      await supabase.from("project_roles").delete().eq("parent_role_id", roleId)
+    }
+
+    // 4. Delete the role itself
     const { error } = await supabase
       .from("project_roles")
       .delete()
@@ -478,7 +505,7 @@ export async function getProjectActorsFromCastings(projectId: string) {
     // 1. Get all roles for this project
     const { data: roles } = await supabase
       .from("project_roles")
-      .select("id, role_name")
+      .select("id, role_name, replicas_needed")
       .eq("project_id", projectId)
 
     if (!roles || roles.length === 0) return []
@@ -505,9 +532,10 @@ export async function getProjectActorsFromCastings(projectId: string) {
     if (error) throw error
     if (!castings) return []
 
-    // 3. Group by actor
+    // 3. Group by actor - use replicas_needed from project_roles as fallback
     const actorMap = new Map<string, any>()
     const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]))
+    const roleIdToReplicas = new Map(roles.map(r => [r.id, r.replicas_needed || 0]))
 
     for (const c of castings) {
       const actor = c.actors as any
@@ -525,11 +553,15 @@ export async function getProjectActorsFromCastings(projectId: string) {
         })
       }
 
+      // Use replicas_planned from casting, fallback to replicas_needed from the role definition
+      const replicasFromCasting = c.replicas_planned || 0
+      const replicasFromRole = roleIdToReplicas.get(c.role_id) || 0
+
       actorMap.get(actor.id).roles.push({
         role_id: c.role_id,
         role_name: roleIdToName.get(c.role_id),
         status: c.status,
-        replicas_planned: c.replicas_planned,
+        replicas_planned: replicasFromCasting > 0 ? replicasFromCasting : replicasFromRole,
         replicas_final: c.replicas_final
       })
     }

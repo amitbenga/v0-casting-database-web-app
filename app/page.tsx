@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
@@ -17,6 +17,7 @@ import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { useAuth } from "@/contexts/AuthContext"
 import { exportActors } from "@/lib/export-utils"
+import { useToast } from "@/hooks/use-toast"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,7 @@ function mapActor(actor: any): Actor {
     dubbing_experience_years: actor.dubbing_experience_years || 0,
     singing_styles: Array.isArray(actor.singing_styles) ? actor.singing_styles : [],
     singing_styles_other: Array.isArray(actor.singing_styles_other) ? actor.singing_styles_other : [],
+    is_draft: actor.is_draft || false,
   }
 }
 
@@ -92,11 +94,12 @@ async function fetchActorsPage(cursor: string | null): Promise<{ actors: Actor[]
 
 function ActorsDatabaseContent() {
   const { user } = useAuth() // Get authenticated user
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [showFilters, setShowFilters] = useState(false)
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
-  const [activeTab, setActiveTab] = useState<"all" | "favorites">("all")
+  const [activeTab, setActiveTab] = useState<"all" | "favorites" | "drafts">("all")
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const [selectedActorForFolder, setSelectedActorForFolder] = useState<Actor | null>(null)
   const [filters, setFilters] = useState<FilterState>({
@@ -223,7 +226,7 @@ function ActorsDatabaseContent() {
   const handleAddToProject = (actor: Actor) => {
     console.log("[v0] Add to project:", actor.full_name)
     // TODO: פתיחת דיאלוג לבחירת פרויקט
-    alert(`הוסף את ${actor.full_name} לפרויקט (בקרוב)`)
+    toast({ title: "בקרוב", description: `הוספת ${actor.full_name} לפרויקט תהיה זמינה בקרוב.` })
   }
 
   const handleAddToFolder = (actor: Actor) => {
@@ -245,7 +248,7 @@ function ActorsDatabaseContent() {
 
       if (error) {
         console.error("[v0] Error deleting actor:", error)
-        alert("שגיאה במחיקת השחקן")
+        toast({ title: "שגיאה", description: "שגיאה במחיקת השחקן", variant: "destructive" })
         return
       }
 
@@ -261,7 +264,7 @@ function ActorsDatabaseContent() {
       setSelectedActors((prev) => prev.filter((actorId) => actorId !== id))
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה במחיקת השחקן")
+      toast({ title: "שגיאה", description: "שגיאה במחיקת השחקן", variant: "destructive" })
     }
   }
 
@@ -281,7 +284,7 @@ function ActorsDatabaseContent() {
   }
 
   const handleBulkAddToProject = () => {
-    alert(`הוספת ${selectedActors.length} שחקנים לפרויקט (בקרוב)`)
+    toast({ title: "בקרוב", description: `הוספת ${selectedActors.length} שחקנים לפרויקט תהיה זמינה בקרוב.` })
     setSelectedActors([])
   }
 
@@ -311,13 +314,47 @@ function ActorsDatabaseContent() {
   const handleBulkExport = (format: "pdf" | "excel") => {
     const selectedActorObjects = actors.filter((actor) => selectedActors.includes(actor.id))
     if (selectedActorObjects.length === 0) {
-      alert("אין שחקנים נבחרים")
+      toast({ title: "שגיאה", description: "אין שחקנים נבחרים", variant: "destructive" })
       return
     }
     exportActors(selectedActorObjects, format, "selected_actors")
   }
 
-  const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
+  // Shuffle seed based on the current date so it changes daily but stays stable within a session
+  const [shuffleSeed] = useState(() => {
+    const today = new Date()
+    return today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate() + Math.random()
+  })
+
+  // Shuffle actors with stable seed (Fisher-Yates with seeded PRNG)
+  const shuffledActors = useMemo(() => {
+    const arr = [...actors]
+    if (arr.length <= 1) return arr
+    // Simple seeded PRNG (mulberry32)
+    let s = Math.floor(shuffleSeed * 2147483647)
+    const rand = () => {
+      s = (s + 0x6d2b79f5) | 0
+      let t = Math.imul(s ^ (s >>> 15), 1 | s)
+      t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    // Fisher-Yates: iterate from last to first (inclusive of index 0 via swaps)
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+  }, [actors, shuffleSeed])
+
+  // Separate draft and non-draft actors
+  const draftActors = shuffledActors.filter((actor) => actor.is_draft)
+  const nonDraftActors = shuffledActors.filter((actor) => !actor.is_draft)
+
+  const displayedActors = activeTab === "drafts"
+    ? draftActors
+    : activeTab === "favorites"
+      ? nonDraftActors.filter((actor) => favorites.includes(actor.id))
+      : nonDraftActors
 
   const filteredActors = displayedActors
     .filter((actor) => {
@@ -406,7 +443,6 @@ function ActorsDatabaseContent() {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       }
     })
-
   if (isLoading && !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -570,12 +606,17 @@ function ActorsDatabaseContent() {
           <div className="flex-1">
             <Tabs
               value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "all" | "favorites")}
+              onValueChange={(value) => setActiveTab(value as "all" | "favorites" | "drafts")}
               className="w-full"
             >
               <TabsList className="mb-6">
-                <TabsTrigger value="all">כל השחקנים ({actors.length})</TabsTrigger>
+                <TabsTrigger value="all">כל השחקנים ({nonDraftActors.length})</TabsTrigger>
                 <TabsTrigger value="favorites">מועדפים ({favorites.length})</TabsTrigger>
+                {draftActors.length > 0 && (
+                  <TabsTrigger value="drafts" className="text-orange-600 data-[state=active]:text-orange-600">
+                    טיוטות ({draftActors.length})
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="all" className="mt-0">
@@ -641,6 +682,31 @@ function ActorsDatabaseContent() {
                         ? "עדיין לא הוספת שחקנים למועדפים."
                         : "לא נמצאו שחקנים מועדפים התואמים את החיפוש."}
                     </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="drafts" className="mt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+                  {filteredActors.map((actor) => (
+                    <ActorCard
+                      key={actor.id}
+                      actor={actor}
+                      isSelected={selectedActors.includes(actor.id)}
+                      isFavorited={favorites.includes(actor.id)}
+                      onToggleFavorite={handleToggleFavorite}
+                      onToggleSelect={handleToggleSelect}
+                      onAddToProject={handleAddToProject}
+                      onAddToFolder={handleAddToFolder}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+
+                {filteredActors.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">אין טיוטות שתואמות את החיפוש.</p>
                   </div>
                 )}
               </TabsContent>

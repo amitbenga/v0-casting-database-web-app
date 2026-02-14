@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -30,8 +30,6 @@ import {
 } from "@/components/ui/tooltip"
 import {
   Search,
-  ChevronDown,
-  ChevronLeft,
   ArrowUpDown,
   Loader2,
   Plus,
@@ -40,18 +38,13 @@ import {
   RefreshCw,
   Trash2,
   AlertTriangle,
-  CheckCircle2,
-  Circle,
   Users,
   Clapperboard,
   Download,
-  Upload,
 } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
 import {
   exportCastingToExcel,
-  importCastingFromExcel,
-  exportCastingTemplate,
 } from "@/lib/casting-export-import"
 import {
   getProjectRolesWithCasting,
@@ -81,7 +74,6 @@ function ConflictTooltip({
   )
   if (roleConflicts.length === 0) return null
 
-  // Build a flat lookup of all roles including children
   const roleLookup = new Map<string, string>()
   for (const r of allRoles) {
     roleLookup.set(r.id, r.role_name)
@@ -99,7 +91,7 @@ function ConflictTooltip({
         </TooltipTrigger>
         <TooltipContent side="right" align="start" className="max-w-[320px] p-3">
           <p className="text-xs font-semibold mb-2">
-            קונפליקטים ({roleConflicts.length})
+            {"קונפליקטים"} ({roleConflicts.length})
           </p>
           <div className="space-y-2">
             {roleConflicts.map((c) => {
@@ -130,11 +122,12 @@ interface RoleRowProps {
   role: ProjectRoleWithCasting
   conflicts: RoleConflict[]
   allRoles: ProjectRoleWithCasting[]
-  isChild?: boolean
+  isSelected: boolean
+  onRoleNameClick: (roleId: string, e: React.MouseEvent) => void
   onUpdate: () => void
 }
 
-function RoleRow({ role, conflicts, allRoles, isChild = false, onUpdate }: RoleRowProps) {
+function RoleRow({ role, conflicts, allRoles, isSelected, onRoleNameClick, onUpdate }: RoleRowProps) {
   const { toast } = useToast()
   const [showSearch, setShowSearch] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
@@ -185,20 +178,6 @@ function RoleRow({ role, conflicts, allRoles, isChild = false, onUpdate }: RoleR
     }
   }
 
-  const handleDeleteRole = async () => {
-    if (!confirm(`למחוק את התפקיד "${role.role_name}"?`)) return
-    setIsUpdating(true)
-    try {
-      const result = await deleteRole(role.id)
-      if (result.success) {
-        toast({ title: "התפקיד נמחק" })
-        onUpdate()
-      }
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
   const isCasted = !!role.casting
 
   return (
@@ -206,25 +185,26 @@ function RoleRow({ role, conflicts, allRoles, isChild = false, onUpdate }: RoleR
       className={`
         group flex items-center gap-3 px-4 py-2.5 
         border-b border-border/50 last:border-b-0
-        hover:bg-muted/40 transition-colors
-        ${isChild ? "pr-14 bg-muted/10" : ""}
-        ${isCasted ? "bg-transparent" : isChild ? "bg-muted/10" : "bg-muted/20"}
+        transition-colors
+        ${isSelected ? "bg-primary/8 ring-1 ring-inset ring-primary/20" : "hover:bg-muted/40"}
+        ${isCasted ? "" : "bg-muted/10"}
       `}
     >
-      {/* Status indicator */}
-      <div className="flex-shrink-0">
-        {isCasted ? (
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-        ) : (
-          <Circle className="h-4 w-4 text-muted-foreground/40" />
-        )}
-      </div>
-
-      {/* Role name */}
+      {/* Role name - clickable for selection */}
       <div className="flex items-center gap-2 min-w-[180px] max-w-[260px]">
-        <span className={`text-sm font-medium truncate ${isCasted ? "text-foreground" : "text-muted-foreground"} ${isChild ? "text-xs" : ""}`}>
+        <button
+          type="button"
+          className={`text-sm font-medium truncate text-right cursor-pointer transition-colors select-none ${
+            isSelected
+              ? "text-primary font-semibold"
+              : isCasted
+              ? "text-foreground hover:text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={(e) => onRoleNameClick(role.id, e)}
+        >
           {role.role_name}
-        </span>
+        </button>
         {role.source === "script" && (
           <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 flex-shrink-0">
             תסריט
@@ -295,28 +275,7 @@ function RoleRow({ role, conflicts, allRoles, isChild = false, onUpdate }: RoleR
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setShowSearch(true)}
-            >
-              <UserPlus className="h-3.5 w-3.5 ml-1.5" />
-              שיבוץ
-            </Button>
-            {role.source === "manual" && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                onClick={handleDeleteRole}
-                disabled={isUpdating}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
+          <span className="text-xs text-muted-foreground/60">לא משובץ</span>
         )}
       </div>
     </div>
@@ -335,7 +294,13 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
   const [conflicts, setConflicts] = useState<RoleConflict[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  // Selection state
+  const [selectedRoleIds, setSelectedRoleIds] = useState<Set<string>>(new Set())
+  const [lastClickedRoleId, setLastClickedRoleId] = useState<string | null>(null)
+  const [showAssignSearch, setShowAssignSearch] = useState(false)
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
   // Filters
   const [search, setSearch] = useState("")
@@ -348,7 +313,6 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
   const [newRoleReplicas, setNewRoleReplicas] = useState(0)
   const [isCreatingRole, setIsCreatingRole] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [importError, setImportError] = useState("")
 
   const loadRoles = useCallback(async () => {
     try {
@@ -357,12 +321,6 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
-
-      // Auto-expand all groups
-      const parentIds = response.roles
-        .filter((r) => r.children && r.children.length > 0)
-        .map((r) => r.id)
-      setExpandedGroups(new Set(parentIds))
     } catch (err) {
       setError("שגיאה בטעינת תפקידים")
       console.error(err)
@@ -374,6 +332,137 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
   useEffect(() => {
     loadRoles()
   }, [loadRoles])
+
+  // Flatten all roles (parents + children) into a single flat list
+  const flatRoles = useMemo(() => {
+    const flat: ProjectRoleWithCasting[] = []
+    for (const role of roles) {
+      flat.push(role)
+      if (role.children) {
+        for (const child of role.children) {
+          flat.push(child)
+        }
+      }
+    }
+    return flat
+  }, [roles])
+
+  // Filter + sort on flat list
+  const filteredRoles = useMemo(() => {
+    let result = [...flatRoles]
+
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter((r) => {
+        const matchesName = r.role_name.toLowerCase().includes(q)
+        const matchesActor = r.casting?.actor?.full_name?.toLowerCase().includes(q)
+        return matchesName || matchesActor
+      })
+    }
+
+    if (showOnlyUnassigned) {
+      result = result.filter((r) => !r.casting)
+    }
+
+    if (sortByReplicas) {
+      result.sort((a, b) => {
+        const diff = b.replicas_count - a.replicas_count
+        return sortByReplicas === "desc" ? diff : -diff
+      })
+    }
+
+    return result
+  }, [flatRoles, search, showOnlyUnassigned, sortByReplicas])
+
+  // Handle role name click - toggle selection, Shift for range
+  const handleRoleNameClick = useCallback((roleId: string, e: React.MouseEvent) => {
+    const isShift = e.shiftKey
+
+    if (isShift && lastClickedRoleId) {
+      // Shift+click: select range
+      const ids = filteredRoles.map((r) => r.id)
+      const startIdx = ids.indexOf(lastClickedRoleId)
+      const endIdx = ids.indexOf(roleId)
+      if (startIdx !== -1 && endIdx !== -1) {
+        const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx]
+        const rangeIds = ids.slice(from, to + 1)
+        setSelectedRoleIds((prev) => {
+          const next = new Set(prev)
+          rangeIds.forEach((id) => next.add(id))
+          return next
+        })
+      }
+    } else {
+      // Simple click: toggle this role (add or remove)
+      setSelectedRoleIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(roleId)) {
+          next.delete(roleId)
+        } else {
+          next.add(roleId)
+        }
+        return next
+      })
+    }
+    setLastClickedRoleId(roleId)
+    
+    // Close assign search when selection changes
+    setShowAssignSearch(false)
+  }, [lastClickedRoleId, filteredRoles])
+
+  const clearSelection = () => {
+    setSelectedRoleIds(new Set())
+    setLastClickedRoleId(null)
+    setShowAssignSearch(false)
+  }
+
+  // Bulk assign actor to all selected roles
+  const handleBulkAssign = async (actor: { id: string; name: string; image_url?: string }) => {
+    setIsBulkAssigning(true)
+    let successCount = 0
+    const ids = Array.from(selectedRoleIds)
+
+    for (const roleId of ids) {
+      try {
+        const result = await assignActorToRole(roleId, actor.id)
+        if (result.success) successCount++
+      } catch {
+        // continue with next
+      }
+    }
+
+    toast({
+      title: `${actor.name} שובץ ל-${successCount} תפקידים`,
+    })
+
+    setIsBulkAssigning(false)
+    setShowAssignSearch(false)
+    clearSelection()
+    loadRoles()
+  }
+
+  // Bulk delete
+  const handleBulkDelete = async () => {
+    const count = selectedRoleIds.size
+    if (!confirm(`האם למחוק ${count} תפקידים?`)) return
+
+    setIsBulkDeleting(true)
+    let deleted = 0
+
+    for (const roleId of selectedRoleIds) {
+      try {
+        const result = await deleteRole(roleId)
+        if (result.success) deleted++
+      } catch {
+        // continue
+      }
+    }
+
+    toast({ title: `${deleted} תפקידים נמחקו` })
+    setIsBulkDeleting(false)
+    clearSelection()
+    loadRoles()
+  }
 
   const handleCreateRole = async () => {
     if (!newRoleName.trim()) return
@@ -394,7 +483,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     }
   }
 
-  // Export to Excel
+  // Export to Excel (kept)
   const handleExportCasting = async () => {
     if (roles.length === 0) {
       toast({ title: "אין תפקידים לייצוא", variant: "destructive" })
@@ -416,115 +505,21 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     }
   }
 
-  // Import from Excel
-  const handleImportCasting = async (file: File) => {
-    setImportError("")
-    try {
-      const { roles: importedRoles, warnings } = await importCastingFromExcel(file)
-
-      if (importedRoles.length === 0) {
-        setImportError("לא נחלצו תפקידים מהקובץ")
-        return
-      }
-
-      // Create roles
-      let created = 0
-      for (const roleData of importedRoles) {
-        const result = await createManualRole(
-          projectId,
-          roleData.role_name,
-          undefined,
-          roleData.replicas_count
-        )
-        if (result.success) created++
-      }
-
-      toast({
-        title: `${created} תפקידים נוצרו`,
-        description: warnings.length > 0 ? `${warnings.length} אזהרות` : undefined,
-      })
-
-      loadRoles()
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "שגיאה בייבוא"
-      setImportError(msg)
-      toast({ title: "שגיאה בייבוא", description: msg, variant: "destructive" })
-    }
-  }
-
-  // Export template
-  const handleExportTemplate = () => {
-    try {
-      exportCastingTemplate(`project-${projectId}`)
-      toast({ title: "דוגמה יוצאת בהצלחה" })
-    } catch (error) {
-      toast({
-        title: "שגיאה",
-        description: error instanceof Error ? error.message : "לא ידוע",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const toggleGroup = (id: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  // Filter + sort
-  const filteredRoles = useMemo(() => {
-    let result = [...roles]
-
-    if (search) {
-      const q = search.toLowerCase()
-      result = result.filter((r) => {
-        const matchesParent = r.role_name.toLowerCase().includes(q)
-        const matchesChild = r.children?.some((c) => c.role_name.toLowerCase().includes(q))
-        const matchesActor = r.casting?.actor?.full_name?.toLowerCase().includes(q)
-        const matchesChildActor = r.children?.some((c) => c.casting?.actor?.full_name?.toLowerCase().includes(q))
-        return matchesParent || matchesChild || matchesActor || matchesChildActor
-      })
-    }
-
-    if (showOnlyUnassigned) {
-      result = result.filter((r) => {
-        const parentUnassigned = !r.casting
-        const hasUnassignedChild = r.children?.some((c) => !c.casting)
-        return parentUnassigned || hasUnassignedChild
-      })
-    }
-
-    if (sortByReplicas) {
-      result.sort((a, b) => {
-        const diff = b.replicas_count - a.replicas_count
-        return sortByReplicas === "desc" ? diff : -diff
-      })
-    }
-
-    return result
-  }, [roles, search, showOnlyUnassigned, sortByReplicas])
-
   // Stats
   const stats = useMemo(() => {
     let totalRoles = 0
     let assignedRoles = 0
     let totalReplicas = 0
 
-    const count = (role: ProjectRoleWithCasting) => {
+    for (const role of flatRoles) {
       totalRoles++
       totalReplicas += role.replicas_count
       if (role.casting) assignedRoles++
-      role.children?.forEach(count)
     }
-    roles.forEach(count)
 
     const pct = totalRoles > 0 ? Math.round((assignedRoles / totalRoles) * 100) : 0
     return { totalRoles, assignedRoles, totalReplicas, pct }
-  }, [roles])
+  }, [flatRoles])
 
   if (loading) {
     return (
@@ -542,6 +537,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       </div>
     )
   }
+
+  const selectedCount = selectedRoleIds.size
 
   return (
     <div className="space-y-4">
@@ -615,7 +612,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
 
         <div className="flex-1" />
 
-        {/* Export/Import buttons */}
+        {/* Export button (Excel import removed) */}
         <Button
           variant="outline"
           size="sm"
@@ -626,43 +623,6 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
           {isExporting ? <Loader2 className="h-3.5 w-3.5 ml-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 ml-1.5" />}
           ייצוא לאקסל
         </Button>
-
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <Upload className="h-3.5 w-3.5 ml-1.5" />
-              ייבוא מאקסל
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>ייבוא תפקידים מאקסל</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              {importError && (
-                <div className="p-3 bg-destructive/10 text-destructive text-sm rounded">
-                  {importError}
-                </div>
-              )}
-              <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={(e) => {
-                    const file = e.currentTarget.files?.[0]
-                    if (file) {
-                      handleImportCasting(file)
-                    }
-                  }}
-                  className="w-full"
-                />
-              </div>
-              <Button variant="ghost" onClick={handleExportTemplate} className="w-full">
-                הורד דוגמה
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         <Dialog open={showAddRole} onOpenChange={setShowAddRole}>
           <DialogTrigger asChild>
@@ -705,19 +665,75 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         </Dialog>
       </div>
 
+      {/* Selection Action Bar */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+          <span className="text-sm font-medium">
+            {selectedCount} {selectedCount === 1 ? "תפקיד נבחר" : "תפקידים נבחרו"}
+          </span>
+
+          <div className="flex items-center gap-2 mr-auto">
+            {showAssignSearch ? (
+              <div className="flex items-center gap-2 w-[280px]">
+                <ActorSearchAutocomplete
+                  onSelect={handleBulkAssign}
+                  disabled={isBulkAssigning}
+                  placeholder="חיפוש שחקן לשיבוץ..."
+                />
+                {isBulkAssigning && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowAssignSearch(false)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => setShowAssignSearch(true)}
+              >
+                <UserPlus className="h-3.5 w-3.5 ml-1.5" />
+                שבץ שחקן
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+            >
+              {isBulkDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 ml-1.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5 ml-1.5" />
+              )}
+              {selectedCount === 1 ? "מחק תפקיד" : "מחק תפקידים"}
+            </Button>
+          </div>
+
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={clearSelection}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       {/* Column headers */}
       <div className="flex items-center gap-3 px-4 py-2 text-xs text-muted-foreground font-medium border-b border-border">
-        <div className="w-4 flex-shrink-0" />
         <div className="min-w-[180px] max-w-[260px]">תפקיד</div>
-        <div className="w-16 text-center flex-shrink-0">רפליקות</div>
+        <div className="w-16 text-center flex-shrink-0">
+          <div>רפליקות</div>
+          <div className="text-[10px] font-semibold text-foreground">{stats.totalReplicas.toLocaleString()}</div>
+        </div>
         <div className="w-8 flex-shrink-0" />
         <div className="flex-1 text-left">שחקן / שיבוץ</div>
       </div>
 
-      {/* Roles list */}
+      {/* Roles list - FLAT */}
       {filteredRoles.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
-          {roles.length === 0 ? (
+          {flatRoles.length === 0 ? (
             <div className="space-y-3">
               <Users className="h-12 w-12 mx-auto text-muted-foreground/40" />
               <p className="text-lg font-medium">אין תפקידים עדיין</p>
@@ -730,60 +746,26 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       ) : (
         <Card className="overflow-hidden">
           <div className="divide-y divide-border/50">
-            {filteredRoles.map((role) => {
-              const hasChildren = role.children && role.children.length > 0
-              const isExpanded = expandedGroups.has(role.id)
-
-              if (hasChildren) {
-                // Parent role WITH variants
-                // The parent itself is castable (it's the main version)
-                // Children are variant versions (e.g. YOUNG ALDRIC)
-                return (
-                  <div key={role.id}>
-                    {/* Parent row - castable + expandable */}
-                    <div className="flex items-center">
-                      {/* Expand toggle */}
-                      <button
-                        onClick={() => toggleGroup(role.id)}
-                        className="flex items-center justify-center w-10 h-full py-2.5 hover:bg-muted/60 transition-colors flex-shrink-0"
-                        aria-label={isExpanded ? "סגור גרסאות" : "פתח גרסאות"}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </button>
-                      {/* The actual castable row for the parent */}
-                      <div className="flex-1">
-                        <RoleRow role={role} conflicts={conflicts} allRoles={roles} onUpdate={loadRoles} />
-                      </div>
-                    </div>
-
-                    {/* Children (variants) */}
-                    {isExpanded && (
-                      <div className="border-r-2 border-primary/20 mr-5">
-                        {role.children!.map((child) => (
-                          <RoleRow
-                            key={child.id}
-                            role={child}
-                            conflicts={conflicts}
-                            allRoles={roles}
-                            isChild
-                            onUpdate={loadRoles}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              }
-
-              // Simple role without variants
-              return <RoleRow key={role.id} role={role} conflicts={conflicts} allRoles={roles} onUpdate={loadRoles} />
-            })}
+            {filteredRoles.map((role) => (
+              <RoleRow
+                key={role.id}
+                role={role}
+                conflicts={conflicts}
+                allRoles={roles}
+                isSelected={selectedRoleIds.has(role.id)}
+                onRoleNameClick={handleRoleNameClick}
+                onUpdate={loadRoles}
+              />
+            ))}
           </div>
         </Card>
+      )}
+
+      {/* Selection hint */}
+      {flatRoles.length > 0 && selectedCount === 0 && (
+        <p className="text-xs text-muted-foreground/60 text-center">
+          {"לחץ על שם תפקיד לבחירה/ביטול. לחץ על תפקידים נוספים לבחירה מרובה. Shift+לחיצה לבחירת טווח."}
+        </p>
       )}
     </div>
   )

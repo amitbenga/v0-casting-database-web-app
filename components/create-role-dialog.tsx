@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,6 +24,7 @@ interface CreateRoleDialogProps {
 }
 
 export function CreateRoleDialog({ open, onOpenChange, projectId, onRoleCreated }: CreateRoleDialogProps) {
+  const { toast } = useToast()
   const [roleName, setRoleName] = useState("")
   const [description, setDescription] = useState("")
   const [replicasNeeded, setReplicasNeeded] = useState("")
@@ -30,7 +32,7 @@ export function CreateRoleDialog({ open, onOpenChange, projectId, onRoleCreated 
 
   const handleSubmit = async () => {
     if (!roleName.trim()) {
-      alert("נא להזין שם תפקיד")
+      toast({ title: "שגיאה", description: "נא להזין שם תפקיד", variant: "destructive" })
       return
     }
 
@@ -55,7 +57,7 @@ export function CreateRoleDialog({ open, onOpenChange, projectId, onRoleCreated 
       onRoleCreated()
     } catch (error) {
       console.error("[v0] Error creating role:", error)
-      alert("שגיאה ביצירת תפקיד")
+      toast({ title: "שגיאה", description: "שגיאה ביצירת תפקיד", variant: "destructive" })
     } finally {
       setIsLoading(false)
     }

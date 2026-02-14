@@ -14,26 +14,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { normalizeEmail, normalizePhone } from "@/lib/normalizers"
+import { useToast } from "@/hooks/use-toast"
 
 const SKILLS_OPTIONS = ["משחק", "שירה", "ריקוד", "אומנויות לחימה", "אקרובטיקה", "מוזיקה", "קומדיה", "דרמה", "אחר"]
 
 const LANGUAGES_OPTIONS = ["עברית", "אנגלית", "ערבית", "רוסית", "צרפתית", "ספרדית", "גרמנית", "איטלקית", "אחר"]
 
-const ACCENTS_OPTIONS = [
-  { key: "french", label: "צרפתי" },
-  { key: "italian", label: "איטלקי" },
-  { key: "spanish", label: "ספרדי" },
-  { key: "german", label: "גרמני" },
-]
-
 export default function ActorIntakePage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [uploadedPhoto, setUploadedPhoto] = useState<string>("")
   const [uploadedAudio, setUploadedAudio] = useState<string>("")
   const [uploadedSinging, setUploadedSinging] = useState<string>("")
-  const [accents, setAccents] = useState<string[]>([])
   const [skills, setSkills] = useState<string[]>([])
   const [languages, setLanguages] = useState<string[]>([])
   const [skillsOther, setSkillsOther] = useState<string>("")
@@ -86,10 +80,6 @@ export default function ActorIntakePage() {
     }
   }
 
-  const toggleAccent = (accent: string) => {
-    setAccents((prev) => (prev.includes(accent) ? prev.filter((a) => a !== accent) : [...prev, accent]))
-  }
-
   const toggleSkill = (skill: string) => {
     setSkills((prev) => (prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]))
   }
@@ -124,7 +114,6 @@ export default function ActorIntakePage() {
         image_url: uploadedPhoto || null,
         voice_sample_url: uploadedAudio || null,
         singing_sample_url: uploadedSinging || null,
-        accents: accents.length > 0 ? accents : [],
         review_status: "pending",
         match_status: "pending",
         matched_actor_id: null,
@@ -142,11 +131,11 @@ export default function ActorIntakePage() {
 
       if (error) throw error
 
-      alert("הבקשה נשלחה בהצלחה! היא תיבדק ותאושר בקרוב.")
+      toast({ title: "הבקשה נשלחה", description: "היא תיבדק ותאושר בקרוב." })
       router.push("/")
     } catch (error) {
       console.error("[v0] Error submitting actor:", error)
-      alert("שגיאה בשליחת הבקשה")
+      toast({ title: "שגיאה", description: "שגיאה בשליחת הבקשה", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -158,6 +147,46 @@ export default function ActorIntakePage() {
 
   const prevStep = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1)
+  }
+
+  const handleSaveDraft = async () => {
+    if (!formData.full_name.trim()) {
+      toast({ title: "חסר שם", description: "נא למלא לפחות שם מלא כדי לשמור טיוטה", variant: "destructive" })
+      return
+    }
+    setLoading(true)
+    try {
+      const supabase = createBrowserClient()
+
+      const draftData: Record<string, any> = {
+        full_name: formData.full_name.trim(),
+        gender: formData.gender || "male",
+        birth_year: formData.birth_year ? Number.parseInt(formData.birth_year) : 2000,
+        phone: formData.phone.trim() || "",
+        email: formData.email.trim() || "",
+        notes: formData.notes || "",
+        is_singer: formData.is_singer,
+        is_course_grad: formData.is_course_graduate,
+        vat_status: formData.vat_status || "none",
+        image_url: uploadedPhoto || "",
+        voice_sample_url: uploadedAudio || "",
+        singing_sample_url: uploadedSinging || "",
+        skills: skills.map(s => ({ key: s, label: s })),
+        languages: languages.map(l => ({ key: l, label: l })),
+        is_draft: true,
+      }
+
+      const { error } = await supabase.from("actors").insert([draftData])
+      if (error) throw error
+
+      toast({ title: "טיוטה נשמרה", description: "השחקן נשמר כטיוטה." })
+      router.push("/")
+    } catch (error) {
+      console.error("[v0] Error saving draft:", error)
+      toast({ title: "שגיאה", description: "שגיאה בשמירת הטיוטה", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const canProceed = () => {
@@ -185,8 +214,8 @@ export default function ActorIntakePage() {
               </div>
             </div>
 
-            <Button variant="outline" onClick={() => router.push("/")}>
-              שמור טיוטה
+            <Button variant="outline" onClick={handleSaveDraft} disabled={loading}>
+              {loading ? "שומר..." : "שמור טיוטה"}
             </Button>
           </div>
         </div>
@@ -425,22 +454,6 @@ export default function ActorIntakePage() {
                       </div>
                     )}
                   </div>
-
-                  <div className="space-y-3">
-                    <Label>מבטאים</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {ACCENTS_OPTIONS.map((accent) => (
-                        <Badge
-                          key={accent.key}
-                          variant={accents.includes(accent.key) ? "default" : "outline"}
-                          className="cursor-pointer"
-                          onClick={() => toggleAccent(accent.key)}
-                        >
-                          {accent.label}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </Card>
             )}
@@ -494,9 +507,41 @@ export default function ActorIntakePage() {
                     )}
                   </div>
 
-                  {/* Voice Sample (Spoken) */}
+                  {/* Singing Sample */}
                   <div className="space-y-3">
-                    <Label>קובץ קול (דיבור)</Label>
+                    <Label>דוגמת שירה (אופציונלי)</Label>
+                    {uploadedSinging ? (
+                      <div className="space-y-3">
+                        <audio controls className="w-full" dir="ltr">
+                          <source src={uploadedSinging} />
+                        </audio>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setUploadedSinging("")}>
+                          <X className="h-4 w-4 ml-2" />
+                          הסר קובץ שירה
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                        <Label htmlFor="singing" className="cursor-pointer">
+                          <div className="text-sm text-muted-foreground mb-2">לחץ להעלאת דוגמת שירה</div>
+                          <Input
+                            id="singing"
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={handleSingingUpload}
+                          />
+                          <Button type="button" variant="outline" size="sm">
+                            בחר קובץ שירה
+                          </Button>
+                        </Label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Audio */}
+                  <div className="space-y-3">
+                    <Label>קובץ קול</Label>
                     {uploadedAudio ? (
                       <div className="space-y-3">
                         <audio controls className="w-full" dir="ltr">
@@ -520,38 +565,6 @@ export default function ActorIntakePage() {
                           />
                           <Button type="button" variant="outline" size="sm">
                             בחר קובץ קול
-                          </Button>
-                        </Label>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Singing Sample */}
-                  <div className="space-y-3">
-                    <Label>קובץ קול (שירה)</Label>
-                    {uploadedSinging ? (
-                      <div className="space-y-3">
-                        <audio controls className="w-full" dir="ltr">
-                          <source src={uploadedSinging} />
-                        </audio>
-                        <Button type="button" variant="outline" size="sm" onClick={() => setUploadedSinging("")}>
-                          <X className="h-4 w-4 ml-2" />
-                          הסר קובץ
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                        <Label htmlFor="singing" className="cursor-pointer">
-                          <div className="text-sm text-muted-foreground mb-2">לחץ להעלאת קובץ שירה</div>
-                          <Input
-                            id="singing"
-                            type="file"
-                            accept="audio/*"
-                            className="hidden"
-                            onChange={handleSingingUpload}
-                          />
-                          <Button type="button" variant="outline" size="sm">
-                            בחר קובץ שירה
                           </Button>
                         </Label>
                       </div>

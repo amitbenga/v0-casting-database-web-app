@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface EditProjectDialogProps {
   open: boolean
@@ -19,6 +20,7 @@ interface EditProjectDialogProps {
 }
 
 export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdated }: EditProjectDialogProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     name: "",
     director: "",
@@ -67,7 +69,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
       onOpenChange(false)
     } catch (error) {
       console.error("Error updating project:", error)
-      alert("שגיאה בעדכון פרויקט")
+      toast({ title: "שגיאה", description: "שגיאה בעדכון פרויקט", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -138,7 +140,7 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
                   <SelectContent>
                     <SelectItem value="not_started">לא התחיל</SelectItem>
                     <SelectItem value="casting">בליהוק</SelectItem>
-                    <SelectItem value="voice_testing">בבדיקת קולות</SelectItem>
+                    <SelectItem value="voice_testing">בדיקת קולות</SelectItem>
                     <SelectItem value="casted">ליהוק הושלם</SelectItem>
                     <SelectItem value="recording">בהקלטה</SelectItem>
                     <SelectItem value="completed">הושלם</SelectItem>

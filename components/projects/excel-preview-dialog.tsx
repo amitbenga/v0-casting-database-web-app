@@ -28,7 +28,6 @@ import {
 import { FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react"
 import type {
   ExcelParseResult,
-  ExcelColumnMapping,
   ExcelMappedRole,
 } from "@/lib/parser/excel-parser"
 import { applyExcelMapping } from "@/lib/parser/excel-parser"
@@ -262,7 +261,7 @@ export function ExcelPreviewDialog({
                           {role.role_name}
                         </TableCell>
                         <TableCell className="text-right">
-                          {role.replicas_count}
+                          {role.replicas_needed}
                         </TableCell>
                       </TableRow>
                     ))}

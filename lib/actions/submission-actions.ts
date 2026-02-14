@@ -66,6 +66,8 @@ export async function mergeSubmissionIntoActor(
       image_url: { submissionKey: "image_url", actorKey: "image_url" },
       voice_sample_url: { submissionKey: "voice_sample_url", actorKey: "voice_sample_url" },
       singing_sample_url: { submissionKey: "singing_sample_url", actorKey: "singing_sample_url" },
+      youtube_link: { submissionKey: "youtube_link", actorKey: "youtube_link" },
+      singing_level: { submissionKey: "singing_level", actorKey: "singing_level" },
       is_singer: { submissionKey: "is_singer", actorKey: "is_singer" },
       is_course_graduate: { submissionKey: "is_course_graduate", actorKey: "is_course_grad" },
       vat_status: { submissionKey: "vat_status", actorKey: "vat_status" },
@@ -76,7 +78,7 @@ export async function mergeSubmissionIntoActor(
     const arrayFields: Record<string, { submissionKey: string; actorKey: string }> = {
       skills: { submissionKey: "skills", actorKey: "skills" },
       languages: { submissionKey: "languages", actorKey: "languages" },
-      accents: { submissionKey: "accents", actorKey: "accents" },
+      singing_styles: { submissionKey: "singing_styles", actorKey: "singing_styles" },
     }
 
     const updateData: Record<string, any> = {}

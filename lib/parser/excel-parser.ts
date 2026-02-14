@@ -6,8 +6,8 @@
  *
  * Flow:
  * 1. Read Excel file → extract headers + rows
- * 2. User maps columns (role_name, replicas_count) via preview dialog
- * 3. Convert mapped data to RoleForDatabase[] format
+ * 2. User maps columns (role_name, replicas) via preview dialog
+ * 3. Convert mapped data to roles format for database insertion
  */
 
 export interface ExcelSheet {
@@ -33,7 +33,7 @@ export interface ExcelColumnMapping {
 export interface ExcelMappedRole {
   role_name: string
   role_name_normalized: string
-  replicas_count: number
+  replicas_needed: number
   source: "script"
 }
 
@@ -110,7 +110,7 @@ export function applyExcelMapping(
     roles.push({
       role_name: roleName,
       role_name_normalized: normalized,
-      replicas_count: replicasCount,
+      replicas_needed: replicasCount,
       source: "script",
     })
   }
