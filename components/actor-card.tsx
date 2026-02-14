@@ -159,13 +159,13 @@ export function ActorCard({
             <div className="flex items-start justify-between">
               <div className="flex gap-1 md:gap-2 flex-wrap">
                 {actor.is_singer && (
-                  <Badge variant="secondary" className="bg-background/90 text-[10px] md:text-xs px-1.5 md:px-2 py-0.5">
+                  <Badge variant="secondary" className="bg-amber-500/90 text-white text-[9px] md:text-[11px] px-1.5 md:px-2 py-0.5 font-semibold shadow-sm">
                     <Music className="h-2.5 w-2.5 md:h-3 md:w-3 ml-0.5 md:ml-1" />
                     זמר/ת
                   </Badge>
                 )}
                 {actor.is_course_grad && (
-                  <Badge variant="secondary" className="bg-background/90 text-[10px] md:text-xs px-1.5 md:px-2 py-0.5">
+                  <Badge variant="secondary" className="bg-emerald-500/90 text-white text-[9px] md:text-[11px] px-1.5 md:px-2 py-0.5 font-semibold shadow-sm">
                     <GraduationCap className="h-2.5 w-2.5 md:h-3 md:w-3 ml-0.5 md:ml-1" />
                     בוגר/ת
                   </Badge>

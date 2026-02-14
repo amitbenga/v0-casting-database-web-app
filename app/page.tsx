@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
@@ -317,7 +317,17 @@ function ActorsDatabaseContent() {
     exportActors(selectedActorObjects, format, "selected_actors")
   }
 
-  const displayedActors = activeTab === "favorites" ? actors.filter((actor) => favorites.includes(actor.id)) : actors
+  // Shuffle actors on initial load (Fisher-Yates)
+  const shuffledActors = useMemo(() => {
+    const arr = [...actors]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+  }, [actors])
+
+  const displayedActors = activeTab === "favorites" ? shuffledActors.filter((actor) => favorites.includes(actor.id)) : shuffledActors
 
   const filteredActors = displayedActors
     .filter((actor) => {

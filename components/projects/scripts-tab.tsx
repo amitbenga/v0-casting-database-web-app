@@ -358,7 +358,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                   ) : (
                     <>
                       <Play className="h-4 w-4 ml-2" />
-                      פרסר תסריטים ({pendingFiles.length})
+                      חלץ תפקידים ({pendingFiles.length})
                     </>
                   )}
                 </Button>
@@ -483,7 +483,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               <p className="font-medium">איך זה עובד?</p>
               <ol className="mt-2 space-y-1 text-muted-foreground list-decimal list-inside">
                 <li>בחר קבצי תסריט (ניתן לבחור מספר קבצים לפרויקט אחד)</li>
-                <li>לחץ "פרסר תסריטים" - המערכת תזהה אוטומטית את התפקידים</li>
+                <li>לחץ "חלץ תפקידים" - המערכת תזהה אוטומטית את התפקידים</li>
                 <li>בדוק את התוצאות, ערוך ומזג תפקידים לפי הצורך</li>
                 <li>אשר את התפקידים - הם יועברו לטאב "תפקידים" לשיבוץ</li>
               </ol>

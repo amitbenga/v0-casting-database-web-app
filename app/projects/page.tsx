@@ -64,8 +64,20 @@ export default function ProjectsPage() {
         return "bg-blue-500/10 text-blue-500 border-blue-500/20"
       case "draft":
         return "bg-gray-500/10 text-gray-500 border-gray-500/20"
+      case "voice_testing":
+        return "bg-transparent text-orange-500 border-orange-400"
       default:
         return "bg-gray-500/10 text-gray-500 border-gray-500/20"
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "active": return "פעיל"
+      case "completed": return "הושלם"
+      case "draft": return "טיוטה"
+      case "voice_testing": return "בדיקת קולות"
+      default: return status
     }
   }
 
@@ -139,6 +151,14 @@ export default function ProjectsPage() {
               >
                 הושלם
               </Button>
+              <Button
+                variant={statusFilter === "voice_testing" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStatusFilter("voice_testing")}
+                className={`text-xs md:text-sm ${statusFilter !== "voice_testing" ? "border-orange-400 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20" : ""}`}
+              >
+                בדיקת קולות
+              </Button>
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -209,9 +229,7 @@ export default function ProjectsPage() {
 
                 {/* Status Badge */}
                 <Badge variant="outline" className={getStatusColor(project.status)}>
-                  {project.status === "active" && "פעיל"}
-                  {project.status === "completed" && "הושלם"}
-                  {project.status === "draft" && "טיוטה"}
+                  {getStatusLabel(project.status)}
                 </Badge>
 
                 {/* Casting Director */}
