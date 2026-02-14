@@ -272,39 +272,72 @@ export async function mergeRoles(
       .update({ replicas_count: totalReplicas, replicas_needed: totalReplicas })
       .eq("id", primaryRoleId)
 
-    // Update any castings to point to the primary role
+    // Resolve castings for merged roles
     const otherRoleIds = roleIds.filter(id => id !== primaryRoleId)
     if (otherRoleIds.length > 0) {
-      // Get castings from other roles
-      const { data: castings } = await supabase
+      const { data: primaryCasting, error: primaryCastingError } = await supabase
+        .from("role_castings")
+        .select("*")
+        .eq("role_id", primaryRoleId)
+        .maybeSingle()
+
+      if (primaryCastingError) throw primaryCastingError
+
+      const { data: otherCastings, error: otherCastingsError } = await supabase
         .from("role_castings")
         .select("*")
         .in("role_id", otherRoleIds)
 
-      // Delete old castings
-      await supabase
-        .from("role_castings")
+      if (otherCastingsError) throw otherCastingsError
+
+      if (otherCastings && otherCastings.length > 0) {
+        if (primaryCasting) {
+          return {
+            success: false,
+            error: "לא ניתן לאחד תפקידים כאשר לתפקיד הראשי כבר משויך שחקן. בטל שיוכים ונסה שוב.",
+          }
+        }
+
+        const uniqueActorIds = new Set(otherCastings.map((c) => c.actor_id))
+        if (uniqueActorIds.size > 1) {
+          return {
+            success: false,
+            error: "לא ניתן לאחד תפקידים עם מספר שחקנים שונים. בצע איחוד ידני של השיבוצים לפני האיחוד.",
+          }
+        }
+
+        // Keep one casting by moving it to the primary role; remove the rest.
+        const [castingToKeep, ...castingsToDelete] = otherCastings
+        const { error: moveCastingError } = await supabase
+          .from("role_castings")
+          .update({ role_id: primaryRoleId })
+          .eq("id", castingToKeep.id)
+        if (moveCastingError) throw moveCastingError
+
+        if (castingsToDelete.length > 0) {
+          const { error: deleteCastingsError } = await supabase
+            .from("role_castings")
+            .delete()
+            .in("id", castingsToDelete.map((c) => c.id))
+          if (deleteCastingsError) throw deleteCastingsError
+        }
+      }
+
+      // Remove conflicts that reference merged-away roles to avoid duplicates/self-conflicts.
+      const roleIdsCsv = otherRoleIds.join(",")
+      const { error: deleteConflictsError } = await supabase
+        .from("role_conflicts")
         .delete()
-        .in("role_id", otherRoleIds)
-
-      // Update conflicts to point to primary role
-      await supabase
-        .from("role_conflicts")
-        .update({ role_id_a: primaryRoleId })
-        .in("role_id_a", otherRoleIds)
         .eq("project_id", projectId)
-
-      await supabase
-        .from("role_conflicts")
-        .update({ role_id_b: primaryRoleId })
-        .in("role_id_b", otherRoleIds)
-        .eq("project_id", projectId)
+        .or(`role_id_a.in.(${roleIdsCsv}),role_id_b.in.(${roleIdsCsv})`)
+      if (deleteConflictsError) throw deleteConflictsError
 
       // Delete merged roles
-      await supabase
+      const { error: deleteRolesError } = await supabase
         .from("project_roles")
         .delete()
         .in("id", otherRoleIds)
+      if (deleteRolesError) throw deleteRolesError
     }
 
     revalidatePath(`/projects/${projectId}`)

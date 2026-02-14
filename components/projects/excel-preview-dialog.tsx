@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -55,8 +55,8 @@ export function ExcelPreviewDialog({
   const sheet = excelResult.sheets[selectedSheet]
   const headers = sheet?.headers || []
 
-  // Auto-detect columns on first load
-  useState(() => {
+  // Auto-detect columns when a sheet is selected and columns are not chosen yet
+  useEffect(() => {
     if (headers.length > 0 && !roleNameColumn) {
       // Try to auto-detect role name column
       const roleNameGuess = headers.find(
@@ -70,16 +70,16 @@ export function ExcelPreviewDialog({
         (h) =>
           /replica|רפליק|כמות|count|lines|שורות|משפטים/i.test(h)
       )
-      if (replicasGuess) setReplicasColumn(replicasGuess)
+      setReplicasColumn(replicasGuess || "__none__")
     }
-  })
+  }, [headers, roleNameColumn])
 
   // Preview the mapped roles
   const mappedRoles = useMemo(() => {
     if (!roleNameColumn) return []
     return applyExcelMapping(excelResult, {
       roleNameColumn,
-      replicasColumn: replicasColumn || undefined,
+      replicasColumn: replicasColumn && replicasColumn !== "__none__" ? replicasColumn : undefined,
       sheetIndex: selectedSheet,
     })
   }, [excelResult, roleNameColumn, replicasColumn, selectedSheet])

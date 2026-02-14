@@ -152,8 +152,10 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
       const rolesToInsert = roles.map(role => ({
         project_id: projectId,
         role_name: role.role_name,
+        role_name_normalized: role.role_name_normalized,
         replicas_count: role.replicas_count,
-        source: "excel" as const,
+        replicas_needed: role.replicas_count,
+        source: "script" as const,
       }))
 
       const { error } = await supabase

@@ -882,7 +882,7 @@ function MergeFieldSelector({
     voice_sample_url: "דוגמת דיבור",
     singing_sample_url: "דוגמת שירה",
     is_singer: "זמר/ת",
-    vat_status: "סטטוס מע"מ",
+    vat_status: 'סטטוס מע"מ',
     notes: "הערות",
   }
 

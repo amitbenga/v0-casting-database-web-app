@@ -94,8 +94,18 @@ export async function mergeSubmissionIntoActor(
 
       // Handle gender mapping (submission is in Hebrew, actor is in English)
       let normalizedSubmissionValue = submissionValue
-      if (fieldName === "gender" && submissionValue) {
-        normalizedSubmissionValue = submissionValue === "זכר" ? "male" : "female"
+      if (fieldName === "gender" && typeof submissionValue === "string") {
+        const g = submissionValue.trim().toLowerCase()
+        if (g === "זכר" || g === "male") {
+          normalizedSubmissionValue = "male"
+        } else if (g === "נקבה" || g === "female") {
+          normalizedSubmissionValue = "female"
+        } else if (g === "other" || g === "אחר" || g === "אחר/ת") {
+          normalizedSubmissionValue = "other"
+        } else {
+          mergeReport.fields_skipped.push(fieldName)
+          continue
+        }
       }
 
       // Skip if submission has no value
@@ -105,7 +115,7 @@ export async function mergeSubmissionIntoActor(
       }
 
       // If actor field is empty, auto-fill from submission
-      if (actorValue == null || actorValue === "" || actorValue === false) {
+      if (actorValue == null || actorValue === "") {
         updateData[mapping.actorKey] = normalizedSubmissionValue
         mergeReport.fields_merged[fieldName] = {
           source: "submission",
