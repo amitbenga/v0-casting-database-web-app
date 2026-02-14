@@ -134,6 +134,45 @@ export default function ActorIntakePage() {
     if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
 
+  const handleSaveDraft = async () => {
+    if (!formData.full_name.trim()) {
+      alert("נא למלא לפחות שם מלא כדי לשמור טיוטה")
+      return
+    }
+    setLoading(true)
+    try {
+      const supabase = createBrowserClient()
+
+      const draftData: Record<string, any> = {
+        full_name: formData.full_name.trim(),
+        gender: formData.gender || "male",
+        birth_year: formData.birth_year ? Number.parseInt(formData.birth_year) : 2000,
+        phone: formData.phone.trim() || "",
+        email: formData.email.trim() || "",
+        notes: formData.notes || "",
+        is_singer: formData.is_singer,
+        is_course_grad: formData.is_course_graduate,
+        vat_status: formData.vat_status || "none",
+        image_url: uploadedPhoto || "",
+        voice_sample_url: uploadedAudio || "",
+        skills: skills.map(s => ({ key: s, label: s })),
+        languages: languages.map(l => ({ key: l, label: l })),
+        is_draft: true,
+      }
+
+      const { error } = await supabase.from("actors").insert([draftData])
+      if (error) throw error
+
+      alert("הטיוטה נשמרה בהצלחה!")
+      router.push("/")
+    } catch (error) {
+      console.error("[v0] Error saving draft:", error)
+      alert("שגיאה בשמירת הטיוטה")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const canProceed = () => {
     if (currentStep === 1) {
       return formData.full_name && formData.gender && formData.birth_year
@@ -159,8 +198,8 @@ export default function ActorIntakePage() {
               </div>
             </div>
 
-            <Button variant="outline" onClick={() => router.push("/")}>
-              שמור טיוטה
+            <Button variant="outline" onClick={handleSaveDraft} disabled={loading}>
+              {loading ? "שומר..." : "שמור טיוטה"}
             </Button>
           </div>
         </div>

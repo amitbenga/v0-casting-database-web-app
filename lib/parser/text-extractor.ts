@@ -243,6 +243,109 @@ export async function extractTextFromDOC(file: File): Promise<string> {
 }
 
 /**
+ * Extract text from a CSV file
+ * Converts rows into script-like format: CHARACTER_NAME (replica count)
+ */
+export async function extractTextFromCSV(file: File): Promise<string> {
+  const text = await file.text()
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  
+  if (lines.length === 0) {
+    throw new Error("CSV file is empty")
+  }
+
+  // Try to detect column structure from header
+  const header = lines[0].toLowerCase()
+  const hasHeader = header.includes("role") || header.includes("name") || header.includes("תפקיד") || header.includes("שם") || header.includes("character")
+
+  const dataLines = hasHeader ? lines.slice(1) : lines
+  const scriptLines: string[] = []
+
+  for (const line of dataLines) {
+    // Split by comma (simple CSV - for complex CSV with quoted fields, use a library)
+    const parts = line.split(",").map(p => p.trim().replace(/^"(.*)"$/, "$1"))
+    
+    if (parts.length === 0 || !parts[0]) continue
+
+    const roleName = parts[0].toUpperCase()
+    const replicaCount = parts.length > 1 ? parseInt(parts[1]) || 1 : 1
+
+    // Generate fake script lines so the parser can extract the character
+    scriptLines.push(`\n${roleName}`)
+    for (let i = 0; i < replicaCount; i++) {
+      scriptLines.push(`                    Line ${i + 1}`)
+    }
+  }
+
+  return scriptLines.join("\n")
+}
+
+/**
+ * Extract text from an Excel file (.xlsx, .xls)
+ * Uses SheetJS to parse the spreadsheet and converts to script-like format
+ */
+export async function extractTextFromExcel(file: File): Promise<string> {
+  const XLSX = await import("xlsx")
+  
+  const arrayBuffer = await file.arrayBuffer()
+  const workbook = XLSX.read(arrayBuffer, { type: "array" })
+  
+  // Use the first sheet
+  const sheetName = workbook.SheetNames[0]
+  if (!sheetName) throw new Error("Excel file has no sheets")
+  
+  const sheet = workbook.Sheets[sheetName]
+  const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+  
+  if (data.length === 0) {
+    throw new Error("Excel sheet is empty")
+  }
+
+  // Try to detect header row
+  const firstRow = data[0]?.map(c => String(c || "").toLowerCase()) || []
+  const hasHeader = firstRow.some(c => 
+    c.includes("role") || c.includes("name") || c.includes("תפקיד") || 
+    c.includes("שם") || c.includes("character") || c.includes("replicas") || c.includes("רפליקות")
+  )
+
+  // Find the role name column and replicas column
+  let nameCol = 0
+  let replicasCol = 1
+  
+  if (hasHeader) {
+    nameCol = firstRow.findIndex(c => c.includes("role") || c.includes("name") || c.includes("תפקיד") || c.includes("שם") || c.includes("character"))
+    replicasCol = firstRow.findIndex(c => c.includes("replica") || c.includes("count") || c.includes("רפליקות") || c.includes("כמות"))
+    
+    if (nameCol === -1) nameCol = 0
+    if (replicasCol === -1) replicasCol = nameCol === 0 ? 1 : 0
+  }
+
+  const dataRows = hasHeader ? data.slice(1) : data
+  const scriptLines: string[] = []
+
+  for (const row of dataRows) {
+    if (!row || !row[nameCol]) continue
+    
+    const roleName = String(row[nameCol]).trim().toUpperCase()
+    if (!roleName) continue
+    
+    const replicaCount = replicasCol < row.length ? (parseInt(String(row[replicasCol])) || 1) : 1
+
+    // Generate fake script lines so the parser can extract the character
+    scriptLines.push(`\n${roleName}`)
+    for (let i = 0; i < Math.min(replicaCount, 500); i++) {
+      scriptLines.push(`                    Line ${i + 1}`)
+    }
+  }
+
+  if (scriptLines.length === 0) {
+    throw new Error("No role data found in Excel file. Ensure the first column contains role names.")
+  }
+
+  return scriptLines.join("\n")
+}
+
+/**
  * Extract text from any supported file type
  */
 export async function extractText(file: File): Promise<{ text: string; warnings: string[] }> {
@@ -288,6 +391,27 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
           throw new Error("Failed to extract text from DOC. Please convert to DOCX or TXT format.")
         }
         break
+
+      case "xlsx":
+      case "xls":
+        try {
+          text = await extractTextFromExcel(file)
+          warnings.push("Excel file imported as role list. Ensure the first column has role names and the second has replica counts.")
+        } catch (excelError) {
+          console.error("Excel extraction error:", excelError)
+          throw new Error("Failed to read Excel file. Ensure it contains role names in the first column.")
+        }
+        break
+
+      case "csv":
+        try {
+          text = await extractTextFromCSV(file)
+          warnings.push("CSV file imported as role list. Ensure the first column has role names and the second has replica counts.")
+        } catch (csvError) {
+          console.error("CSV extraction error:", csvError)
+          throw new Error("Failed to read CSV file.")
+        }
+        break
         
       default:
         throw new Error(`Unsupported file format: .${extension}`)
@@ -323,7 +447,7 @@ export function getFileInfo(file: File): {
   supported: boolean
 } {
   const extension = file.name.split(".").pop()?.toLowerCase() || ""
-  const supported = ["txt", "pdf", "docx", "doc"].includes(extension)
+  const supported = ["txt", "pdf", "docx", "doc", "xlsx", "xls", "csv"].includes(extension)
   
   let size: string
   if (file.size < 1024) {

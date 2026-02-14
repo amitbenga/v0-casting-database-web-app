@@ -39,6 +39,7 @@ export interface Actor {
   voice_sample_url?: string
   created_at: string
   vat_status: VatStatus
+  is_draft?: boolean
 }
 
 export interface Project {

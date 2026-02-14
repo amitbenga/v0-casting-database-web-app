@@ -52,6 +52,7 @@ function mapActor(actor: any): Actor {
     dubbing_experience_years: actor.dubbing_experience_years || 0,
     singing_styles: Array.isArray(actor.singing_styles) ? actor.singing_styles : [],
     singing_styles_other: Array.isArray(actor.singing_styles_other) ? actor.singing_styles_other : [],
+    is_draft: actor.is_draft || false,
   }
 }
 
@@ -96,7 +97,7 @@ function ActorsDatabaseContent() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
-  const [activeTab, setActiveTab] = useState<"all" | "favorites">("all")
+  const [activeTab, setActiveTab] = useState<"all" | "favorites" | "drafts">("all")
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const [selectedActorForFolder, setSelectedActorForFolder] = useState<Actor | null>(null)
   const [filters, setFilters] = useState<FilterState>({
@@ -338,7 +339,15 @@ function ActorsDatabaseContent() {
     return arr
   }, [actors, shuffleSeed])
 
-  const displayedActors = activeTab === "favorites" ? shuffledActors.filter((actor) => favorites.includes(actor.id)) : shuffledActors
+  // Separate draft and non-draft actors
+  const draftActors = shuffledActors.filter((actor) => actor.is_draft)
+  const nonDraftActors = shuffledActors.filter((actor) => !actor.is_draft)
+
+  const displayedActors = activeTab === "drafts"
+    ? draftActors
+    : activeTab === "favorites"
+      ? nonDraftActors.filter((actor) => favorites.includes(actor.id))
+      : nonDraftActors
 
   const filteredActors = displayedActors
     .filter((actor) => {
@@ -591,12 +600,17 @@ function ActorsDatabaseContent() {
           <div className="flex-1">
             <Tabs
               value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "all" | "favorites")}
+              onValueChange={(value) => setActiveTab(value as "all" | "favorites" | "drafts")}
               className="w-full"
             >
               <TabsList className="mb-6">
-                <TabsTrigger value="all">כל השחקנים ({actors.length})</TabsTrigger>
+                <TabsTrigger value="all">כל השחקנים ({nonDraftActors.length})</TabsTrigger>
                 <TabsTrigger value="favorites">מועדפים ({favorites.length})</TabsTrigger>
+                {draftActors.length > 0 && (
+                  <TabsTrigger value="drafts" className="text-orange-600 data-[state=active]:text-orange-600">
+                    טיוטות ({draftActors.length})
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="all" className="mt-0">
@@ -662,6 +676,31 @@ function ActorsDatabaseContent() {
                         ? "עדיין לא הוספת שחקנים למועדפים."
                         : "לא נמצאו שחקנים מועדפים התואמים את החיפוש."}
                     </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="drafts" className="mt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+                  {filteredActors.map((actor) => (
+                    <ActorCard
+                      key={actor.id}
+                      actor={actor}
+                      isSelected={selectedActors.includes(actor.id)}
+                      isFavorited={favorites.includes(actor.id)}
+                      onToggleFavorite={handleToggleFavorite}
+                      onToggleSelect={handleToggleSelect}
+                      onAddToProject={handleAddToProject}
+                      onAddToFolder={handleAddToFolder}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+
+                {filteredActors.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">אין טיוטות שתואמות את החיפוש.</p>
                   </div>
                 )}
               </TabsContent>

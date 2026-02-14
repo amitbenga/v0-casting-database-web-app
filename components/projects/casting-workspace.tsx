@@ -374,9 +374,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     return result
   }, [flatRoles, search, showOnlyUnassigned, sortByReplicas])
 
-  // Handle role name click with Ctrl/Cmd and Shift support
+  // Handle role name click - toggle selection, Shift for range
   const handleRoleNameClick = useCallback((roleId: string, e: React.MouseEvent) => {
-    const isMeta = e.metaKey || e.ctrlKey
     const isShift = e.shiftKey
 
     if (isShift && lastClickedRoleId) {
@@ -393,8 +392,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
           return next
         })
       }
-    } else if (isMeta) {
-      // Ctrl/Cmd+click: toggle
+    } else {
+      // Simple click: toggle this role (add or remove)
       setSelectedRoleIds((prev) => {
         const next = new Set(prev)
         if (next.has(roleId)) {
@@ -404,12 +403,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
         }
         return next
       })
-      setLastClickedRoleId(roleId)
-    } else {
-      // Simple click: select only this one
-      setSelectedRoleIds(new Set([roleId]))
-      setLastClickedRoleId(roleId)
     }
+    setLastClickedRoleId(roleId)
     
     // Close assign search when selection changes
     setShowAssignSearch(false)
@@ -769,7 +764,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       {/* Selection hint */}
       {flatRoles.length > 0 && selectedCount === 0 && (
         <p className="text-xs text-muted-foreground/60 text-center">
-          {"לחץ על שם תפקיד לבחירה. Ctrl+לחיצה לבחירת מספר תפקידים, Shift+לחיצה לבחירת טווח."}
+          {"לחץ על שם תפקיד לבחירה/ביטול. לחץ על תפקידים נוספים לבחירה מרובה. Shift+לחיצה לבחירת טווח."}
         </p>
       )}
     </div>
