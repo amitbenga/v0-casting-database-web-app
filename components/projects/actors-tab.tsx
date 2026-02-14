@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { Search, Loader2, Users, LayoutGrid, List, ArrowUpDown } from "lucide-react"
 import { getProjectActorsFromCastings } from "@/lib/actions/casting-actions"
+import type { CastingStatus, CASTING_STATUS_COLORS } from "@/lib/types"
 
 type ActorWithRoles = Awaited<ReturnType<typeof getProjectActorsFromCastings>>[number]
 
@@ -29,16 +30,12 @@ const STATUS_COLORS: Record<string, string> = {
   "מלוהק": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
 }
 
-type SortField = "name" | "roles" | "total_replicas"
-type SortDir = "asc" | "desc"
-
 export function ActorsTab({ projectId }: ActorsTabProps) {
   const [castings, setCastings] = useState<ActorWithRoles[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
-  const [sortField, setSortField] = useState<SortField>("total_replicas")
-  const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [sortByReplicas, setSortByReplicas] = useState<"asc" | "desc" | null>(null)
 
   useEffect(() => {
     async function loadCastings() {
@@ -56,20 +53,8 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
     loadCastings()
   }, [projectId])
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
-    } else {
-      setSortField(field)
-      setSortDir("desc")
-    }
-  }
-
-  const getActorTotalReplicas = (c: ActorWithRoles) =>
-    c.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
-
-  const filteredCastings = useMemo(() => {
-    let result = castings.filter((c) => {
+  const filteredCastings = castings
+    .filter((c) => {
       if (!searchQuery) return true
       const searchLower = searchQuery.toLowerCase()
       return (
@@ -77,31 +62,18 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
         c.roles.some((r) => r.role_name?.toLowerCase().includes(searchLower))
       )
     })
-
-    result.sort((a, b) => {
-      let diff = 0
-      switch (sortField) {
-        case "name":
-          diff = a.actor.name.localeCompare(b.actor.name, "he")
-          break
-        case "roles":
-          diff = a.roles.length - b.roles.length
-          break
-        case "total_replicas":
-          diff = getActorTotalReplicas(a) - getActorTotalReplicas(b)
-          break
-      }
-      return sortDir === "desc" ? -diff : diff
+    .sort((a, b) => {
+      if (!sortByReplicas) return 0
+      const totalA = a.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+      const totalB = b.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+      return sortByReplicas === "desc" ? totalB - totalA : totalA - totalB
     })
-
-    return result
-  }, [castings, searchQuery, sortField, sortDir])
 
   // Stats
   const totalActors = castings.length
   const totalRoles = castings.reduce((sum, c) => sum + c.roles.length, 0)
   const totalReplicas = castings.reduce(
-    (sum, c) => sum + getActorTotalReplicas(c),
+    (sum, c) => sum + c.roles.reduce((s, r) => s + (r.replicas_planned || 0), 0),
     0
   )
 
@@ -122,23 +94,12 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
             אין שחקנים משובצים עדיין
           </p>
           <p className="text-sm text-muted-foreground text-center mt-1">
-            {"שבץ שחקנים לתפקידים בטאב \"תפקידים\""}
+            שבץ שחקנים לתפקידים בטאב "תפקידים"
           </p>
         </div>
       </Card>
     )
   }
-
-  const SortButton = ({ field, label }: { field: SortField; label: string }) => (
-    <button
-      type="button"
-      className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-      onClick={() => toggleSort(field)}
-    >
-      {label}
-      <ArrowUpDown className={`h-3 w-3 ${sortField === field ? "text-primary" : "text-muted-foreground/50"}`} />
-    </button>
-  )
 
   return (
     <div className="space-y-6">
@@ -155,21 +116,38 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
         </div>
         <div className="h-8 w-px bg-border" />
         <div>
-          <p className="text-sm text-muted-foreground">סה"כ רפליקות</p>
+          <p className="text-sm text-muted-foreground">רפליקות מתוכננות</p>
           <p className="text-lg font-semibold">{totalReplicas.toLocaleString()}</p>
         </div>
       </div>
 
       {/* Filters & View Toggle */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-[300px]">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="חיפוש שחקן או תפקיד..."
-            className="pr-10"
-          />
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="relative min-w-[200px] max-w-[300px]">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="חיפוש שחקן או תפקיד..."
+              className="pr-10"
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className={sortByReplicas ? "border-primary text-primary" : ""}
+            onClick={() =>
+              setSortByReplicas((prev) => (prev === "desc" ? "asc" : prev === "asc" ? null : "desc"))
+            }
+          >
+            <ArrowUpDown className="h-3.5 w-3.5 ml-1.5" />
+            רפליקות
+            {sortByReplicas && (
+              <span className="text-xs mr-1">({sortByReplicas === "desc" ? "גבוה" : "נמוך"})</span>
+            )}
+          </Button>
         </div>
 
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
@@ -196,21 +174,18 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-right">
-                  <SortButton field="name" label="שחקן" />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortButton field="roles" label="תפקידים" />
-                </TableHead>
-                <TableHead className="text-right">רפליקות לפי תפקיד</TableHead>
-                <TableHead className="text-right">
-                  <SortButton field="total_replicas" label="סה&quot;כ רפליקות" />
-                </TableHead>
+                <TableHead className="text-right">שחקן</TableHead>
+                <TableHead className="text-right">תפקיד</TableHead>
+                <TableHead className="text-right">רפליקות לתפקיד</TableHead>
+                <TableHead className="text-right">סה"כ רפליקות</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredCastings.map((casting) => {
-                const actorTotal = getActorTotalReplicas(casting)
+                const actorTotalReplicas = casting.roles.reduce(
+                  (sum, r) => sum + (r.replicas_planned || 0),
+                  0
+                )
                 return (
                   <TableRow key={casting.actor.id}>
                     <TableCell>
@@ -228,7 +203,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                           <Badge
                             key={role.role_id}
                             variant="outline"
-                            className={STATUS_COLORS[role.status] || ""}
+                            className={STATUS_COLORS[role.status]}
                           >
                             {role.role_name}
                           </Badge>
@@ -238,15 +213,14 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         {casting.roles.map((role) => (
-                          <div key={role.role_id} className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground truncate max-w-[120px]">{role.role_name}:</span>
-                            <span className="font-medium">{(role.replicas_planned || 0).toLocaleString()}</span>
-                          </div>
+                          <span key={role.role_id} className="text-sm text-muted-foreground">
+                            {role.role_name}: {(role.replicas_planned || 0).toLocaleString()}
+                          </span>
                         ))}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-semibold text-base">{actorTotal.toLocaleString()}</span>
+                      <span className="font-semibold">{actorTotalReplicas.toLocaleString()}</span>
                     </TableCell>
                   </TableRow>
                 )
@@ -256,46 +230,47 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCastings.map((casting) => {
-            const actorTotal = getActorTotalReplicas(casting)
-            return (
-              <Card key={casting.actor.id} className="p-4">
-                <div className="flex items-start gap-3">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={casting.actor.image_url} alt={casting.actor.name} />
-                    <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{casting.actor.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {casting.roles.length} תפקידים | {actorTotal.toLocaleString()} רפליקות
-                    </p>
+          {filteredCastings.map((casting) => (
+            <Card key={casting.actor.id} className="p-4">
+              <div className="flex items-start gap-3">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={casting.actor.image_url} alt={casting.actor.name} />
+                  <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{casting.actor.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {casting.roles.length} תפקידים |{" "}
+                    {casting.roles
+                      .reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+                      .toLocaleString()}{" "}
+                    רפליקות
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {casting.roles.map((role) => (
+                  <div key={role.role_id} className="flex items-center justify-between">
+                    <Badge
+                      variant="outline"
+                      className={STATUS_COLORS[role.status]}
+                    >
+                      {role.role_name}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {(role.replicas_planned || 0).toLocaleString()} רפליקות
+                    </span>
                   </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {casting.roles.map((role) => (
-                    <div key={role.role_id} className="flex items-center justify-between">
-                      <Badge
-                        variant="outline"
-                        className={STATUS_COLORS[role.status] || ""}
-                      >
-                        {role.role_name}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {(role.replicas_planned || 0).toLocaleString()} רפליקות
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )
-          })}
+                ))}
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
       {filteredCastings.length === 0 && searchQuery && (
         <div className="text-center py-12 text-muted-foreground">
-          {"לא נמצאו תוצאות עבור"} &quot;{searchQuery}&quot;
+          לא נמצאו תוצאות עבור "{searchQuery}"
         </div>
       )}
     </div>

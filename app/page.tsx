@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
@@ -317,15 +317,26 @@ function ActorsDatabaseContent() {
     exportActors(selectedActorObjects, format, "selected_actors")
   }
 
-  // Shuffle actors on initial load (Fisher-Yates)
+  // Stable shuffle seed - created once per mount so cards don't jump on pagination
+  const [shuffleSeed] = useState(() => Math.random())
+
+  // Shuffle actors with stable seed (Fisher-Yates with seeded PRNG)
   const shuffledActors = useMemo(() => {
     const arr = [...actors]
+    // Simple seeded PRNG (mulberry32)
+    let s = Math.floor(shuffleSeed * 2147483647)
+    const rand = () => {
+      s = (s + 0x6d2b79f5) | 0
+      let t = Math.imul(s ^ (s >>> 15), 1 | s)
+      t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
     for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rand() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]]
     }
     return arr
-  }, [actors])
+  }, [actors, shuffleSeed])
 
   const displayedActors = activeTab === "favorites" ? shuffledActors.filter((actor) => favorites.includes(actor.id)) : shuffledActors
 
