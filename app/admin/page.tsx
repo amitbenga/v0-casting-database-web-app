@@ -18,6 +18,7 @@ import {
   Clock,
   AlertTriangle,
   Link2,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -53,6 +54,9 @@ interface ActorSubmission {
   image_url?: string
   voice_sample_url?: string
   singing_sample_url?: string
+  youtube_link?: string
+  singing_styles?: string[]
+  singing_level?: string
   is_singer?: boolean
   is_course_graduate?: boolean
   vat_status?: string
@@ -164,6 +168,9 @@ function AdminPageContent() {
         image_url: submission.image_url,
         voice_sample_url: submission.voice_sample_url,
         singing_sample_url: submission.singing_sample_url || "",
+        youtube_link: submission.youtube_link || "",
+        singing_styles: submission.singing_styles || [],
+        singing_level: submission.singing_level || "",
         is_singer: submission.is_singer || false,
         is_course_grad: submission.is_course_graduate || false,
         vat_status: submission.vat_status || "exempt",
@@ -471,6 +478,25 @@ function SubmissionCard({
                 <div className="flex items-center gap-2">
                   <Music className="h-4 w-4 text-primary" />
                   <span>זמר/ת</span>
+                  {submission.singing_level && (
+                    <Badge variant="outline" className="text-xs">{submission.singing_level}</Badge>
+                  )}
+                </div>
+              )}
+              {submission.singing_styles && submission.singing_styles.length > 0 && (
+                <div>
+                  <p className="font-medium mb-1">סגנונות שירה:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {submission.singing_styles.map((style) => (
+                      <Badge key={style} variant="secondary" className="text-xs">{style}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {submission.youtube_link && (
+                <div className="flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4 text-primary" />
+                  <a href={submission.youtube_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[200px]">לינק ליוטיוב</a>
                 </div>
               )}
               {submission.is_course_graduate && (

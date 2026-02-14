@@ -38,6 +38,9 @@ export interface Actor {
   phone?: string
   voice_sample_url?: string
   singing_sample_url?: string
+  youtube_link?: string
+  singing_styles?: string[]
+  singing_level?: string
   created_at: string
   vat_status: VatStatus
   is_draft?: boolean
