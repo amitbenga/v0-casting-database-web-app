@@ -320,12 +320,16 @@ function ActorsDatabaseContent() {
     exportActors(selectedActorObjects, format, "selected_actors")
   }
 
-  // Stable shuffle seed - created once per mount so cards don't jump on pagination
-  const [shuffleSeed] = useState(() => Math.random())
+  // Shuffle seed based on the current date so it changes daily but stays stable within a session
+  const [shuffleSeed] = useState(() => {
+    const today = new Date()
+    return today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate() + Math.random()
+  })
 
   // Shuffle actors with stable seed (Fisher-Yates with seeded PRNG)
   const shuffledActors = useMemo(() => {
     const arr = [...actors]
+    if (arr.length <= 1) return arr
     // Simple seeded PRNG (mulberry32)
     let s = Math.floor(shuffleSeed * 2147483647)
     const rand = () => {
@@ -334,6 +338,7 @@ function ActorsDatabaseContent() {
       t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296
     }
+    // Fisher-Yates: iterate from last to first (inclusive of index 0 via swaps)
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]]
