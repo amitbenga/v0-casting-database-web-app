@@ -345,8 +345,15 @@ function ActorsDatabaseContent() {
       [arr[i], arr[j]] = [arr[j], arr[i]]
     }
     console.log("[v0] Shuffle output - first 5:", arr.slice(0, 5).map(a => a.full_name))
+    const leniIdx = arr.findIndex(a => a.full_name.includes("לני"))
+    console.log("[v0] Leni position after shuffle:", leniIdx, "out of", arr.length)
     return arr
   }, [actors, shuffleSeed])
+
+  // Debug: log what filteredActors actually shows
+  console.log("[v0] filteredActors first 5:", filteredActors.slice(0, 5).map(a => a.full_name))
+  const leniFilteredIdx = filteredActors.findIndex(a => a.full_name.includes("לני"))
+  console.log("[v0] Leni position in filteredActors:", leniFilteredIdx)
 
   // Separate draft and non-draft actors
   const draftActors = shuffledActors.filter((actor) => actor.is_draft)
