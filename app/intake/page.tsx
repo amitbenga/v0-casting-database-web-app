@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { normalizeEmail, normalizePhone } from "@/lib/normalizers"
+import { useToast } from "@/hooks/use-toast"
 
 const SKILLS_OPTIONS = ["משחק", "שירה", "ריקוד", "אומנויות לחימה", "אקרובטיקה", "מוזיקה", "קומדיה", "דרמה", "אחר"]
 
@@ -21,6 +22,7 @@ const LANGUAGES_OPTIONS = ["עברית", "אנגלית", "ערבית", "רוסי
 
 export default function ActorIntakePage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [uploadedPhoto, setUploadedPhoto] = useState<string>("")
@@ -116,11 +118,11 @@ export default function ActorIntakePage() {
 
       if (error) throw error
 
-      alert("הבקשה נשלחה בהצלחה! היא תיבדק ותאושר בקרוב.")
+      toast({ title: "הבקשה נשלחה", description: "היא תיבדק ותאושר בקרוב." })
       router.push("/")
     } catch (error) {
       console.error("[v0] Error submitting actor:", error)
-      alert("שגיאה בשליחת הבקשה")
+      toast({ title: "שגיאה", description: "שגיאה בשליחת הבקשה", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -136,7 +138,7 @@ export default function ActorIntakePage() {
 
   const handleSaveDraft = async () => {
     if (!formData.full_name.trim()) {
-      alert("נא למלא לפחות שם מלא כדי לשמור טיוטה")
+      toast({ title: "חסר שם", description: "נא למלא לפחות שם מלא כדי לשמור טיוטה", variant: "destructive" })
       return
     }
     setLoading(true)
@@ -163,11 +165,11 @@ export default function ActorIntakePage() {
       const { error } = await supabase.from("actors").insert([draftData])
       if (error) throw error
 
-      alert("הטיוטה נשמרה בהצלחה!")
+      toast({ title: "טיוטה נשמרה", description: "השחקן נשמר כטיוטה." })
       router.push("/")
     } catch (error) {
       console.error("[v0] Error saving draft:", error)
-      alert("שגיאה בשמירת הטיוטה")
+      toast({ title: "שגיאה", description: "שגיאה בשמירת הטיוטה", variant: "destructive" })
     } finally {
       setLoading(false)
     }

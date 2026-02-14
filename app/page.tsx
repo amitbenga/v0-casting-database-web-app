@@ -17,6 +17,7 @@ import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { useAuth } from "@/contexts/AuthContext"
 import { exportActors } from "@/lib/export-utils"
+import { useToast } from "@/hooks/use-toast"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,6 +94,7 @@ async function fetchActorsPage(cursor: string | null): Promise<{ actors: Actor[]
 
 function ActorsDatabaseContent() {
   const { user } = useAuth() // Get authenticated user
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [showFilters, setShowFilters] = useState(false)
   const [selectedActors, setSelectedActors] = useState<string[]>([])
@@ -224,7 +226,7 @@ function ActorsDatabaseContent() {
   const handleAddToProject = (actor: Actor) => {
     console.log("[v0] Add to project:", actor.full_name)
     // TODO: פתיחת דיאלוג לבחירת פרויקט
-    alert(`הוסף את ${actor.full_name} לפרויקט (בקרוב)`)
+    toast({ title: "בקרוב", description: `הוספת ${actor.full_name} לפרויקט תהיה זמינה בקרוב.` })
   }
 
   const handleAddToFolder = (actor: Actor) => {
@@ -246,7 +248,7 @@ function ActorsDatabaseContent() {
 
       if (error) {
         console.error("[v0] Error deleting actor:", error)
-        alert("שגיאה במחיקת השחקן")
+        toast({ title: "שגיאה", description: "שגיאה במחיקת השחקן", variant: "destructive" })
         return
       }
 
@@ -262,7 +264,7 @@ function ActorsDatabaseContent() {
       setSelectedActors((prev) => prev.filter((actorId) => actorId !== id))
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה במחיקת השחקן")
+      toast({ title: "שגיאה", description: "שגיאה במחיקת השחקן", variant: "destructive" })
     }
   }
 
@@ -282,7 +284,7 @@ function ActorsDatabaseContent() {
   }
 
   const handleBulkAddToProject = () => {
-    alert(`הוספת ${selectedActors.length} שחקנים לפרויקט (בקרוב)`)
+    toast({ title: "בקרוב", description: `הוספת ${selectedActors.length} שחקנים לפרויקט תהיה זמינה בקרוב.` })
     setSelectedActors([])
   }
 
@@ -312,7 +314,7 @@ function ActorsDatabaseContent() {
   const handleBulkExport = (format: "pdf" | "excel") => {
     const selectedActorObjects = actors.filter((actor) => selectedActors.includes(actor.id))
     if (selectedActorObjects.length === 0) {
-      alert("אין שחקנים נבחרים")
+      toast({ title: "שגיאה", description: "אין שחקנים נבחרים", variant: "destructive" })
       return
     }
     exportActors(selectedActorObjects, format, "selected_actors")

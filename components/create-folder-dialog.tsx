@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface CreateFolderDialogProps {
   open: boolean
@@ -17,6 +18,7 @@ interface CreateFolderDialogProps {
 }
 
 export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: CreateFolderDialogProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     name: "",
     description: "",

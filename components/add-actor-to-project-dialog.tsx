@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { assignActorToRole } from "@/lib/actions/casting-actions"
+import { useToast } from "@/hooks/use-toast"
 import { toast } from "sonner"
 
 interface AddActorToProjectDialogProps {
@@ -30,6 +31,7 @@ export function AddActorToProjectDialog({
   roles = [],
   onActorsAdded,
 }: AddActorToProjectDialogProps) {
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [actors, setActors] = useState<any[]>([])

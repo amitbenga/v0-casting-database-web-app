@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -17,6 +18,7 @@ interface CreateProjectDialogProps {
 }
 
 export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: CreateProjectDialogProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     name: "",
     director: "",
@@ -49,7 +51,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
       if (error) {
         console.error("[v0] Error creating project:", error)
-        alert("שגיאה ביצירת הפרויקט")
+        toast({ title: "שגיאה", description: "שגיאה ביצירת הפרויקט", variant: "destructive" })
         return
       }
 
@@ -62,7 +64,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
       }
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה ביצירת הפרויקט")
+      toast({ title: "שגיאה", description: "שגיאה ביצירת הפרויקט", variant: "destructive" })
     } finally {
       setSubmitting(false)
     }

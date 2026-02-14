@@ -11,6 +11,7 @@ import { Search } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface AddActorToFolderDialogProps {
   open: boolean
@@ -20,6 +21,7 @@ interface AddActorToFolderDialogProps {
 }
 
 export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsAdded }: AddActorToFolderDialogProps) {
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedActors, setSelectedActors] = useState<string[]>([])
   const [actors, setActors] = useState<any[]>([])

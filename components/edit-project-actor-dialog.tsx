@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface EditProjectActorDialogProps {
   open: boolean
@@ -23,6 +24,7 @@ export function EditProjectActorDialog({
   projectActor,
   onActorUpdated,
 }: EditProjectActorDialogProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     role_name: "",
     replicas_planned: "",

@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleLevel, type SingingStyle, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface ActorEditFormProps {
   actor: Actor
@@ -21,6 +22,7 @@ interface ActorEditFormProps {
 }
 
 export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState(actor)
   const [imagePreview, setImagePreview] = useState(actor.image_url)
   const [saving, setSaving] = useState(false)
@@ -61,7 +63,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
 
       if (error) {
         console.error("[v0] Error updating actor:", error)
-        alert("שגיאה בשמירת השינויים")
+        toast({ title: "שגיאה", description: "שגיאה בשמירת השינויים", variant: "destructive" })
         return
       }
 
@@ -69,7 +71,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
       onSave(formData)
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה בשמירת השינויים")
+      toast({ title: "שגיאה", description: "שגיאה בשמירת השינויים", variant: "destructive" })
     } finally {
       setSaving(false)
     }
