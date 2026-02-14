@@ -15,6 +15,7 @@ import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
+import { useToast } from "@/hooks/use-toast"
 
 const PROJECT_STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -45,6 +46,7 @@ interface ProjectStats {
 export default function ProjectDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const { toast } = useToast()
   const projectId = typeof params?.id === "string" ? params.id : null
 
   const [project, setProject] = useState<Project | null>(null)
@@ -112,7 +114,7 @@ export default function ProjectDetailPage() {
       router.push("/projects")
     } catch (error) {
       console.error("Error deleting project:", error)
-      alert("שגיאה במחיקת פרויקט")
+      toast({ title: "שגיאה", description: "שגיאה במחיקת פרויקט", variant: "destructive" })
     }
   }
 

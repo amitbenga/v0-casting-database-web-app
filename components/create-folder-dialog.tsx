@@ -54,7 +54,7 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
 
       if (error) {
         console.error("[v0] Error creating folder:", error)
-        alert("שגיאה ביצירת התיקייה")
+        toast({ title: "שגיאה", description: "שגיאה ביצירת התיקייה", variant: "destructive" })
         return
       }
 
@@ -67,7 +67,7 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
       }
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה ביצירת התיקייה")
+      toast({ title: "שגיאה", description: "שגיאה ביצירת התיקייה", variant: "destructive" })
     } finally {
       setSubmitting(false)
     }

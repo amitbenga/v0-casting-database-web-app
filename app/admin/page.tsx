@@ -24,6 +24,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
 import { ProtectedRoute } from "@/components/ProtectedRoute"
@@ -68,6 +69,7 @@ interface ActorSubmission {
 }
 
 function AdminPageContent() {
+  const { toast } = useToast()
   const [submissions, setSubmissions] = useState<ActorSubmission[]>([])
   const [existingActors, setExistingActors] = useState<ExistingActor[]>([])
   const [duplicatesMap, setDuplicatesMap] = useState<Record<string, DuplicateMatch[]>>({})
@@ -184,7 +186,7 @@ function AdminPageContent() {
       setSelectedSubmission(null)
     } catch (error) {
       console.error("[v0] Error approving submission:", error)
-      alert("שגיאה באישור הבקשה")
+      toast({ title: "שגיאה", description: "שגיאה באישור הבקשה", variant: "destructive" })
     }
   }
 
@@ -206,7 +208,7 @@ function AdminPageContent() {
       setSelectedSubmission(null)
     } catch (error) {
       console.error("[v0] Error rejecting submission:", error)
-      alert("שגיאה בדחיית הבקשה")
+      toast({ title: "שגיאה", description: "שגיאה בדחיית הבקשה", variant: "destructive" })
     }
   }
 

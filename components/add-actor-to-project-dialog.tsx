@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createBrowserClient } from "@/lib/supabase/client"
 import { assignActorToRole } from "@/lib/actions/casting-actions"
 import { useToast } from "@/hooks/use-toast"
-import { toast } from "sonner"
 
 interface AddActorToProjectDialogProps {
   open: boolean
@@ -101,12 +100,12 @@ export function AddActorToProjectDialog({
       selectedRoleId === "new" ? newRoleName.trim() : roles.find((r) => r.id === selectedRoleId)?.role_name
 
     if (!selectedRoleId || (selectedRoleId === "new" && !newRoleName.trim())) {
-      alert("יש לבחור תפקיד או להזין שם תפקיד חדש")
+      toast({ title: "שגיאה", description: "יש לבחור תפקיד או להזין שם תפקיד חדש", variant: "destructive" })
       return
     }
 
     if (selectedActors.length === 0) {
-      alert("יש לבחור לפחות שחקן אחד")
+      toast({ title: "שגיאה", description: "יש לבחור לפחות שחקן אחד", variant: "destructive" })
       return
     }
 
@@ -145,11 +144,11 @@ export function AddActorToProjectDialog({
       }
 
       if (successCount > 0) {
-        toast.success(`שויכו ${successCount} שחקנים בהצלחה`)
+        toast({ title: "הצלחה", description: `שויכו ${successCount} שחקנים בהצלחה` })
       }
 
       if (errorMessages.length > 0) {
-        alert("חלק מהשחקנים לא שויכו עקב התנגשויות:\n\n" + errorMessages.join("\n"))
+        toast({ title: "התנגשויות", description: errorMessages.join(", "), variant: "destructive" })
       }
 
       if (successCount > 0) {
@@ -158,7 +157,7 @@ export function AddActorToProjectDialog({
       }
     } catch (error) {
       console.error("[v0] Error adding actors to project:", error)
-      toast.error("שגיאה בהוספת שחקנים לפרויקט")
+      toast({ title: "שגיאה", description: "שגיאה בהוספת שחקנים לפרויקט", variant: "destructive" })
     }
   }
 

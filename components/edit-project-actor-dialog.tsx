@@ -74,7 +74,7 @@ export function EditProjectActorDialog({
       onOpenChange(false)
     } catch (error) {
       console.error("Error updating project actor:", error)
-      alert("שגיאה בעדכון פרטי שחקן")
+      toast({ title: "שגיאה", description: "שגיאה בעדכון פרטי שחקן", variant: "destructive" })
     } finally {
       setLoading(false)
     }

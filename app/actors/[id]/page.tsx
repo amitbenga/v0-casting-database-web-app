@@ -15,9 +15,11 @@ import { createClient } from "@/lib/supabase/client"
 import { VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { AppHeader } from "@/components/app-header"
 import { exportActor } from "@/lib/export-utils"
+import { useToast } from "@/hooks/use-toast"
 
 export default function ActorProfile() {
   const params = useParams()
+  const { toast } = useToast()
   const actorId = params?.id as string
 
   const [isEditing, setIsEditing] = useState(false)
@@ -43,7 +45,7 @@ export default function ActorProfile() {
       // Fallback: copy to clipboard
       try {
         await navigator.clipboard.writeText(url)
-        alert('הקישור הועתק ללוח')
+        toast({ title: "הועתק", description: "הקישור הועתק ללוח" })
       } catch (err) {
         console.error('Failed to copy:', err)
       }
@@ -151,7 +153,7 @@ export default function ActorProfile() {
 
       if (error) {
         console.error("[v0] Error updating actor:", error)
-        alert("שגיאה בשמירת הנתונים")
+        toast({ title: "שגיאה", description: "שגיאה בשמירת הנתונים", variant: "destructive" })
         return
       }
 
@@ -159,7 +161,7 @@ export default function ActorProfile() {
       setIsEditing(false)
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("שגיאה בשמירת הנתונים")
+      toast({ title: "שגיאה", description: "שגיאה בשמירת הנתונים", variant: "destructive" })
     }
   }
 
