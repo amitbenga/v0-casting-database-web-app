@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { 
   ProjectRoleWithCasting, 
-  RoleCasting, 
   CastingActionResult,
   CastingStatus,
   RoleConflict 
@@ -26,19 +25,28 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
 
     if (rolesError) throw rolesError
 
-    // 2. Upsert to project_roles
+    const uniqueRawRoleNames = Array.from(new Set((rawRoles || []).map((rawRole) => rawRole.role_name)))
+    const existingRolesByName = new Map<string, string>()
+
+    // 2. Load existing roles once and then upsert to project_roles
+    if (uniqueRawRoleNames.length > 0) {
+      const { data: existingRoles, error: existingRolesError } = await supabase
+        .from("project_roles")
+        .select("id, role_name")
+        .eq("project_id", projectId)
+        .in("role_name", uniqueRawRoleNames)
+
+      if (existingRolesError) throw existingRolesError
+      for (const existingRole of existingRoles || []) {
+        existingRolesByName.set(existingRole.role_name, existingRole.id)
+      }
+    }
+
     for (const rawRole of rawRoles || []) {
       const normalizedName = rawRole.role_name.trim().toLowerCase()
-      
-      // Check if role exists
-      const { data: existingRole } = await supabase
-        .from("project_roles")
-        .select("id")
-        .eq("project_id", projectId)
-        .eq("role_name", rawRole.role_name)
-        .maybeSingle()
 
-      if (existingRole) {
+      const existingRoleId = existingRolesByName.get(rawRole.role_name)
+      if (existingRoleId) {
         // Update existing role - replicas_count is primary, keep replicas_needed in sync
         await supabase
           .from("project_roles")
@@ -48,10 +56,10 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
             replicas_needed: rawRole.replicas_count,
             source: "script"
           })
-          .eq("id", existingRole.id)
+          .eq("id", existingRoleId)
       } else {
         // Create new role - replicas_count is primary, keep replicas_needed in sync
-        await supabase
+        const { data: createdRole, error: createRoleError } = await supabase
           .from("project_roles")
           .insert({
             project_id: projectId,
@@ -61,6 +69,13 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
             replicas_needed: rawRole.replicas_count,
             source: "script"
           })
+          .select("id")
+          .single()
+
+        if (createRoleError) throw createRoleError
+        if (createdRole) {
+          existingRolesByName.set(rawRole.role_name, createdRole.id)
+        }
       }
     }
 
@@ -80,6 +95,14 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
 
     const roleMap = new Map(projectRoles?.map(r => [r.role_name, r.id]))
 
+    const warningUpserts: {
+      project_id: string
+      role_id_a: string
+      role_id_b: string
+      warning_type: string
+      scene_reference: string | null
+    }[] = []
+
     for (const warning of rawWarnings || []) {
       const roleIdA = roleMap.get(warning.role_1_name)
       const roleIdB = roleMap.get(warning.role_2_name)
@@ -88,18 +111,29 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
         // Ensure roleIdA < roleIdB
         const [id1, id2] = roleIdA < roleIdB ? [roleIdA, roleIdB] : [roleIdB, roleIdA]
 
-        await supabase
-          .from("role_conflicts")
-          .upsert({
-            project_id: projectId,
-            role_id_a: id1,
-            role_id_b: id2,
-            warning_type: warning.warning_type,
-            scene_reference: warning.scene_reference,
-          }, {
-            onConflict: "project_id, role_id_a, role_id_b"
-          })
+        warningUpserts.push({
+          project_id: projectId,
+          role_id_a: id1,
+          role_id_b: id2,
+          warning_type: warning.warning_type,
+          scene_reference: warning.scene_reference ?? null,
+        })
       }
+    }
+
+    if (warningUpserts.length > 0) {
+      const dedupedWarnings = new Map<string, (typeof warningUpserts)[number]>()
+      for (const warning of warningUpserts) {
+        dedupedWarnings.set(`${warning.role_id_a}:${warning.role_id_b}`, warning)
+      }
+
+      const { error: warningsUpsertError } = await supabase
+        .from("role_conflicts")
+        .upsert(Array.from(dedupedWarnings.values()), {
+          onConflict: "project_id, role_id_a, role_id_b",
+        })
+
+      if (warningsUpsertError) throw warningsUpsertError
     }
 
     // 4. Mark script as applied
@@ -280,16 +314,18 @@ export async function deleteRole(roleId: string): Promise<CastingActionResult> {
     const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
     
     // 1. Delete related castings first
-    await supabase
+    const { error: deleteCastingsError } = await supabase
       .from("role_castings")
       .delete()
       .eq("role_id", roleId)
+    if (deleteCastingsError) throw deleteCastingsError
 
     // 2. Delete related conflicts
-    await supabase
+    const { error: deleteConflictsError } = await supabase
       .from("role_conflicts")
       .delete()
       .or(`role_id_a.eq.${roleId},role_id_b.eq.${roleId}`)
+    if (deleteConflictsError) throw deleteConflictsError
 
     // 3. Delete child roles (if this is a parent)
     const { data: children } = await supabase
@@ -298,11 +334,26 @@ export async function deleteRole(roleId: string): Promise<CastingActionResult> {
       .eq("parent_role_id", roleId)
 
     if (children && children.length > 0) {
-      for (const child of children) {
-        await supabase.from("role_castings").delete().eq("role_id", child.id)
-        await supabase.from("role_conflicts").delete().or(`role_id_a.eq.${child.id},role_id_b.eq.${child.id}`)
-      }
-      await supabase.from("project_roles").delete().eq("parent_role_id", roleId)
+      const childRoleIds = children.map((child) => child.id)
+
+      const { error: deleteChildCastingsError } = await supabase
+        .from("role_castings")
+        .delete()
+        .in("role_id", childRoleIds)
+      if (deleteChildCastingsError) throw deleteChildCastingsError
+
+      const [{ error: deleteChildConflictsAError }, { error: deleteChildConflictsBError }] = await Promise.all([
+        supabase.from("role_conflicts").delete().in("role_id_a", childRoleIds),
+        supabase.from("role_conflicts").delete().in("role_id_b", childRoleIds),
+      ])
+      if (deleteChildConflictsAError) throw deleteChildConflictsAError
+      if (deleteChildConflictsBError) throw deleteChildConflictsBError
+
+      const { error: deleteChildRolesError } = await supabase
+        .from("project_roles")
+        .delete()
+        .in("id", childRoleIds)
+      if (deleteChildRolesError) throw deleteChildRolesError
     }
 
     // 4. Delete the role itself

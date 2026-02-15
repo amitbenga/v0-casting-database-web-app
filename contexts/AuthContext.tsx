@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
@@ -29,6 +29,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
+  const loadProfile = useCallback(async (userId: string, userEmail?: string) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("id, email, full_name, role")
+        .eq("id", userId)
+        .maybeSingle()
+
+      if (error) {
+        console.warn("[Auth] user_profiles table not found or not accessible, using default profile")
+        // Create a default profile from user data
+        setProfile({
+          id: userId,
+          email: userEmail || user?.email || "",
+          full_name: userEmail?.split("@")[0] || user?.email?.split("@")[0] || "User",
+          role: "admin", // Default to admin for now
+        })
+      } else if (data) {
+        setProfile(data)
+      } else {
+        // No profile found, create default
+        setProfile({
+          id: userId,
+          email: userEmail || user?.email || "",
+          full_name: userEmail?.split("@")[0] || user?.email?.split("@")[0] || "User",
+          role: "admin",
+        })
+      }
+    } catch (error) {
+      console.error("[Auth] Error loading profile:", error)
+      // Fallback to default profile
+      setProfile({
+        id: userId,
+        email: userEmail || user?.email || "",
+        full_name: "User",
+        role: "admin",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.email])
+
   useEffect(() => {
     const supabase = createClient()
 
@@ -36,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        loadProfile(session.user.id)
+        loadProfile(session.user.id, session.user.email)
       } else {
         setLoading(false)
       }
@@ -48,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        loadProfile(session.user.id)
+        loadProfile(session.user.id, session.user.email)
       } else {
         setProfile(null)
         setLoading(false)
@@ -56,46 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
-
-  async function loadProfile(userId: string) {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase.from("user_profiles").select("*").eq("id", userId)
-
-      if (error) {
-        console.warn("[Auth] user_profiles table not found or not accessible, using default profile")
-        // Create a default profile from user data
-        setProfile({
-          id: userId,
-          email: user?.email || "",
-          full_name: user?.email?.split("@")[0] || "User",
-          role: "admin", // Default to admin for now
-        })
-      } else if (data && data.length > 0) {
-        setProfile(data[0])
-      } else {
-        // No profile found, create default
-        setProfile({
-          id: userId,
-          email: user?.email || "",
-          full_name: user?.email?.split("@")[0] || "User",
-          role: "admin",
-        })
-      }
-    } catch (error) {
-      console.error("[Auth] Error loading profile:", error)
-      // Fallback to default profile
-      setProfile({
-        id: userId,
-        email: user?.email || "",
-        full_name: "User",
-        role: "admin",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [loadProfile])
 
   async function signIn(email: string, password: string) {
     try {

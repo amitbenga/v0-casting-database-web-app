@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -58,27 +58,36 @@ import type { ProjectRoleWithCasting, RoleConflict, CastingStatus } from "@/lib/
 import { CASTING_STATUS_LIST, CASTING_STATUS_COLORS } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
+const EMPTY_CONFLICTS: RoleConflict[] = []
+
+async function runInChunks<T, R>(
+  items: T[],
+  worker: (item: T) => Promise<R>,
+  chunkSize: number
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = []
+
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize)
+    const chunkResults = await Promise.allSettled(chunk.map(worker))
+    results.push(...chunkResults)
+  }
+
+  return results
+}
+
 // ---------- Conflict Tooltip ----------
 
 function ConflictTooltip({
   roleId,
-  conflicts,
-  allRoles,
+  roleConflicts,
+  roleLookup,
 }: {
   roleId: string
-  conflicts: RoleConflict[]
-  allRoles: ProjectRoleWithCasting[]
+  roleConflicts: RoleConflict[]
+  roleLookup: Map<string, string>
 }) {
-  const roleConflicts = conflicts.filter(
-    (c) => c.role_id_a === roleId || c.role_id_b === roleId
-  )
   if (roleConflicts.length === 0) return null
-
-  const roleLookup = new Map<string, string>()
-  for (const r of allRoles) {
-    roleLookup.set(r.id, r.role_name)
-    r.children?.forEach((c) => roleLookup.set(c.id, c.role_name))
-  }
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -120,14 +129,14 @@ function ConflictTooltip({
 
 interface RoleRowProps {
   role: ProjectRoleWithCasting
-  conflicts: RoleConflict[]
-  allRoles: ProjectRoleWithCasting[]
+  roleConflicts: RoleConflict[]
+  roleLookup: Map<string, string>
   isSelected: boolean
   onRoleNameClick: (roleId: string, e: React.MouseEvent) => void
   onUpdate: () => void
 }
 
-function RoleRow({ role, conflicts, allRoles, isSelected, onRoleNameClick, onUpdate }: RoleRowProps) {
+function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick, onUpdate }: RoleRowProps) {
   const { toast } = useToast()
   const [showSearch, setShowSearch] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
@@ -218,7 +227,7 @@ function RoleRow({ role, conflicts, allRoles, isSelected, onRoleNameClick, onUpd
       </div>
 
       {/* Conflict indicator */}
-      <ConflictTooltip roleId={role.id} conflicts={conflicts} allRoles={allRoles} />
+      <ConflictTooltip roleId={role.id} roleConflicts={roleConflicts} roleLookup={roleLookup} />
 
       {/* Casting section */}
       <div className="flex-1 flex items-center justify-end gap-2">
@@ -290,6 +299,7 @@ interface CastingWorkspaceProps {
 
 export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
   const { toast } = useToast()
+  const BULK_CONCURRENCY = 8
   const [roles, setRoles] = useState<ProjectRoleWithCasting[]>([])
   const [conflicts, setConflicts] = useState<RoleConflict[]>([])
   const [loading, setLoading] = useState(true)
@@ -346,6 +356,34 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     }
     return flat
   }, [roles])
+
+  const roleLookup = useMemo(() => {
+    const lookup = new Map<string, string>()
+    for (const role of flatRoles) {
+      lookup.set(role.id, role.role_name)
+    }
+    return lookup
+  }, [flatRoles])
+
+  const conflictsByRoleId = useMemo(() => {
+    const byRoleId = new Map<string, RoleConflict[]>()
+    for (const conflict of conflicts) {
+      const forRoleA = byRoleId.get(conflict.role_id_a)
+      if (forRoleA) {
+        forRoleA.push(conflict)
+      } else {
+        byRoleId.set(conflict.role_id_a, [conflict])
+      }
+
+      const forRoleB = byRoleId.get(conflict.role_id_b)
+      if (forRoleB) {
+        forRoleB.push(conflict)
+      } else {
+        byRoleId.set(conflict.role_id_b, [conflict])
+      }
+    }
+    return byRoleId
+  }, [conflicts])
 
   // Filter + sort on flat list
   const filteredRoles = useMemo(() => {
@@ -419,26 +457,31 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
   // Bulk assign actor to all selected roles
   const handleBulkAssign = async (actor: { id: string; name: string; image_url?: string }) => {
     setIsBulkAssigning(true)
-    let successCount = 0
-    const ids = Array.from(selectedRoleIds)
+    try {
+      const ids = Array.from(selectedRoleIds)
+      const results = await runInChunks(
+        ids,
+        (roleId) => assignActorToRole(roleId, actor.id),
+        BULK_CONCURRENCY
+      )
 
-    for (const roleId of ids) {
-      try {
-        const result = await assignActorToRole(roleId, actor.id)
-        if (result.success) successCount++
-      } catch {
-        // continue with next
-      }
+      const successCount = results.reduce((count, result) => {
+        if (result.status === "fulfilled" && result.value.success) {
+          return count + 1
+        }
+        return count
+      }, 0)
+
+      toast({
+        title: `${actor.name} שובץ ל-${successCount} תפקידים`,
+      })
+
+      setShowAssignSearch(false)
+      clearSelection()
+      loadRoles()
+    } finally {
+      setIsBulkAssigning(false)
     }
-
-    toast({
-      title: `${actor.name} שובץ ל-${successCount} תפקידים`,
-    })
-
-    setIsBulkAssigning(false)
-    setShowAssignSearch(false)
-    clearSelection()
-    loadRoles()
   }
 
   // Bulk delete
@@ -447,21 +490,23 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     if (!confirm(`האם למחוק ${count} תפקידים?`)) return
 
     setIsBulkDeleting(true)
-    let deleted = 0
+    try {
+      const ids = Array.from(selectedRoleIds)
+      const results = await runInChunks(ids, (roleId) => deleteRole(roleId), BULK_CONCURRENCY)
 
-    for (const roleId of selectedRoleIds) {
-      try {
-        const result = await deleteRole(roleId)
-        if (result.success) deleted++
-      } catch {
-        // continue
-      }
+      const deleted = results.reduce((count, result) => {
+        if (result.status === "fulfilled" && result.value.success) {
+          return count + 1
+        }
+        return count
+      }, 0)
+
+      toast({ title: `${deleted} תפקידים נמחקו` })
+      clearSelection()
+      loadRoles()
+    } finally {
+      setIsBulkDeleting(false)
     }
-
-    toast({ title: `${deleted} תפקידים נמחקו` })
-    setIsBulkDeleting(false)
-    clearSelection()
-    loadRoles()
   }
 
   const handleCreateRole = async () => {
@@ -750,8 +795,8 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
               <RoleRow
                 key={role.id}
                 role={role}
-                conflicts={conflicts}
-                allRoles={roles}
+                roleConflicts={conflictsByRoleId.get(role.id) || EMPTY_CONFLICTS}
+                roleLookup={roleLookup}
                 isSelected={selectedRoleIds.has(role.id)}
                 onRoleNameClick={handleRoleNameClick}
                 onUpdate={loadRoles}

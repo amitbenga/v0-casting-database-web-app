@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { type Actor, VAT_STATUS_LABELS } from "@/lib/types"
-import { exportActor } from "@/lib/export-utils"
 
 interface ActorCardProps {
   actor: Actor
@@ -123,9 +122,10 @@ export function ActorCard({
     }
   }
 
-  const handleExport = (e: React.MouseEvent, format: "pdf" | "excel") => {
+  const handleExport = async (e: React.MouseEvent, format: "pdf" | "excel") => {
     e.preventDefault()
     e.stopPropagation()
+    const { exportActor } = await import("@/lib/export-utils")
     exportActor(actor, format)
   }
 

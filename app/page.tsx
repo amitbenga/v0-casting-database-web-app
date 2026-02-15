@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
+import { useState, useEffect, useRef, useMemo, useDeferredValue } from "react"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
@@ -16,7 +16,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectFolderDialog } from "@/components/select-folder-dialog"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { useAuth } from "@/contexts/AuthContext"
-import { exportActors } from "@/lib/export-utils"
 import { useToast } from "@/hooks/use-toast"
 import {
   DropdownMenu,
@@ -27,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const PAGE_SIZE = 20
+const ACTOR_SELECT_FIELDS =
+  "id,full_name,gender,birth_year,phone,email,is_singer,is_course_grad,vat_status,image_url,voice_sample_url,notes,city,skills,languages,other_lang_text,created_at,updated_at,dubbing_experience_years,singing_styles,singing_styles_other,is_draft"
 
 // Mapper function to convert DB record to Actor type
 function mapActor(actor: any): Actor {
@@ -63,7 +64,7 @@ async function fetchActorsPage(cursor: string | null): Promise<{ actors: Actor[]
   
   let query = supabase
     .from("actors")
-    .select("*")
+    .select(ACTOR_SELECT_FIELDS)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE)
@@ -102,6 +103,7 @@ function ActorsDatabaseContent() {
   const [activeTab, setActiveTab] = useState<"all" | "favorites" | "drafts">("all")
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const [selectedActorForFolder, setSelectedActorForFolder] = useState<Actor | null>(null)
+  const deferredSearchQuery = useDeferredValue(searchQuery)
   const [filters, setFilters] = useState<FilterState>({
     gender: [],
     ageMin: 18,
@@ -116,7 +118,6 @@ function ActorsDatabaseContent() {
     singingStyles: [],
   })
   const [bulkFolderDialogOpen, setBulkFolderDialogOpen] = useState(false)
-  const [loading, setLoading] = useState(false) // Declare the loading variable
   
   // Infinite scroll observer ref
   const loadMoreRef = useRef<HTMLDivElement>(null)
@@ -131,7 +132,7 @@ function ActorsDatabaseContent() {
     return ["actors", previousPageData?.nextCursor]
   }
   
-  const { data, error, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(
+  const { data, size, setSize, isLoading, mutate } = useSWRInfinite(
     getKey,
     ([, cursor]) => fetchActorsPage(cursor as string | null),
     {
@@ -142,7 +143,7 @@ function ActorsDatabaseContent() {
   )
   
   // Flatten all pages into single actors array
-  const actors = data ? data.flatMap(page => page.actors) : []
+  const actors = useMemo(() => (data ? data.flatMap((page) => page.actors) : []), [data])
   const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === "undefined")
   const isEmpty = data?.[0]?.actors.length === 0
   const isReachingEnd = isEmpty || (data && data[data.length - 1]?.nextCursor === null)
@@ -152,7 +153,7 @@ function ActorsDatabaseContent() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isLoadingMore && !isReachingEnd) {
-          setSize(size + 1)
+          setSize((currentSize) => currentSize + 1)
         }
       },
       { threshold: 0.1 }
@@ -163,7 +164,7 @@ function ActorsDatabaseContent() {
     }
     
     return () => observer.disconnect()
-  }, [isLoadingMore, isReachingEnd, size, setSize])
+  }, [isLoadingMore, isReachingEnd, setSize])
   
   // Load favorites
   useEffect(() => {
@@ -186,16 +187,21 @@ function ActorsDatabaseContent() {
     loadFavorites()
   }, [user])
 
+  const favoriteIdsSet = useMemo(() => new Set(favorites), [favorites])
+  const selectedActorIdsSet = useMemo(() => new Set(selectedActors), [selectedActors])
+
   const handleToggleFavorite = async (actorId: string) => {
+    if (!user?.id) return
+
     const supabase = createClient()
-    const isFavorited = favorites.includes(actorId)
+    const isFavorited = favoriteIdsSet.has(actorId)
 
     try {
       if (isFavorited) {
         const { error } = await supabase
           .from("favorites")
           .delete()
-          .eq("user_id", user?.id)
+          .eq("user_id", user.id)
           .eq("actor_id", actorId)
 
         if (error) {
@@ -205,7 +211,7 @@ function ActorsDatabaseContent() {
 
         setFavorites((prev) => prev.filter((id) => id !== actorId))
       } else {
-        const { error } = await supabase.from("favorites").insert({ user_id: user?.id, actor_id: actorId })
+        const { error } = await supabase.from("favorites").insert({ user_id: user.id, actor_id: actorId })
 
         if (error) {
           console.error("[v0] Error adding to favorites:", error)
@@ -224,19 +230,16 @@ function ActorsDatabaseContent() {
   }
 
   const handleAddToProject = (actor: Actor) => {
-    console.log("[v0] Add to project:", actor.full_name)
     // TODO: פתיחת דיאלוג לבחירת פרויקט
     toast({ title: "בקרוב", description: `הוספת ${actor.full_name} לפרויקט תהיה זמינה בקרוב.` })
   }
 
   const handleAddToFolder = (actor: Actor) => {
-    console.log("[v0] Add to folder:", actor.full_name)
     setSelectedActorForFolder(actor)
     setFolderDialogOpen(true)
   }
 
   const handleEdit = (actor: Actor) => {
-    console.log("[v0] Edit actor:", actor.full_name)
     // Navigate to edit page
     window.location.href = `/actors/${actor.id}`
   }
@@ -269,13 +272,27 @@ function ActorsDatabaseContent() {
   }
 
   const handleBulkAddToFavorites = async () => {
-    const supabase = createClient()
-    for (const actorId of selectedActors) {
-      if (!favorites.includes(actorId)) {
-        await supabase.from("favorites").insert({ user_id: user?.id, actor_id: actorId })
-      }
+    if (!user?.id || selectedActors.length === 0) return
+
+    const actorIdsToAdd = selectedActors.filter((actorId) => !favoriteIdsSet.has(actorId))
+    if (actorIdsToAdd.length === 0) {
+      setSelectedActors([])
+      return
     }
-    setFavorites((prev) => [...new Set([...prev, ...selectedActors])])
+
+    const supabase = createClient()
+    const { error } = await supabase.from("favorites").upsert(
+      actorIdsToAdd.map((actorId) => ({ user_id: user.id, actor_id: actorId })),
+      { onConflict: "user_id,actor_id" }
+    )
+
+    if (error) {
+      console.error("[v0] Error adding bulk favorites:", error)
+      toast({ title: "שגיאה", description: "שגיאה בהוספה למועדפים", variant: "destructive" })
+      return
+    }
+
+    setFavorites((prev) => [...new Set([...prev, ...actorIdsToAdd])])
     setSelectedActors([])
   }
 
@@ -292,18 +309,26 @@ function ActorsDatabaseContent() {
     if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedActors.length} שחקנים?`)) {
       return
     }
+    if (selectedActors.length === 0) return
+
+    const actorIdsToDelete = [...selectedActors]
+    const actorIdsToDeleteSet = new Set(actorIdsToDelete)
     const supabase = createClient()
-    for (const actorId of selectedActors) {
-      await supabase.from("actors").delete().eq("id", actorId)
+    const { error } = await supabase.from("actors").delete().in("id", actorIdsToDelete)
+    if (error) {
+      console.error("[v0] Error deleting actors:", error)
+      toast({ title: "שגיאה", description: "שגיאה במחיקת שחקנים", variant: "destructive" })
+      return
     }
+
     mutate((prevData) => {
       if (!prevData) return prevData
       return prevData.map((page) => ({
         ...page,
-        actors: page.actors.filter((actor) => !selectedActors.includes(actor.id)),
+        actors: page.actors.filter((actor) => !actorIdsToDeleteSet.has(actor.id)),
       }))
     })
-    setFavorites((prev) => prev.filter((id) => !selectedActors.includes(id)))
+    setFavorites((prev) => prev.filter((id) => !actorIdsToDeleteSet.has(id)))
     setSelectedActors([])
   }
 
@@ -311,13 +336,20 @@ function ActorsDatabaseContent() {
     setSelectedActors([])
   }
 
-  const handleBulkExport = (format: "pdf" | "excel") => {
-    const selectedActorObjects = actors.filter((actor) => selectedActors.includes(actor.id))
+  const handleBulkExport = async (format: "pdf" | "excel") => {
+    const selectedActorObjects = actors.filter((actor) => selectedActorIdsSet.has(actor.id))
     if (selectedActorObjects.length === 0) {
       toast({ title: "שגיאה", description: "אין שחקנים נבחרים", variant: "destructive" })
       return
     }
-    exportActors(selectedActorObjects, format, "selected_actors")
+
+    try {
+      const { exportActors } = await import("@/lib/export-utils")
+      exportActors(selectedActorObjects, format, "selected_actors")
+    } catch (error) {
+      console.error("[v0] Error exporting actors:", error)
+      toast({ title: "שגיאה", description: "שגיאה בייצוא השחקנים", variant: "destructive" })
+    }
   }
 
   // Shuffle seed based on the current date so it changes daily but stays stable within a session
@@ -347,102 +379,98 @@ function ActorsDatabaseContent() {
   }, [actors, shuffleSeed])
 
   // Separate draft and non-draft actors
-  const draftActors = shuffledActors.filter((actor) => actor.is_draft)
-  const nonDraftActors = shuffledActors.filter((actor) => !actor.is_draft)
-
-  const displayedActors = activeTab === "drafts"
-    ? draftActors
-    : activeTab === "favorites"
-      ? nonDraftActors.filter((actor) => favorites.includes(actor.id))
-      : nonDraftActors
-
-  const filteredActors = displayedActors
-    .filter((actor) => {
-      const currentYear = new Date().getFullYear()
-      const actorAge = currentYear - actor.birth_year
-
-      const query = searchQuery.toLowerCase()
-      const matchesSearch =
-        actor.full_name.toLowerCase().includes(query) ||
-        actor.phone.toLowerCase().includes(query) ||
-        actor.email.toLowerCase().includes(query) ||
-        actor.notes.toLowerCase().includes(query) ||
-        actor.skills.some((skill) => skill.label.toLowerCase().includes(query)) ||
-        actor.languages.some((lang) => lang.label.toLowerCase().includes(query)) ||
-        (actor.other_lang_text?.toLowerCase().includes(query) ?? false) ||
-        (actor.city?.toLowerCase().includes(query) ?? false)
-
-      if (!matchesSearch) return false
-
-      if (filters.gender.length > 0 && !filters.gender.includes(actor.gender)) {
-        return false
+  const [draftActors, nonDraftActors] = useMemo(() => {
+    const draft: Actor[] = []
+    const nonDraft: Actor[] = []
+    for (const actor of shuffledActors) {
+      if (actor.is_draft) {
+        draft.push(actor)
+      } else {
+        nonDraft.push(actor)
       }
+    }
+    return [draft, nonDraft]
+  }, [shuffledActors])
 
-      if (actorAge < filters.ageMin || actorAge > filters.ageMax) {
-        return false
-      }
+  const displayedActors = useMemo(() => {
+    if (activeTab === "drafts") return draftActors
+    if (activeTab === "favorites") {
+      return nonDraftActors.filter((actor) => favoriteIdsSet.has(actor.id))
+    }
+    return nonDraftActors
+  }, [activeTab, draftActors, nonDraftActors, favoriteIdsSet])
 
-      if (filters.isSinger !== null && actor.is_singer !== filters.isSinger) {
-        return false
-      }
+  const filteredActors = useMemo(() => {
+    const currentYear = new Date().getFullYear()
+    const query = deferredSearchQuery.trim().toLowerCase()
 
-      if (filters.isCourseGrad !== null && actor.is_course_grad !== filters.isCourseGrad) {
-        return false
-      }
+    return displayedActors
+      .filter((actor) => {
+        const actorAge = currentYear - actor.birth_year
+        const matchesSearch =
+          query.length === 0 ||
+          actor.full_name.toLowerCase().includes(query) ||
+          actor.phone.toLowerCase().includes(query) ||
+          actor.email.toLowerCase().includes(query) ||
+          actor.notes.toLowerCase().includes(query) ||
+          actor.skills.some((skill) => skill.label.toLowerCase().includes(query)) ||
+          actor.languages.some((lang) => lang.label.toLowerCase().includes(query)) ||
+          (actor.other_lang_text?.toLowerCase().includes(query) ?? false) ||
+          (actor.city?.toLowerCase().includes(query) ?? false)
 
-      if (filters.skills.length > 0) {
-        const actorSkills = actor.skills.map((s) => s.key)
-        const hasSkill = filters.skills.some((skill) => actorSkills.includes(skill))
-        if (!hasSkill) return false
-      }
+        if (!matchesSearch) return false
+        if (filters.gender.length > 0 && !filters.gender.includes(actor.gender)) return false
+        if (actorAge < filters.ageMin || actorAge > filters.ageMax) return false
+        if (filters.isSinger !== null && actor.is_singer !== filters.isSinger) return false
+        if (filters.isCourseGrad !== null && actor.is_course_grad !== filters.isCourseGrad) return false
 
-      if (filters.languages.length > 0) {
-        const actorLangs = actor.languages.map((l) => l.key)
-        const hasLang = filters.languages.some((lang) => actorLangs.includes(lang))
-        if (!hasLang) return false
-      }
+        if (filters.skills.length > 0) {
+          const hasSkill = actor.skills.some((skill) => filters.skills.includes(skill.key))
+          if (!hasSkill) return false
+        }
 
-      if (filters.vatStatus.length > 0 && !filters.vatStatus.includes(actor.vat_status)) {
-        return false
-      }
+        if (filters.languages.length > 0) {
+          const hasLang = actor.languages.some((lang) => filters.languages.includes(lang.key))
+          if (!hasLang) return false
+        }
 
-      // סינון לפי ניסיון בדיבוב
-      if (filters.dubbingExperience && filters.dubbingExperience.length > 0) {
-        const actorYears = actor.dubbing_experience_years || 0
-        const matchesRange = filters.dubbingExperience.some((range) => {
-          if (range === "0-1") return actorYears >= 0 && actorYears <= 1
-          if (range === "2-4") return actorYears >= 2 && actorYears <= 4
-          if (range === "5+") return actorYears >= 5
-          return false
-        })
-        if (!matchesRange) return false
-      }
+        if (filters.vatStatus.length > 0 && !filters.vatStatus.includes(actor.vat_status)) return false
 
-      // סינון לפי סגנונות שירה
-      if (filters.singingStyles && filters.singingStyles.length > 0) {
-        const actorStyles = (actor.singing_styles || []) as { style: string; level: string }[]
-        const actorStyleKeys = actorStyles.map(s => s.style)
-        const hasMatchingStyle = filters.singingStyles.some(style => actorStyleKeys.includes(style))
-        if (!hasMatchingStyle) return false
-      }
+        // סינון לפי ניסיון בדיבוב
+        if (filters.dubbingExperience && filters.dubbingExperience.length > 0) {
+          const actorYears = actor.dubbing_experience_years || 0
+          const matchesRange = filters.dubbingExperience.some((range) => {
+            if (range === "0-1") return actorYears >= 0 && actorYears <= 1
+            if (range === "2-4") return actorYears >= 2 && actorYears <= 4
+            if (range === "5+") return actorYears >= 5
+            return false
+          })
+          if (!matchesRange) return false
+        }
 
-      return true
-    })
-    .sort((a, b) => {
-      const currentYear = new Date().getFullYear()
+        // סינון לפי סגנונות שירה
+        if (filters.singingStyles && filters.singingStyles.length > 0) {
+          const actorStyles = (actor.singing_styles || []) as { style: string; level: string }[]
+          const hasMatchingStyle = actorStyles.some((style) => filters.singingStyles.includes(style.style))
+          if (!hasMatchingStyle) return false
+        }
 
-      switch (filters.sortBy) {
-        case "alphabetical":
-          return a.full_name.localeCompare(b.full_name, "he")
-        case "age-asc":
-          return currentYear - b.birth_year - (currentYear - a.birth_year)
-        case "age-desc":
-          return currentYear - a.birth_year - (currentYear - b.birth_year)
-        case "newest":
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      }
-    })
+        return true
+      })
+      .sort((a, b) => {
+        switch (filters.sortBy) {
+          case "alphabetical":
+            return a.full_name.localeCompare(b.full_name, "he")
+          case "age-asc":
+            return a.birth_year - b.birth_year
+          case "age-desc":
+            return b.birth_year - a.birth_year
+          case "newest":
+          default:
+            return b.created_at.localeCompare(a.created_at)
+        }
+      })
+  }, [deferredSearchQuery, displayedActors, filters])
   if (isLoading && !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -625,8 +653,8 @@ function ActorsDatabaseContent() {
                     <ActorCard
                       key={actor.id}
                       actor={actor}
-                      isSelected={selectedActors.includes(actor.id)}
-                      isFavorited={favorites.includes(actor.id)}
+                      isSelected={selectedActorIdsSet.has(actor.id)}
+                      isFavorited={favoriteIdsSet.has(actor.id)}
                       onToggleFavorite={handleToggleFavorite}
                       onToggleSelect={handleToggleSelect}
                       onAddToProject={handleAddToProject}
@@ -663,8 +691,8 @@ function ActorsDatabaseContent() {
                     <ActorCard
                       key={actor.id}
                       actor={actor}
-                      isSelected={selectedActors.includes(actor.id)}
-                      isFavorited={favorites.includes(actor.id)}
+                      isSelected={selectedActorIdsSet.has(actor.id)}
+                      isFavorited={favoriteIdsSet.has(actor.id)}
                       onToggleFavorite={handleToggleFavorite}
                       onToggleSelect={handleToggleSelect}
                       onAddToProject={handleAddToProject}
@@ -692,8 +720,8 @@ function ActorsDatabaseContent() {
                     <ActorCard
                       key={actor.id}
                       actor={actor}
-                      isSelected={selectedActors.includes(actor.id)}
-                      isFavorited={favorites.includes(actor.id)}
+                      isSelected={selectedActorIdsSet.has(actor.id)}
+                      isFavorited={favoriteIdsSet.has(actor.id)}
                       onToggleFavorite={handleToggleFavorite}
                       onToggleSelect={handleToggleSelect}
                       onAddToProject={handleAddToProject}
@@ -729,7 +757,7 @@ function ActorsDatabaseContent() {
           open={bulkFolderDialogOpen}
           onOpenChange={setBulkFolderDialogOpen}
           actorIds={selectedActors}
-          actorNames={actors.filter((a) => selectedActors.includes(a.id)).map((a) => a.full_name)}
+          actorNames={actors.filter((a) => selectedActorIdsSet.has(a.id)).map((a) => a.full_name)}
           onSuccess={() => setSelectedActors([])}
         />
       )}
