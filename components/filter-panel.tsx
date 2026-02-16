@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Slider } from "@/components/ui/slider"
-import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, DUBBING_EXPERIENCE_RANGES, SINGING_STYLES_LIST, type SingingStyle, type FilterState } from "@/lib/types"
+import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, DUBBING_EXPERIENCE_RANGES, SINGING_STYLES_LIST, type Gender, type SingingStyle, type VatStatus, type FilterState } from "@/lib/types"
 
 interface FilterPanelProps {
   onFilterChange?: (filters: FilterState) => void
@@ -38,7 +38,7 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
     onFilterChange?.(updated)
   }
 
-  const handleGenderChange = (gender: string, checked: boolean) => {
+  const handleGenderChange = (gender: Gender, checked: boolean) => {
     const newGender = checked ? [...filters.gender, gender] : filters.gender.filter((g) => g !== gender)
     updateFilters({ gender: newGender })
   }
@@ -53,7 +53,7 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
     updateFilters({ languages: newLanguages })
   }
 
-  const handleVatChange = (vatKey: string, checked: boolean) => {
+  const handleVatChange = (vatKey: VatStatus, checked: boolean) => {
     const newVat = checked ? [...filters.vatStatus, vatKey] : filters.vatStatus.filter((v) => v !== vatKey)
     updateFilters({ vatStatus: newVat })
   }
@@ -110,15 +110,15 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
             <AccordionTrigger className="text-xs md:text-sm font-medium py-2 md:py-3">מין</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2 md:space-y-3">
-                {[
+                {([
                   { key: "male", label: "זכר" },
                   { key: "female", label: "נקבה" },
-                ].map((gender) => (
+                ] as const).map((gender) => (
                   <div key={gender.key} className="flex items-center gap-2">
                     <Checkbox
                       id={`gender-${gender.key}`}
                       checked={filters.gender.includes(gender.key)}
-                      onCheckedChange={(checked) => handleGenderChange(gender.key, checked as boolean)}
+                      onCheckedChange={(checked) => handleGenderChange(gender.key as Gender, checked as boolean)}
                       className="h-4 w-4"
                     />
                     <Label htmlFor={`gender-${gender.key}`} className="text-xs md:text-sm font-normal cursor-pointer">
@@ -313,16 +313,16 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
             <AccordionTrigger className="text-xs md:text-sm font-medium py-2 md:py-3">מעמד במע״מ</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2 md:space-y-3">
-                {Object.entries(VAT_STATUS_LABELS).map(([key, label]) => (
+                {(Object.keys(VAT_STATUS_LABELS) as VatStatus[]).map((key) => (
                   <div key={key} className="flex items-center gap-2">
                     <Checkbox
                       id={`vat-${key}`}
                       checked={filters.vatStatus.includes(key)}
-                      onCheckedChange={(checked) => handleVatChange(key, checked as boolean)}
+                      onCheckedChange={(checked) => handleVatChange(key as VatStatus, checked as boolean)}
                       className="h-4 w-4"
                     />
                     <Label htmlFor={`vat-${key}`} className="text-xs md:text-sm font-normal cursor-pointer">
-                      {label}
+                      {VAT_STATUS_LABELS[key]}
                     </Label>
                   </div>
                 ))}
@@ -335,7 +335,7 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
             <AccordionContent>
               <RadioGroup
                 value={filters.sortBy}
-                onValueChange={(value) => updateFilters({ sortBy: value })}
+                onValueChange={(value) => updateFilters({ sortBy: value as FilterState["sortBy"] })}
                 className="space-y-2 md:space-y-3"
               >
                 <div className="flex items-center gap-2">
