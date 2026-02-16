@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,19 +27,13 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
   const [actors, setActors] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      loadActors()
-    }
-  }, [open])
-
-  async function loadActors() {
+  const loadActors = useCallback(async () => {
     try {
       setLoading(true)
       const supabase = createClient()
 
       const [actorsResult, folderActorsResult] = await Promise.all([
-        supabase.from("actors").select("*").order("full_name"),
+        supabase.from("actors").select("id, full_name, gender, birth_year, image_url").order("full_name"),
         supabase.from("folder_actors").select("actor_id").eq("folder_id", folderId),
       ])
 
@@ -55,7 +49,13 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
     } finally {
       setLoading(false)
     }
-  }
+  }, [folderId])
+
+  useEffect(() => {
+    if (open) {
+      loadActors()
+    }
+  }, [loadActors, open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -100,7 +100,13 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
     }
   }
 
-  const filteredActors = actors.filter((actor) => actor.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const selectedActorIdsSet = useMemo(() => new Set(selectedActors), [selectedActors])
+
+  const filteredActors = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return actors
+    return actors.filter((actor) => actor.full_name.toLowerCase().includes(query))
+  }, [actors, searchQuery])
 
   const toggleActor = (actorId: string) => {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
@@ -144,12 +150,12 @@ export function AddActorToFolderDialog({ open, onOpenChange, folderId, onActorsA
                 <Card
                   key={actor.id}
                   className={`p-4 cursor-pointer transition-colors ${
-                    selectedActors.includes(actor.id) ? "border-primary bg-primary/5" : ""
+                    selectedActorIdsSet.has(actor.id) ? "border-primary bg-primary/5" : ""
                   }`}
                   onClick={() => toggleActor(actor.id)}
                 >
                   <div className="flex items-center gap-4">
-                    <Checkbox checked={selectedActors.includes(actor.id)} />
+                    <Checkbox checked={selectedActorIdsSet.has(actor.id)} />
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                       {actor.image_url ? (
                         <img

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   ChevronRight,
@@ -73,10 +73,12 @@ interface ActorSubmission {
   created_at: string
 }
 
+const normalizeEmail = (email?: string) => email?.toLowerCase().trim() || ""
+const normalizePhone = (phone?: string) => phone?.replace(/\D/g, "") || ""
+
 function AdminPageContent() {
   const { toast } = useToast()
   const [submissions, setSubmissions] = useState<ActorSubmission[]>([])
-  const [existingActors, setExistingActors] = useState<ExistingActor[]>([])
   const [duplicatesMap, setDuplicatesMap] = useState<Record<string, DuplicateMatch[]>>({})
   const [loading, setLoading] = useState(true)
   const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
@@ -110,37 +112,61 @@ function AdminPageContent() {
       if (actorsError) throw actorsError
 
       setSubmissions(submissionsData || [])
-      setExistingActors(actorsData || [])
 
-      // בדוק כפילויות
+      // בדוק כפילויות עם אינדקסים כדי להימנע מלולאה כפולה מלאה
       const duplicates: Record<string, DuplicateMatch[]> = {}
-      
-      for (const submission of submissionsData || []) {
-        const matches: DuplicateMatch[] = []
-        
-        for (const actor of actorsData || []) {
-          const normalizedSubmissionEmail = submission.normalized_email || submission.email?.toLowerCase().trim()
-          const normalizedSubmissionPhone = submission.normalized_phone || submission.phone?.replace(/\D/g, "")
-          
-          const normalizedActorEmail = actor.email?.toLowerCase().trim()
-          const normalizedActorPhone = actor.phone?.replace(/\D/g, "")
-          
-          const emailMatch = normalizedSubmissionEmail && normalizedActorEmail && 
-                           normalizedSubmissionEmail === normalizedActorEmail
-          const phoneMatch = normalizedSubmissionPhone && normalizedActorPhone && 
-                           normalizedSubmissionPhone === normalizedActorPhone
+      const actorsByEmail = new Map<string, ExistingActor[]>()
+      const actorsByPhone = new Map<string, ExistingActor[]>()
 
-          if (emailMatch && phoneMatch) {
-            matches.push({ actor, matchType: "both" })
-          } else if (emailMatch) {
-            matches.push({ actor, matchType: "email" })
-          } else if (phoneMatch) {
-            matches.push({ actor, matchType: "phone" })
+      for (const actor of actorsData || []) {
+        const email = normalizeEmail(actor.email)
+        const phone = normalizePhone(actor.phone)
+
+        if (email) {
+          const byEmail = actorsByEmail.get(email)
+          if (byEmail) {
+            byEmail.push(actor)
+          } else {
+            actorsByEmail.set(email, [actor])
           }
         }
-        
-        if (matches.length > 0) {
-          duplicates[submission.id] = matches
+
+        if (phone) {
+          const byPhone = actorsByPhone.get(phone)
+          if (byPhone) {
+            byPhone.push(actor)
+          } else {
+            actorsByPhone.set(phone, [actor])
+          }
+        }
+      }
+
+      for (const submission of submissionsData || []) {
+        const normalizedSubmissionEmail = submission.normalized_email || normalizeEmail(submission.email)
+        const normalizedSubmissionPhone = submission.normalized_phone || normalizePhone(submission.phone)
+        const matchesByActorId = new Map<string, DuplicateMatch>()
+
+        if (normalizedSubmissionEmail) {
+          const emailMatches = actorsByEmail.get(normalizedSubmissionEmail) || []
+          for (const actor of emailMatches) {
+            matchesByActorId.set(actor.id, { actor, matchType: "email" })
+          }
+        }
+
+        if (normalizedSubmissionPhone) {
+          const phoneMatches = actorsByPhone.get(normalizedSubmissionPhone) || []
+          for (const actor of phoneMatches) {
+            const existingMatch = matchesByActorId.get(actor.id)
+            if (!existingMatch) {
+              matchesByActorId.set(actor.id, { actor, matchType: "phone" })
+            } else if (existingMatch.matchType !== "both") {
+              matchesByActorId.set(actor.id, { actor, matchType: "both" })
+            }
+          }
+        }
+
+        if (matchesByActorId.size > 0) {
+          duplicates[submission.id] = Array.from(matchesByActorId.values())
         }
       }
       
@@ -244,9 +270,19 @@ function AdminPageContent() {
     }
   }
 
-  const pendingSubmissions = submissions.filter((s) => s.review_status === "pending")
-  const approvedSubmissions = submissions.filter((s) => s.review_status === "approved")
-  const rejectedSubmissions = submissions.filter((s) => s.review_status === "rejected")
+  const [pendingSubmissions, approvedSubmissions, rejectedSubmissions] = useMemo(() => {
+    const pending: ActorSubmission[] = []
+    const approved: ActorSubmission[] = []
+    const rejected: ActorSubmission[] = []
+
+    for (const submission of submissions) {
+      if (submission.review_status === "pending") pending.push(submission)
+      else if (submission.review_status === "approved") approved.push(submission)
+      else if (submission.review_status === "rejected") rejected.push(submission)
+    }
+
+    return [pending, approved, rejected]
+  }, [submissions])
 
   if (loading) {
     return (
@@ -461,7 +497,7 @@ function SubmissionCard({
                 submission.review_status === "pending"
                   ? "default"
                   : submission.review_status === "approved"
-                    ? "success"
+                    ? "secondary"
                     : "destructive"
               }
             >

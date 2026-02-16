@@ -42,8 +42,32 @@ export interface Actor {
   singing_styles?: string[]
   singing_level?: string
   created_at: string
+  updated_at?: string
   vat_status: VatStatus
   is_draft?: boolean
+  city?: string
+  is_singer?: boolean
+  is_course_grad?: boolean
+  notes?: string
+  skills?: Skill[]
+  languages?: Language[]
+  other_lang_text?: string
+  dubbing_experience_years?: number
+  singing_styles_other?: SingingStyleOther[]
+}
+
+export interface FilterState {
+  gender: string[]
+  ageMin: number
+  ageMax: number
+  isSinger: boolean | null
+  isCourseGrad: boolean | null
+  skills: string[]
+  languages: string[]
+  vatStatus: string[]
+  sortBy: "newest" | "alphabetical" | "age-asc" | "age-desc"
+  dubbingExperience: string[]
+  singingStyles: string[]
 }
 
 export interface Project {

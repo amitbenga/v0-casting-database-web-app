@@ -75,13 +75,16 @@ export const exportActorToPDF = async (actor: Actor) => {
 
   // פרטי השחקן
   const currentYear = new Date().getFullYear();
-  const age = currentYear - actor.birth_year;
+  const age = currentYear - (actor.birth_year ?? 0);
+
+  const skills = actor.skills ?? [];
+  const languages = actor.languages ?? [];
 
   const data = hebrewFontLoaded ? [
     [reverseHebrewText("שם מלא"), reverseHebrewText(actor.full_name)],
     [reverseHebrewText("מין"), reverseHebrewText(actor.gender === "male" ? "זכר" : "נקבה")],
-    [reverseHebrewText("גיל"), `${age} (${reverseHebrewText("נולד")} ${actor.birth_year})`],
-    [reverseHebrewText("טלפון"), actor.phone],
+    [reverseHebrewText("גיל"), `${age} (${reverseHebrewText("נולד")} ${actor.birth_year ?? ""})`],
+    [reverseHebrewText("טלפון"), actor.phone ?? ""],
     [reverseHebrewText("אימייל"), actor.email || reverseHebrewText("לא זמין")],
     [reverseHebrewText("עיר"), actor.city ? reverseHebrewText(actor.city) : reverseHebrewText("לא זמין")],
     [reverseHebrewText("זמר/ת"), reverseHebrewText(actor.is_singer ? "כן" : "לא")],
@@ -89,18 +92,18 @@ export const exportActorToPDF = async (actor: Actor) => {
     [reverseHebrewText("סטטוס מעמ"), actor.vat_status],
     [
       reverseHebrewText("כישורים"),
-      actor.skills.length > 0 ? reverseHebrewText(actor.skills.map((s) => s.label).join(", ")) : reverseHebrewText("לא זמין"),
+      skills.length > 0 ? reverseHebrewText(skills.map((s) => s.label).join(", ")) : reverseHebrewText("לא זמין"),
     ],
     [
       reverseHebrewText("שפות"),
-      actor.languages.length > 0 ? reverseHebrewText(actor.languages.map((l) => l.label).join(", ")) : reverseHebrewText("לא זמין"),
+      languages.length > 0 ? reverseHebrewText(languages.map((l) => l.label).join(", ")) : reverseHebrewText("לא זמין"),
     ],
     [reverseHebrewText("הערות"), actor.notes ? reverseHebrewText(actor.notes) : reverseHebrewText("לא זמין")],
   ] : [
     ["Full Name", actor.full_name],
     ["Gender", actor.gender === "male" ? "Male" : "Female"],
-    ["Age", `${age} (Born ${actor.birth_year})`],
-    ["Phone", actor.phone],
+    ["Age", `${age} (Born ${actor.birth_year ?? ""})`],
+    ["Phone", actor.phone ?? ""],
     ["Email", actor.email || "N/A"],
     ["City", actor.city || "N/A"],
     ["Singer", actor.is_singer ? "Yes" : "No"],
@@ -108,11 +111,11 @@ export const exportActorToPDF = async (actor: Actor) => {
     ["VAT Status", actor.vat_status],
     [
       "Skills",
-      actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "N/A",
+      skills.length > 0 ? skills.map((s) => s.label).join(", ") : "N/A",
     ],
     [
       "Languages",
-      actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "N/A",
+      languages.length > 0 ? languages.map((l) => l.label).join(", ") : "N/A",
     ],
     ["Notes", actor.notes || "N/A"],
   ];
@@ -166,16 +169,16 @@ export const exportActorsToPDF = async (actors: Actor[], filename: string = "act
   const tableData = actors.map((actor) => hebrewFontLoaded ? [
     reverseHebrewText(actor.full_name),
     reverseHebrewText(actor.gender === "male" ? "ז" : "נ"),
-    `${currentYear - actor.birth_year}`,
-    actor.phone,
+    `${currentYear - (actor.birth_year ?? 0)}`,
+    actor.phone ?? "",
     actor.email || reverseHebrewText("לא זמין"),
     reverseHebrewText(actor.is_singer ? "כן" : "לא"),
     actor.vat_status,
   ] : [
     actor.full_name,
     actor.gender === "male" ? "M" : "F",
-    `${currentYear - actor.birth_year}`,
-    actor.phone,
+    `${currentYear - (actor.birth_year ?? 0)}`,
+    actor.phone ?? "",
     actor.email || "N/A",
     actor.is_singer ? "Yes" : "No",
     actor.vat_status,
@@ -218,13 +221,15 @@ export const exportActorsToPDF = async (actors: Actor[], filename: string = "act
 export const exportActorToExcel = (actor: Actor) => {
   try {
     const currentYear = new Date().getFullYear();
-    const age = currentYear - actor.birth_year;
+    const age = currentYear - (actor.birth_year ?? 0);
+    const skills = actor.skills ?? [];
+    const languages = actor.languages ?? [];
 
     const data = [
       { שדה: "שם מלא", ערך: actor.full_name },
       { שדה: "מין", ערך: actor.gender === "male" ? "זכר" : "נקבה" },
-      { שדה: "גיל", ערך: `${age} (נולד ${actor.birth_year})` },
-      { שדה: "טלפון", ערך: actor.phone },
+      { שדה: "גיל", ערך: `${age} (נולד ${actor.birth_year ?? ""})` },
+      { שדה: "טלפון", ערך: actor.phone ?? "" },
       { שדה: "אימייל", ערך: actor.email || "לא זמין" },
       { שדה: "עיר", ערך: actor.city || "לא זמין" },
       { שדה: "זמר/ת", ערך: actor.is_singer ? "כן" : "לא" },
@@ -232,11 +237,11 @@ export const exportActorToExcel = (actor: Actor) => {
       { שדה: "סטטוס מעמ", ערך: actor.vat_status },
       {
         שדה: "כישורים",
-        ערך: actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "לא זמין",
+        ערך: skills.length > 0 ? skills.map((s) => s.label).join(", ") : "לא זמין",
       },
       {
         שדה: "שפות",
-        ערך: actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "לא זמין",
+        ערך: languages.length > 0 ? languages.map((l) => l.label).join(", ") : "לא זמין",
       },
       { שדה: "הערות", ערך: actor.notes || "לא זמין" },
     ];
@@ -275,16 +280,16 @@ export const exportActorsToExcel = (actors: Actor[], filename: string = "actors"
     const data = actors.map((actor) => ({
       "שם מלא": actor.full_name,
       "מין": actor.gender === "male" ? "זכר" : "נקבה",
-      "גיל": currentYear - actor.birth_year,
-      "שנת לידה": actor.birth_year,
-      "טלפון": actor.phone,
+      "גיל": currentYear - (actor.birth_year ?? 0),
+      "שנת לידה": actor.birth_year ?? "",
+      "טלפון": actor.phone ?? "",
       "אימייל": actor.email || "לא זמין",
       "עיר": actor.city || "לא זמין",
       "זמר/ת": actor.is_singer ? "כן" : "לא",
       "בוגר/ת קורס": actor.is_course_grad ? "כן" : "לא",
       "סטטוס מעמ": actor.vat_status,
-      "כישורים": actor.skills.length > 0 ? actor.skills.map((s) => s.label).join(", ") : "לא זמין",
-      "שפות": actor.languages.length > 0 ? actor.languages.map((l) => l.label).join(", ") : "לא זמין",
+      "כישורים": (actor.skills ?? []).length > 0 ? (actor.skills ?? []).map((s) => s.label).join(", ") : "לא זמין",
+      "שפות": (actor.languages ?? []).length > 0 ? (actor.languages ?? []).map((l) => l.label).join(", ") : "לא זמין",
       "הערות": actor.notes || "לא זמין",
     }));
 

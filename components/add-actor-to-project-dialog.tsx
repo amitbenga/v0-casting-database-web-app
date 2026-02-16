@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +40,7 @@ export function AddActorToProjectDialog({
   const [replicasPlanned, setReplicasPlanned] = useState("")
   const [notes, setNotes] = useState("")
   const hasInitialized = useRef(false)
+  const ASSIGN_CONCURRENCY = 8
 
   useEffect(() => {
     if (!open) {
@@ -64,7 +65,10 @@ export function AddActorToProjectDialog({
       try {
         setLoading(true)
         const supabase = createBrowserClient()
-        const { data, error } = await supabase.from("actors").select("*").order("full_name")
+        const { data, error } = await supabase
+          .from("actors")
+          .select("id, full_name, gender, birth_year, image_url")
+          .order("full_name")
 
         if (error) throw error
         setActors(data || [])
@@ -96,9 +100,6 @@ export function AddActorToProjectDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const roleName =
-      selectedRoleId === "new" ? newRoleName.trim() : roles.find((r) => r.id === selectedRoleId)?.role_name
-
     if (!selectedRoleId || (selectedRoleId === "new" && !newRoleName.trim())) {
       toast({ title: "שגיאה", description: "יש לבחור תפקיד או להזין שם תפקיד חדש", variant: "destructive" })
       return
@@ -128,18 +129,33 @@ export function AddActorToProjectDialog({
         roleId = newRole.id
       }
 
+      if (!roleId) {
+        throw new Error("Role ID is missing")
+      }
+
       // Use the new assignActorToRole action for each selected actor
       // This handles conflict checking and role_castings table
       let successCount = 0
-      let errorMessages: string[] = []
+      const errorMessages: string[] = []
 
-      for (const actorId of selectedActors) {
-        const result = await assignActorToRole(roleId!, actorId, projectId)
-        if (result.success) {
-          successCount++
-        } else {
-          const actorName = actors.find(a => a.id === actorId)?.full_name || actorId
-          errorMessages.push(`${actorName}: ${result.error}`)
+      for (let i = 0; i < selectedActors.length; i += ASSIGN_CONCURRENCY) {
+        const actorIdsChunk = selectedActors.slice(i, i + ASSIGN_CONCURRENCY)
+        const chunkResults = await Promise.allSettled(
+          actorIdsChunk.map((actorId) => assignActorToRole(roleId, actorId))
+        )
+
+        for (let j = 0; j < chunkResults.length; j++) {
+          const actorId = actorIdsChunk[j]
+          const actorName = actorNameById.get(actorId) || actorId
+          const result = chunkResults[j]
+
+          if (result.status === "fulfilled" && result.value.success) {
+            successCount++
+          } else if (result.status === "fulfilled") {
+            errorMessages.push(`${actorName}: ${result.value.error || "שגיאת שיוך"}`)
+          } else {
+            errorMessages.push(`${actorName}: שיוך נכשל`)
+          }
         }
       }
 
@@ -161,7 +177,17 @@ export function AddActorToProjectDialog({
     }
   }
 
-  const filteredActors = actors.filter((actor) => actor.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const actorNameById = useMemo(() => {
+    return new Map<string, string>(actors.map((actor) => [actor.id, actor.full_name]))
+  }, [actors])
+
+  const selectedActorIdsSet = useMemo(() => new Set(selectedActors), [selectedActors])
+
+  const filteredActors = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return actors
+    return actors.filter((actor) => actor.full_name.toLowerCase().includes(query))
+  }, [actors, searchQuery])
 
   const toggleActor = (actorId: string) => {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
@@ -253,14 +279,14 @@ export function AddActorToProjectDialog({
 
                 return (
                   <Card
-                    key={actor.id}
-                    className={`p-4 cursor-pointer transition-colors ${
-                      selectedActors.includes(actor.id) ? "border-primary bg-primary/5" : ""
-                    }`}
-                    onClick={() => toggleActor(actor.id)}
-                  >
-                    <div className="flex items-center gap-4">
-                      <Checkbox checked={selectedActors.includes(actor.id)} />
+                  key={actor.id}
+                  className={`p-4 cursor-pointer transition-colors ${
+                    selectedActorIdsSet.has(actor.id) ? "border-primary bg-primary/5" : ""
+                  }`}
+                  onClick={() => toggleActor(actor.id)}
+                >
+                  <div className="flex items-center gap-4">
+                    <Checkbox checked={selectedActorIdsSet.has(actor.id)} />
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                         {actor.image_url ? (
                           <img

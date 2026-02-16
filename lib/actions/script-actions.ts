@@ -22,67 +22,93 @@ export async function applyParsedRoles(
     let rolesCreated = 0
     let conflictsCreated = 0
 
-    // First pass: create all roles without parent_role_id
-    for (const role of roles) {
-      // Check if role already exists
-      const { data: existingRole } = await supabase
+    const uniqueNormalizedRoleNames = Array.from(new Set(roles.map((role) => role.role_name_normalized)))
+    const existingRolesByNormalizedName = new Map<string, { id: string }>()
+
+    // Load existing roles in one query to avoid N+1
+    if (uniqueNormalizedRoleNames.length > 0) {
+      const { data: existingRoles, error: existingRolesError } = await supabase
         .from("project_roles")
-        .select("id")
+        .select("id, role_name_normalized")
         .eq("project_id", projectId)
-        .eq("role_name_normalized", role.role_name_normalized)
-        .maybeSingle()
+        .in("role_name_normalized", uniqueNormalizedRoleNames)
+
+      if (existingRolesError) throw existingRolesError
+
+      for (const existingRole of existingRoles || []) {
+        existingRolesByNormalizedName.set(existingRole.role_name_normalized, { id: existingRole.id })
+      }
+    }
+
+    // First pass: update existing roles and create missing roles
+    for (const role of roles) {
+      const existingRole = existingRolesByNormalizedName.get(role.role_name_normalized)
 
       if (existingRole) {
-        // Role exists, just update
         await supabase
           .from("project_roles")
           .update({
             replicas_needed: role.replicas_needed,
-            source: "script"
+            source: "script",
           })
           .eq("id", existingRole.id)
 
         roleNameToId.set(role.role_name_normalized, existingRole.id)
-      } else {
-        // Create new role
-        const { data: newRole, error } = await supabase
-          .from("project_roles")
-          .insert({
-            project_id: projectId,
-            role_name: role.role_name,
-            role_name_normalized: role.role_name_normalized,
-            replicas_needed: role.replicas_needed,
-            source: "script"
-          })
-          .select("id")
-          .single()
-
-        if (error) {
-          console.error("Error creating role:", error)
-          continue
-        }
-
-        roleNameToId.set(role.role_name_normalized, newRole.id)
-        rolesCreated++
+        continue
       }
+
+      const { data: newRole, error } = await supabase
+        .from("project_roles")
+        .insert({
+          project_id: projectId,
+          role_name: role.role_name,
+          role_name_normalized: role.role_name_normalized,
+          replicas_needed: role.replicas_needed,
+          source: "script",
+        })
+        .select("id")
+        .single()
+
+      if (error) {
+        console.error("Error creating role:", error)
+        continue
+      }
+
+      roleNameToId.set(role.role_name_normalized, newRole.id)
+      existingRolesByNormalizedName.set(role.role_name_normalized, { id: newRole.id })
+      rolesCreated++
     }
 
     // Second pass: update parent_role_id for variants
+    const parentUpdates: PromiseLike<unknown>[] = []
     for (const role of roles) {
       if (role.parent_role_id) {
         const roleId = roleNameToId.get(role.role_name_normalized)
         const parentId = roleNameToId.get(role.parent_role_id.toUpperCase())
 
         if (roleId && parentId) {
-          await supabase
-            .from("project_roles")
-            .update({ parent_role_id: parentId })
-            .eq("id", roleId)
+          parentUpdates.push(
+            supabase
+              .from("project_roles")
+              .update({ parent_role_id: parentId })
+              .eq("id", roleId)
+          )
         }
       }
     }
+    if (parentUpdates.length > 0) {
+      await Promise.all(parentUpdates)
+    }
 
-    // Create conflicts
+    // Create conflicts (deduplicated + single existing lookup)
+    const candidateConflicts: {
+      key: string
+      role_id_a: string
+      role_id_b: string
+      warning_type: string
+      scene_reference: string | null
+    }[] = []
+
     for (const conflict of conflicts) {
       const roleIdA = roleNameToId.get(conflict.role_name_a.toUpperCase())
       const roleIdB = roleNameToId.get(conflict.role_name_b.toUpperCase())
@@ -91,29 +117,66 @@ export async function applyParsedRoles(
 
       // Ensure consistent ordering (smaller ID first)
       const [id1, id2] = roleIdA < roleIdB ? [roleIdA, roleIdB] : [roleIdB, roleIdA]
+      const key = `${id1}:${id2}`
+      candidateConflicts.push({
+        key,
+        role_id_a: id1,
+        role_id_b: id2,
+        warning_type: conflict.warning_type,
+        scene_reference: conflict.scene_reference ?? null,
+      })
+    }
 
-      // Check if conflict already exists
-      const { data: existingConflict } = await supabase
+    const uniqueConflictMap = new Map<
+      string,
+      { role_id_a: string; role_id_b: string; warning_type: string; scene_reference: string | null }
+    >()
+    for (const conflict of candidateConflicts) {
+      if (!uniqueConflictMap.has(conflict.key)) {
+        uniqueConflictMap.set(conflict.key, {
+          role_id_a: conflict.role_id_a,
+          role_id_b: conflict.role_id_b,
+          warning_type: conflict.warning_type,
+          scene_reference: conflict.scene_reference,
+        })
+      }
+    }
+
+    const uniqueConflicts = Array.from(uniqueConflictMap.values())
+    if (uniqueConflicts.length > 0) {
+      const roleIdsA = Array.from(new Set(uniqueConflicts.map((c) => c.role_id_a)))
+      const roleIdsB = Array.from(new Set(uniqueConflicts.map((c) => c.role_id_b)))
+
+      const { data: existingConflicts, error: existingConflictsError } = await supabase
         .from("role_conflicts")
-        .select("id")
+        .select("role_id_a, role_id_b")
         .eq("project_id", projectId)
-        .eq("role_id_a", id1)
-        .eq("role_id_b", id2)
-        .maybeSingle()
+        .in("role_id_a", roleIdsA)
+        .in("role_id_b", roleIdsB)
 
-      if (!existingConflict) {
-        const { error } = await supabase
-          .from("role_conflicts")
-          .insert({
+      if (existingConflictsError) throw existingConflictsError
+
+      const existingConflictKeys = new Set(
+        (existingConflicts || []).map((existingConflict) => `${existingConflict.role_id_a}:${existingConflict.role_id_b}`)
+      )
+
+      const conflictsToInsert = uniqueConflicts.filter(
+        (conflict) => !existingConflictKeys.has(`${conflict.role_id_a}:${conflict.role_id_b}`)
+      )
+
+      if (conflictsToInsert.length > 0) {
+        const { error: insertConflictsError } = await supabase.from("role_conflicts").insert(
+          conflictsToInsert.map((conflict) => ({
             project_id: projectId,
-            role_id_a: id1,
-            role_id_b: id2,
+            role_id_a: conflict.role_id_a,
+            role_id_b: conflict.role_id_b,
             warning_type: conflict.warning_type,
-            scene_reference: conflict.scene_reference
-          })
+            scene_reference: conflict.scene_reference,
+          }))
+        )
 
-        if (!error) {
-          conflictsCreated++
+        if (!insertConflictsError) {
+          conflictsCreated = conflictsToInsert.length
         }
       }
     }
@@ -322,21 +385,21 @@ export async function mergeRoles(
       }
 
       // Re-point conflicts from merged roles to primary role (instead of deleting them)
-      for (const mergedId of otherRoleIds) {
-        // Re-point role_id_a references
-        await supabase
+      const [{ error: repointAError }, { error: repointBError }] = await Promise.all([
+        supabase
           .from("role_conflicts")
           .update({ role_id_a: primaryRoleId })
           .eq("project_id", projectId)
-          .eq("role_id_a", mergedId)
-
-        // Re-point role_id_b references
-        await supabase
+          .in("role_id_a", otherRoleIds),
+        supabase
           .from("role_conflicts")
           .update({ role_id_b: primaryRoleId })
           .eq("project_id", projectId)
-          .eq("role_id_b", mergedId)
-      }
+          .in("role_id_b", otherRoleIds),
+      ])
+
+      if (repointAError) throw repointAError
+      if (repointBError) throw repointBError
 
       // Remove self-conflicts (where role_id_a === role_id_b after re-pointing)
       await supabase
@@ -358,6 +421,7 @@ export async function mergeRoles(
         // Normalize: ensure smaller ID is always in role_id_a
         const seen = new Set<string>()
         const toDelete: string[] = []
+        const toReorder: { id: string; role_id_a: string; role_id_b: string }[] = []
 
         for (const c of primaryConflicts) {
           const [normA, normB] = c.role_id_a < c.role_id_b
@@ -371,20 +435,31 @@ export async function mergeRoles(
             seen.add(key)
             // Update ordering if needed
             if (c.role_id_a !== normA) {
-              await supabase
-                .from("role_conflicts")
-                .update({ role_id_a: normA, role_id_b: normB })
-                .eq("id", c.id)
+              toReorder.push({ id: c.id, role_id_a: normA, role_id_b: normB })
             }
           }
         }
 
+        if (toReorder.length > 0) {
+          const reorderResults = await Promise.all(
+            toReorder.map((conflict) =>
+              supabase
+                .from("role_conflicts")
+                .update({ role_id_a: conflict.role_id_a, role_id_b: conflict.role_id_b })
+                .eq("id", conflict.id)
+            )
+          )
+          const failedReorder = reorderResults.find((result) => result.error)
+          if (failedReorder?.error) throw failedReorder.error
+        }
+
         // Delete duplicate conflicts
         if (toDelete.length > 0) {
-          await supabase
+          const { error: deleteDuplicatesError } = await supabase
             .from("role_conflicts")
             .delete()
             .in("id", toDelete)
+          if (deleteDuplicatesError) throw deleteDuplicatesError
         }
       }
 

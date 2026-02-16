@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { type Actor, VAT_STATUS_LABELS } from "@/lib/types"
-import { exportActor } from "@/lib/export-utils"
 
 interface ActorCardProps {
   actor: Actor
@@ -42,7 +41,7 @@ export function ActorCard({
   const router = useRouter()
 
   const currentYear = new Date().getFullYear()
-  const age = currentYear - actor.birth_year
+  const age = currentYear - (actor.birth_year ?? 0)
 
   const handleNavigateToProfile = () => {
     router.push(`/actors/${actor.id}`)
@@ -123,9 +122,10 @@ export function ActorCard({
     }
   }
 
-  const handleExport = (e: React.MouseEvent, format: "pdf" | "excel") => {
+  const handleExport = async (e: React.MouseEvent, format: "pdf" | "excel") => {
     e.preventDefault()
     e.stopPropagation()
+    const { exportActor } = await import("@/lib/export-utils")
     exportActor(actor, format)
   }
 
@@ -191,7 +191,7 @@ export function ActorCard({
               </div>
 
               <div className="flex flex-wrap gap-1 md:gap-1.5">
-                {actor.skills.slice(0, 2).map((skill) => (
+                {(actor.skills ?? []).slice(0, 2).map((skill) => (
                   <Badge
                     key={skill.id}
                     variant="secondary"
@@ -200,12 +200,12 @@ export function ActorCard({
                     {skill.label}
                   </Badge>
                 ))}
-                {actor.languages.length > 0 && (
+                {(actor.languages ?? []).length > 0 && (
                   <Badge
                     variant="secondary"
                     className="bg-blue-500/90 text-white text-[9px] md:text-xs px-1 md:px-2 py-0 md:py-0.5"
                   >
-                    {actor.languages[0].label}
+                    {(actor.languages ?? [])[0]?.label}
                   </Badge>
                 )}
               </div>
