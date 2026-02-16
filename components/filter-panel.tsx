@@ -335,7 +335,7 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
             <AccordionContent>
               <RadioGroup
                 value={filters.sortBy}
-                onValueChange={(value) => updateFilters({ sortBy: value })}
+                onValueChange={(value) => updateFilters({ sortBy: value as FilterState["sortBy"] })}
                 className="space-y-2 md:space-y-3"
               >
                 <div className="flex items-center gap-2">

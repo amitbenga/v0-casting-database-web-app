@@ -397,8 +397,8 @@ export default function ActorProfile() {
                 <Card className="p-4 md:p-6">
                   <h3 className="font-semibold mb-4">כישורים</h3>
                   <div className="flex flex-wrap gap-2">
-                    {actor.skills.length > 0 ? (
-                      actor.skills.map((skill) => (
+                    {(actor.skills ?? []).length > 0 ? (
+                      (actor.skills ?? []).map((skill) => (
                         <Badge key={skill.id} variant="outline">
                           {skill.label}
                         </Badge>
@@ -412,8 +412,8 @@ export default function ActorProfile() {
                 <Card className="p-4 md:p-6">
                   <h3 className="font-semibold mb-4">שפות</h3>
                   <div className="flex flex-wrap gap-2">
-                    {actor.languages.length > 0 ? (
-                      actor.languages.map((language) => (
+                    {(actor.languages ?? []).length > 0 ? (
+                      (actor.languages ?? []).map((language) => (
                         <Badge key={language.id} variant="outline">
                           {language.label}
                         </Badge>

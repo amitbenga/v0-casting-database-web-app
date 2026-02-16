@@ -497,7 +497,7 @@ function SubmissionCard({
                 submission.review_status === "pending"
                   ? "default"
                   : submission.review_status === "approved"
-                    ? "success"
+                    ? "secondary"
                     : "destructive"
               }
             >

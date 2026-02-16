@@ -41,7 +41,7 @@ export function ActorCard({
   const router = useRouter()
 
   const currentYear = new Date().getFullYear()
-  const age = currentYear - actor.birth_year
+  const age = currentYear - (actor.birth_year ?? 0)
 
   const handleNavigateToProfile = () => {
     router.push(`/actors/${actor.id}`)
@@ -191,7 +191,7 @@ export function ActorCard({
               </div>
 
               <div className="flex flex-wrap gap-1 md:gap-1.5">
-                {actor.skills.slice(0, 2).map((skill) => (
+                {(actor.skills ?? []).slice(0, 2).map((skill) => (
                   <Badge
                     key={skill.id}
                     variant="secondary"
@@ -200,12 +200,12 @@ export function ActorCard({
                     {skill.label}
                   </Badge>
                 ))}
-                {actor.languages.length > 0 && (
+                {(actor.languages ?? []).length > 0 && (
                   <Badge
                     variant="secondary"
                     className="bg-blue-500/90 text-white text-[9px] md:text-xs px-1 md:px-2 py-0 md:py-0.5"
                   >
-                    {actor.languages[0].label}
+                    {(actor.languages ?? [])[0]?.label}
                   </Badge>
                 )}
               </div>

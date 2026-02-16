@@ -406,15 +406,15 @@ function ActorsDatabaseContent() {
 
     return displayedActors
       .filter((actor) => {
-        const actorAge = currentYear - actor.birth_year
+        const actorAge = currentYear - (actor.birth_year ?? 0)
         const matchesSearch =
           query.length === 0 ||
           actor.full_name.toLowerCase().includes(query) ||
-          actor.phone.toLowerCase().includes(query) ||
-          actor.email.toLowerCase().includes(query) ||
-          actor.notes.toLowerCase().includes(query) ||
-          actor.skills.some((skill) => skill.label.toLowerCase().includes(query)) ||
-          actor.languages.some((lang) => lang.label.toLowerCase().includes(query)) ||
+          (actor.phone ?? "").toLowerCase().includes(query) ||
+          (actor.email ?? "").toLowerCase().includes(query) ||
+          (actor.notes ?? "").toLowerCase().includes(query) ||
+          (actor.skills ?? []).some((skill) => skill.label.toLowerCase().includes(query)) ||
+          (actor.languages ?? []).some((lang) => lang.label.toLowerCase().includes(query)) ||
           (actor.other_lang_text?.toLowerCase().includes(query) ?? false) ||
           (actor.city?.toLowerCase().includes(query) ?? false)
 
@@ -425,12 +425,12 @@ function ActorsDatabaseContent() {
         if (filters.isCourseGrad !== null && actor.is_course_grad !== filters.isCourseGrad) return false
 
         if (filters.skills.length > 0) {
-          const hasSkill = actor.skills.some((skill) => filters.skills.includes(skill.key))
+          const hasSkill = (actor.skills ?? []).some((skill) => filters.skills.includes(skill.key))
           if (!hasSkill) return false
         }
 
         if (filters.languages.length > 0) {
-          const hasLang = actor.languages.some((lang) => filters.languages.includes(lang.key))
+          const hasLang = (actor.languages ?? []).some((lang) => filters.languages.includes(lang.key))
           if (!hasLang) return false
         }
 
@@ -450,7 +450,7 @@ function ActorsDatabaseContent() {
 
         // סינון לפי סגנונות שירה
         if (filters.singingStyles && filters.singingStyles.length > 0) {
-          const actorStyles = (actor.singing_styles || []) as { style: string; level: string }[]
+          const actorStyles = (actor.singing_styles || []) as unknown as { style: string; level: string }[]
           const hasMatchingStyle = actorStyles.some((style) => filters.singingStyles.includes(style.style))
           if (!hasMatchingStyle) return false
         }
@@ -462,9 +462,9 @@ function ActorsDatabaseContent() {
           case "alphabetical":
             return a.full_name.localeCompare(b.full_name, "he")
           case "age-asc":
-            return a.birth_year - b.birth_year
+            return (a.birth_year ?? 0) - (b.birth_year ?? 0)
           case "age-desc":
-            return b.birth_year - a.birth_year
+            return (b.birth_year ?? 0) - (a.birth_year ?? 0)
           case "newest":
           default:
             return b.created_at.localeCompare(a.created_at)

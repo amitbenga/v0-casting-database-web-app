@@ -541,14 +541,14 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                 <div key={skill.id} className="flex items-center gap-2">
                   <Checkbox
                     id={`skill-${skill.id}`}
-                    checked={formData.skills.some((s) => s.id === skill.id)}
+                    checked={(formData.skills ?? []).some((s) => s.id === skill.id)}
                     onCheckedChange={(checked) => {
                       if (checked) {
-                        handleChange("skills", [...formData.skills, skill])
+                        handleChange("skills", [...(formData.skills ?? []), skill])
                       } else {
                         handleChange(
                           "skills",
-                          formData.skills.filter((s) => s.id !== skill.id),
+                          (formData.skills ?? []).filter((s) => s.id !== skill.id),
                         )
                       }
                     }}
@@ -571,14 +571,14 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                 <div key={language.id} className="flex items-center gap-2">
                   <Checkbox
                     id={`lang-${language.id}`}
-                    checked={formData.languages.some((l) => l.id === language.id)}
+                    checked={(formData.languages ?? []).some((l) => l.id === language.id)}
                     onCheckedChange={(checked) => {
                       if (checked) {
-                        handleChange("languages", [...formData.languages, language])
+                        handleChange("languages", [...(formData.languages ?? []), language])
                       } else {
                         handleChange(
                           "languages",
-                          formData.languages.filter((l) => l.id !== language.id),
+                          (formData.languages ?? []).filter((l) => l.id !== language.id),
                         )
                       }
                     }}
