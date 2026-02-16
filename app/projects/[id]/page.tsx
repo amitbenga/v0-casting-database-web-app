@@ -99,6 +99,36 @@ export default function ProjectDetailPage() {
     loadData()
   }, [loadData])
 
+  // Export project
+  async function exportProject() {
+    toast({ title: "בקרוב", description: "ייצוא פרויקט יהיה זמין בקרוב" })
+  }
+
+  // Duplicate project
+  async function duplicateProject() {
+    if (!project) return
+
+    try {
+      const supabase = createBrowserClient()
+      const { error } = await supabase.from("casting_projects").insert({
+        name: `${project.name} (עותק)`,
+        director: project.director,
+        casting_director: project.casting_director,
+        project_date: project.project_date,
+        status: "not_started",
+        notes: project.notes,
+      })
+
+      if (error) throw error
+
+      toast({ title: "הצלחה", description: "הפרויקט שוכפל בהצלחה" })
+      router.push("/projects")
+    } catch (error) {
+      console.error("Error duplicating project:", error)
+      toast({ title: "שגיאה", description: "שגיאה בשכפול פרויקט", variant: "destructive" })
+    }
+  }
+
   // Delete project
   async function deleteProject() {
     if (!confirm("האם אתה בטוח שברצונך למחוק את הפרויקט? פעולה זו בלתי הפיכה.")) return
@@ -181,8 +211,12 @@ export default function ProjectDetailPage() {
                   <DropdownMenuItem className="md:hidden" onClick={() => setShowEditProjectDialog(true)}>
                     ערוך פרויקט
                   </DropdownMenuItem>
-                  <DropdownMenuItem>ייצא פרויקט</DropdownMenuItem>
-                  <DropdownMenuItem>שכפל</DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportProject}>
+                    ייצא פרויקט
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={duplicateProject}>
+                    שכפל
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="text-destructive" onClick={deleteProject}>
                     מחק פרויקט
                   </DropdownMenuItem>
@@ -314,6 +348,9 @@ export default function ProjectDetailPage() {
           project={{
             id: project.id,
             name: project.name,
+            director: project.director || "",
+            casting_director: project.casting_director || "",
+            project_date: project.project_date || "",
             status: project.status as any,
             notes: project.notes || "",
             created_at: project.created_at,
@@ -321,7 +358,7 @@ export default function ProjectDetailPage() {
           }}
           open={showEditProjectDialog}
           onOpenChange={setShowEditProjectDialog}
-          onSuccess={() => {
+          onProjectUpdated={() => {
             loadData()
             setShowEditProjectDialog(false)
           }}

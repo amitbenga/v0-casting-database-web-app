@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Calendar, Users, MoreVertical, FolderOpen } from "lucide-react"
+import { Plus, Search, Calendar, Users, MoreVertical, FolderOpen, UserCircle, Film } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -9,14 +9,19 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
+import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 export default function ProjectsPage() {
+  const { toast } = useToast()
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<any | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>("all")
 
   useEffect(() => {
@@ -58,14 +63,18 @@ export default function ProjectsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "active":
-        return "bg-green-500/10 text-green-500 border-green-500/20"
-      case "completed":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20"
-      case "draft":
+      case "not_started":
         return "bg-gray-500/10 text-gray-500 border-gray-500/20"
+      case "casting":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20"
       case "voice_testing":
-        return "bg-transparent text-orange-500 border-orange-400"
+        return "bg-cyan-500/10 text-cyan-500 border-cyan-500/20"
+      case "casted":
+        return "bg-purple-500/10 text-purple-500 border-purple-500/20"
+      case "recording":
+        return "bg-orange-500/10 text-orange-500 border-orange-500/20"
+      case "completed":
+        return "bg-green-500/10 text-green-500 border-green-500/20"
       default:
         return "bg-gray-500/10 text-gray-500 border-gray-500/20"
     }
@@ -73,12 +82,49 @@ export default function ProjectsPage() {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case "active": return "פעיל"
-      case "completed": return "הושלם"
-      case "draft": return "טיוטה"
+      case "not_started": return "לא התחיל"
+      case "casting": return "בליהוק"
       case "voice_testing": return "בדיקת קולות"
+      case "casted": return "ליהוק הושלם"
+      case "recording": return "בהקלטה"
+      case "completed": return "הושלם"
       default: return status
     }
+  }
+
+  const handleEditProject = (project: any) => {
+    setSelectedProject(project)
+    setShowEditDialog(true)
+  }
+
+  const handleDuplicateProject = async (project: any) => {
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("casting_projects").insert({
+        name: `${project.name} (עותק)`,
+        director: project.director,
+        casting_director: project.casting_director,
+        project_date: project.project_date,
+        status: "not_started",
+        notes: project.notes,
+      })
+
+      if (error) {
+        console.error("[v0] Error duplicating project:", error)
+        toast({ title: "שגיאה", description: "שגיאה בשכפול פרויקט", variant: "destructive" })
+        return
+      }
+
+      toast({ title: "הצלחה", description: "הפרויקט שוכפל בהצלחה" })
+      await loadProjects()
+    } catch (error) {
+      console.error("[v0] Error:", error)
+      toast({ title: "שגיאה", description: "שגיאה בשכפול פרויקט", variant: "destructive" })
+    }
+  }
+
+  const handleExportProject = async (project: any) => {
+    toast({ title: "בקרוב", description: "ייצוא פרויקט יהיה זמין בקרוב" })
   }
 
   const handleDeleteProject = async (id: string) => {
@@ -128,20 +174,44 @@ export default function ProjectsPage() {
                 הכל
               </Button>
               <Button
-                variant={statusFilter === "active" ? "default" : "ghost"}
+                variant={statusFilter === "not_started" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setStatusFilter("active")}
+                onClick={() => setStatusFilter("not_started")}
                 className="text-xs md:text-sm"
               >
-                פעיל
+                לא התחיל
               </Button>
               <Button
-                variant={statusFilter === "draft" ? "default" : "ghost"}
+                variant={statusFilter === "casting" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setStatusFilter("draft")}
+                onClick={() => setStatusFilter("casting")}
                 className="text-xs md:text-sm"
               >
-                טיוטה
+                בליהוק
+              </Button>
+              <Button
+                variant={statusFilter === "voice_testing" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("voice_testing")}
+                className="text-xs md:text-sm"
+              >
+                בדיקת קולות
+              </Button>
+              <Button
+                variant={statusFilter === "casted" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("casted")}
+                className="text-xs md:text-sm"
+              >
+                ליהוק הושלם
+              </Button>
+              <Button
+                variant={statusFilter === "recording" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("recording")}
+                className="text-xs md:text-sm"
+              >
+                בהקלטה
               </Button>
               <Button
                 variant={statusFilter === "completed" ? "default" : "ghost"}
@@ -150,14 +220,6 @@ export default function ProjectsPage() {
                 className="text-xs md:text-sm"
               >
                 הושלם
-              </Button>
-              <Button
-                variant={statusFilter === "voice_testing" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setStatusFilter("voice_testing")}
-                className={`text-xs md:text-sm ${statusFilter !== "voice_testing" ? "border-orange-400 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20" : ""}`}
-              >
-                בדיקת קולות
               </Button>
             </div>
 
@@ -211,9 +273,30 @@ export default function ProjectsPage() {
                       <DropdownMenuItem>
                         <Link href={`/projects/${project.id}`}>צפייה בפרטים</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem>עריכת פרויקט</DropdownMenuItem>
-                      <DropdownMenuItem>שכפול</DropdownMenuItem>
-                      <DropdownMenuItem>ייצוא</DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleEditProject(project)
+                        }}
+                      >
+                        עריכת פרויקט
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleDuplicateProject(project)
+                        }}
+                      >
+                        שכפול
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleExportProject(project)
+                        }}
+                      >
+                        ייצוא
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"
                         onClick={(e) => {
@@ -232,36 +315,29 @@ export default function ProjectsPage() {
                   {getStatusLabel(project.status)}
                 </Badge>
 
-                {/* Casting Director */}
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">במאי ליהוק</p>
-                  <p className="text-sm font-medium">{project.castingDirector}</p>
-                </div>
-
-                {/* Stats */}
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">תפקידים</p>
-                      <p className="text-sm font-medium">{project.numberOfRoles}</p>
+                {/* Project Info */}
+                <div className="space-y-2 pt-2">
+                  {project.casting_director && (
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
+                      <UserCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">מלהק:</span>
+                      <span className="font-medium">{project.casting_director}</span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">שחקנים</p>
-                      <p className="text-sm font-medium">{project.numberOfActors}</p>
+                  )}
+                  {project.director && (
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
+                      <Film className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">במאי:</span>
+                      <span className="font-medium">{project.director}</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Deadline */}
-                <div className="flex items-center gap-2 text-xs md:text-sm">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">תאריך יעד:</span>
-                  <span className="font-medium">{new Date(project.deadline).toLocaleDateString("he-IL")}</span>
+                  )}
+                  {project.project_date && (
+                    <div className="flex items-center gap-2 text-xs md:text-sm">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">תאריך:</span>
+                      <span className="font-medium">{new Date(project.project_date).toLocaleDateString("he-IL")}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Created At */}
@@ -281,6 +357,19 @@ export default function ProjectsPage() {
       </div>
 
       <CreateProjectDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onProjectCreated={loadProjects} />
+
+      {selectedProject && (
+        <EditProjectDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          project={selectedProject}
+          onProjectUpdated={() => {
+            loadProjects()
+            setShowEditDialog(false)
+            setSelectedProject(null)
+          }}
+        />
+      )}
     </div>
   )
 }
