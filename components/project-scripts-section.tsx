@@ -156,7 +156,9 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
     try {
       const result = await applyParsedScript(projectId, scriptId)
       if (result.success) {
-        toast.success("התפקידים והאזהרות הוחלו על הפרויקט בהצלחה")
+        toast({
+          title: "התפקידים והאזהרות הוחלו על הפרויקט בהצלחה",
+        })
         // Refresh scripts to show updated status
         const supabase = createClient()
         const { data: scriptsData } = await supabase
@@ -166,11 +168,19 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
           .order("created_at", { ascending: false })
         if (scriptsData) setScripts(scriptsData as ProjectScript[])
       } else {
-        toast.error(`שגיאה בהחלת התסריט: ${result.error}`)
+        toast({
+          title: "שגיאה",
+          description: `שגיאה בהחלת התסריט: ${result.error}`,
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error applying script:", error)
-      toast.error("שגיאה בלתי צפויה בהחלת התסריט")
+      toast({
+        title: "שגיאה",
+        description: "שגיאה בלתי צפויה בהחלת התסריט",
+        variant: "destructive",
+      })
     } finally {
       setApplying(null)
     }

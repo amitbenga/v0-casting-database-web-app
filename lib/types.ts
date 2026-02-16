@@ -217,3 +217,52 @@ export const DUBBING_EXPERIENCE_RANGES = [
   { key: "2-4", label: "2-4 שנים", min: 2, max: 4 },
   { key: "5+", label: "5+ שנים", min: 5, max: 999 },
 ]
+
+// Script-related types
+export interface ProjectScript {
+  id: string
+  project_id: string
+  file_name: string
+  file_type: string
+  file_size_bytes: number
+  processing_status: ScriptProcessingStatus
+  applied_at?: string
+  created_at: string
+}
+
+export interface ScriptExtractedRole {
+  id: string
+  script_id: string
+  role_name: string
+  role_type: ExtractedRoleType
+  dialogue_count: number
+  replicas_count?: number
+  first_appearance_script?: string
+  notes?: string
+  created_at: string
+}
+
+export interface ScriptCastingWarning {
+  id: string
+  script_id: string
+  role_id_a: string
+  role_id_b: string
+  role_1_name?: string
+  role_2_name?: string
+  warning_type: string
+  scene_reference?: string
+  created_at: string
+}
+
+// Folder type
+export interface Folder {
+  id: string
+  name: string
+  color?: string
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+// Alias for backwards compatibility
+export type CastingProject = Project

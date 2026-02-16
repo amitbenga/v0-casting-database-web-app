@@ -59,21 +59,21 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
       const searchLower = searchQuery.toLowerCase()
       return (
         c.actor.name.toLowerCase().includes(searchLower) ||
-        c.roles.some((r) => r.role_name?.toLowerCase().includes(searchLower))
+        c.roles.some((r: any) => r.role_name?.toLowerCase().includes(searchLower))
       )
     })
     .sort((a, b) => {
       if (!sortByReplicas) return 0
-      const totalA = a.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
-      const totalB = b.roles.reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+      const totalA = a.roles.reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
+      const totalB = b.roles.reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
       return sortByReplicas === "desc" ? totalB - totalA : totalA - totalB
     })
 
   // Stats
   const totalActors = castings.length
-  const totalRoles = castings.reduce((sum, c) => sum + c.roles.length, 0)
+  const totalRoles = castings.reduce((sum: number, c) => sum + c.roles.length, 0)
   const totalReplicas = castings.reduce(
-    (sum, c) => sum + c.roles.reduce((s, r) => s + (r.replicas_planned || 0), 0),
+    (sum: number, c) => sum + c.roles.reduce((s: number, r: any) => s + (r.replicas_planned || 0), 0),
     0
   )
 
@@ -183,7 +183,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
             <TableBody>
               {filteredCastings.map((casting) => {
                 const actorTotalReplicas = casting.roles.reduce(
-                  (sum, r) => sum + (r.replicas_planned || 0),
+                  (sum: number, r: any) => sum + (r.replicas_planned || 0),
                   0
                 )
                 return (
@@ -199,7 +199,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
-                        {casting.roles.map((role) => (
+                        {casting.roles.map((role: any) => (
                           <Badge
                             key={role.role_id}
                             variant="outline"
@@ -212,7 +212,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        {casting.roles.map((role) => (
+                        {casting.roles.map((role: any) => (
                           <span key={role.role_id} className="text-sm text-muted-foreground">
                             {role.role_name}: {(role.replicas_planned || 0).toLocaleString()}
                           </span>
@@ -242,14 +242,14 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                   <p className="text-sm text-muted-foreground">
                     {casting.roles.length} תפקידים |{" "}
                     {casting.roles
-                      .reduce((sum, r) => sum + (r.replicas_planned || 0), 0)
+                      .reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
                       .toLocaleString()}{" "}
                     רפליקות
                   </p>
                 </div>
               </div>
               <div className="mt-3 space-y-2">
-                {casting.roles.map((role) => (
+                {casting.roles.map((role: any) => (
                   <div key={role.role_id} className="flex items-center justify-between">
                     <Badge
                       variant="outline"
