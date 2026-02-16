@@ -418,7 +418,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
               
               <div className="space-y-3">
                 {SINGING_STYLES_LIST.filter(style => style.key !== "other").map((style) => {
-                  const currentStyles = (formData.singing_styles || []) as SingingStyleWithLevel[]
+                  const currentStyles = (formData.singing_styles || []) as unknown as SingingStyleWithLevel[]
                   const existingStyle = currentStyles.find((s) => s.style === style.key)
                   const isSelected = !!existingStyle
 

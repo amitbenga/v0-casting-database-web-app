@@ -51,7 +51,7 @@ const generateMockRoles = (projectId: string): ProjectRoleWithCasting[] => {
             actor: MOCK_ACTORS[0],
             status: "מלוהק",
             replicas_planned: 120,
-            replicas_final: null,
+            replicas_final: undefined,
             notes: "",
             created_at: new Date().toISOString(),
           },
@@ -80,7 +80,7 @@ const generateMockRoles = (projectId: string): ProjectRoleWithCasting[] => {
         actor: MOCK_ACTORS[1],
         status: "בליהוק",
         replicas_planned: 150,
-        replicas_final: null,
+        replicas_final: undefined,
         notes: "בודקים אלטרנטיבות",
         created_at: new Date().toISOString(),
       },
@@ -107,7 +107,7 @@ const generateMockRoles = (projectId: string): ProjectRoleWithCasting[] => {
         actor: MOCK_ACTORS[2],
         status: "באודישן",
         replicas_planned: 80,
-        replicas_final: null,
+        replicas_final: undefined,
         notes: "",
         created_at: new Date().toISOString(),
       },
@@ -548,34 +548,4 @@ export async function getProjectCastings(projectId: string): Promise<
   })
 
   return Array.from(actorMap.values())
-}
-
-// ===================================
-// Export API Object
-// ===================================
-
-export const projectApi = {
-  // Projects
-  getProject,
-  deleteProject,
-  
-  // Roles
-  getRoles,
-  createRole,
-  deleteRole,
-  
-  // Castings
-  getCastings,
-  assignActor,
-  updateCastingStatus,
-  removeCasting,
-  
-  // Scripts
-  getScripts,
-  getExtractedRoles,
-  applyExtractedRoles,
-  
-  // Actors
-  searchActors,
-  getProjectActors,
 }

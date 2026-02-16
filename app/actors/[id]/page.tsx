@@ -124,7 +124,7 @@ export default function ActorProfile() {
   }
 
   const currentYear = new Date().getFullYear()
-  const age = currentYear - actor.birth_year
+  const age = currentYear - (actor.birth_year ?? 2000)
 
   const handleSave = async (updatedActor: Actor) => {
     try {
@@ -366,7 +366,7 @@ export default function ActorProfile() {
                   <div className="space-y-4">
                     {actor.singing_styles && actor.singing_styles.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
-                        {(actor.singing_styles as SingingStyleWithLevel[]).map((item, index) => {
+                        {(actor.singing_styles as unknown as SingingStyleWithLevel[]).map((item, index) => {
                           const styleInfo = SINGING_STYLES_LIST.find(s => s.key === item.style)
                           return styleInfo ? (
                             <Badge key={index} variant="outline">
