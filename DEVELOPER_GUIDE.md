@@ -99,9 +99,14 @@ To maintain code quality, security, and stability, adhere to the following rules
 
 ---
 
-## 5. v0.app Integration
+## 5. AI-Assisted Development
 
-This project was initially scaffolded and is synced with [v0.app](https://v0.app). While `v0.app` is excellent for rapid UI prototyping, all core business logic, database interactions, and state management should be manually implemented and refined in this repository. Think of `v0.app` as a UI/UX co-pilot, not the final authority on application architecture.
+This project is developed with AI coding tools:
+
+- **Claude Code (Sonnet/Opus)** — Handles backend logic, data flow, TypeScript fixes, server actions, and database alignment. Works directly in this repository via the CLI.
+- **v0.app** — Used for rapid UI prototyping and component styling. Think of it as a UI/UX co-pilot, not the final authority on architecture.
+
+All core business logic, database interactions, and state management should be implemented and reviewed in this repository. UI changes from v0 should be integrated carefully to avoid overwriting logic.
 
 
 ---
@@ -210,18 +215,32 @@ The application uses **Supabase** (PostgreSQL) as its backend database. Understa
 
 ### Core Tables
 
-| Table Name          | Purpose                                                  | Key Relationships                          |
-| ------------------- | -------------------------------------------------------- | ------------------------------------------ |
-| `actors`            | Stores actor profiles                                    | Referenced by `favorites`, `role_casting`  |
-| `projects`          | Stores casting projects                                  | Referenced by `project_roles`, `scripts`   |
-| `project_roles`     | Stores roles within projects                             | References `projects`, referenced by `role_casting` |
-| `role_casting`      | Links actors to roles with casting status                | References `actors`, `project_roles`       |
-| `favorites`         | Tracks user's favorite actors                            | References `actors`, `user_profiles`       |
-| `folders`           | Custom actor folders                                     | Referenced by `folder_actors`              |
-| `folder_actors`     | Many-to-many relationship between folders and actors     | References `folders`, `actors`             |
-| `scripts`           | Stores uploaded script files and parsing status          | References `projects`                      |
-| `parsed_roles`      | Stores roles extracted from scripts (before applying)    | References `scripts`                       |
-| `role_conflicts`    | Stores detected conflicts between role assignments       | References `project_roles`                 |
+| Table Name                  | Purpose                                                  | Key Relationships                          |
+| --------------------------- | -------------------------------------------------------- | ------------------------------------------ |
+| `actors`                    | Stores actor profiles                                    | Referenced by `favorites`, `role_casting`  |
+| `actor_submissions`         | Raw submissions from the external intake form (scprodub) | Admin approves → inserts/updates `actors`  |
+| `casting_projects`          | Stores casting projects                                  | Referenced by `project_roles`, `scripts`   |
+| `project_roles`             | Stores roles within projects                             | References `casting_projects`, referenced by `role_casting` |
+| `role_casting`              | Links actors to roles with casting status                | References `actors`, `project_roles`       |
+| `favorites`                 | Tracks user's favorite actors                            | References `actors`, `user_profiles`       |
+| `folders`                   | Custom actor folders                                     | Referenced by `folder_actors`              |
+| `folder_actors`             | Many-to-many relationship between folders and actors     | References `folders`, `actors`             |
+| `casting_project_scripts`   | Stores uploaded script files and parsing status          | References `casting_projects`              |
+| `script_extracted_roles`    | Roles extracted from scripts (before applying)           | References `casting_project_scripts`       |
+| `script_casting_warnings`   | Detected conflicts between role assignments              | References `project_roles`                 |
+
+### Important Schema Notes
+
+- `actors.skills` and `actors.languages` are **JSONB** columns (not text arrays). Each item is an object: `{ id: string, key: string, label: string }`.
+- `actors.vat_status` valid values: `"ptor"` | `"murshe"` | `"artist_salary"` (Hebrew tax status categories).
+- `actors.id` is `text` (not UUID).
+- The external form (scprodub repo) writes skills/languages as plain Hebrew strings into `actor_submissions`. The admin approval flow in `app/admin/page.tsx` converts them to the `{id, key, label}` format before inserting into `actors`.
+
+### External Intake Form
+
+A separate public-facing repository (`scprodub`) provides the actor intake form at a different URL. It writes directly to `actor_submissions` in the same Supabase project. The `app/admin/page.tsx` page in this repo is used to review and approve these submissions, merging them into the `actors` table.
+
+Data flow: **scprodub form → `actor_submissions` → admin approval → `actors`**
 
 ### Row Level Security (RLS)
 
@@ -300,24 +319,35 @@ useSWR(key, fetcher, {
 
 ## 9. Testing & Quality Assurance
 
-While the project doesn't currently have automated tests, here are the manual testing procedures you should follow before merging any code.
+### Automated Tests (Vitest)
+
+The project has **77 unit tests** covering the script parser, fuzzy matcher, and pipeline logic.
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test --watch
+```
+
+Test files are located in:
+- `lib/parser/__tests__/script-parser.test.ts`
+- `lib/parser/__tests__/fuzzy-matcher.test.ts`
+- `lib/parser/__tests__/pipeline.test.ts`
+
+Configuration: `vitest.config.ts`
 
 ### Pre-Merge Checklist
 
 - [ ] Run `pnpm exec tsc --noEmit` - No TypeScript errors
+- [ ] Run `pnpm test` - All 77 tests pass
 - [ ] Run `pnpm run lint` - No linting errors
 - [ ] Run `pnpm run build` - Build completes successfully
 - [ ] Test all modified features in the browser
 - [ ] Test on both desktop and mobile viewports
 - [ ] Check browser console for errors or warnings
 - [ ] Verify database operations work correctly (create, read, update, delete)
-
-### Future: Automated Testing
-
-As the project matures, we should implement:
-- Unit tests for utility functions and server actions
-- Integration tests for critical user flows
-- End-to-end tests using Playwright or Cypress
 
 ---
 

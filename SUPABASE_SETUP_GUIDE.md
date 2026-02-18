@@ -1,5 +1,9 @@
 # Supabase Setup Guide - Authentication & RLS
 
+> **סטטוס:** ✅ בוצע — מדריך זה הוא חד-פעמי. כל הצעדים הורצו. שמור לצורך התקנה מחדש.
+>
+> **migrations שרצו:** ראה תיקיית `migrations/` לגרסאות הנוכחיות.
+
 **IMPORTANT:** Authentication is now ENABLED. You must complete these steps for the app to work.
 
 ---

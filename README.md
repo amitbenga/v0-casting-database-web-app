@@ -14,11 +14,14 @@ This application provides casting directors with a comprehensive platform to man
 
 **Key Features:**
 - **Actor Database:** Comprehensive profiles with skills, languages, voice samples, and more
+- **Public Intake Form:** Actors submit profiles via a separate public form (scprodub repo) → admin reviews and approves
 - **Project Management:** Organize casting projects with roles, assignments, and status tracking
-- **Script Parsing:** Automatically extract roles and dialogue counts from uploaded scripts
+- **Script Parsing:** Automatically extract roles and dialogue counts from uploaded scripts (77 unit tests)
 - **Conflict Detection:** Identify scheduling conflicts when the same actor is cast in multiple roles
 - **Advanced Search & Filtering:** Find the perfect actor using multiple criteria
 - **Collaboration Tools:** Favorites, folders, and notes for team coordination
+
+**Architecture Note:** This app shares a Supabase database with a separate public intake form repo (scprodub). Actor submissions flow from the form → `actor_submissions` table → admin approval page → `actors` table.
 
 ---
 
@@ -128,12 +131,13 @@ v0-casting-database-web-app/
 
 ### Available Scripts
 
-| Command           | Description                                    |
-| ----------------- | ---------------------------------------------- |
-| `pnpm run dev`    | Start development server                       |
-| `pnpm run build`  | Build for production                           |
-| `pnpm run start`  | Start production server                        |
-| `pnpm run lint`   | Run ESLint                                     |
+| Command               | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `pnpm run dev`        | Start development server                       |
+| `pnpm run build`      | Build for production                           |
+| `pnpm run start`      | Start production server                        |
+| `pnpm run lint`       | Run ESLint                                     |
+| `pnpm test`           | Run unit tests (Vitest, 77 tests)              |
 
 ### Code Quality
 
@@ -142,6 +146,9 @@ Before committing, ensure your code passes these checks:
 ```bash
 # Type checking
 pnpm exec tsc --noEmit
+
+# Unit tests
+pnpm test
 
 # Linting
 pnpm run lint
