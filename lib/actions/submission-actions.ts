@@ -147,6 +147,7 @@ export async function mergeSubmissionIntoActor(
     }
 
     // Process array fields (always union)
+    // Submission arrays come as plain Hebrew strings, actor arrays may be {id,key,label} objects
     for (const [fieldName, mapping] of Object.entries(arrayFields)) {
       const submissionArr = Array.isArray(submission[mapping.submissionKey])
         ? submission[mapping.submissionKey]
@@ -160,9 +161,26 @@ export async function mergeSubmissionIntoActor(
         continue
       }
 
-      // Union of both arrays
-      const merged = [...new Set([...actorArr, ...submissionArr])]
-      if (merged.length > actorArr.length) {
+      // Normalize: extract labels/keys for dedup comparison
+      const getKey = (item: any): string =>
+        typeof item === "string" ? item : (item.key || item.label || item.style || JSON.stringify(item))
+
+      const existingKeys = new Set(actorArr.map(getKey))
+      const newItems = submissionArr.filter((item: any) => !existingKeys.has(getKey(item)))
+
+      if (newItems.length > 0) {
+        // Convert new submission strings to objects if actor already has objects
+        const actorHasObjects = actorArr.length > 0 && typeof actorArr[0] === "object"
+        const convertedNew = (fieldName === "skills" || fieldName === "languages") && !actorHasObjects
+          ? submissionArr  // both are strings, keep as-is
+          : newItems.map((item: any, i: number) => {
+              if (typeof item === "string") {
+                return { id: String(actorArr.length + i + 1), key: item, label: item }
+              }
+              return item
+            })
+
+        const merged = [...actorArr, ...convertedNew]
         updateData[mapping.actorKey] = merged
         mergeReport.fields_merged[fieldName] = {
           source: "submission",
@@ -170,6 +188,24 @@ export async function mergeSubmissionIntoActor(
         }
       } else {
         mergeReport.fields_skipped.push(fieldName)
+      }
+    }
+
+    // Extract additional fields from raw_payload that are not top-level columns on actor_submissions
+    if (submission.raw_payload) {
+      const rawPayloadFields: Record<string, string> = {
+        city: "city",
+        dubbing_experience_years: "dubbing_experience_years",
+        youtube_link: "youtube_link",
+        singing_sample_url: "singing_sample_url",
+      }
+      for (const [rawKey, actorKey] of Object.entries(rawPayloadFields)) {
+        const rawValue = submission.raw_payload[rawKey]
+        const actorValue = actor[actorKey]
+        if (rawValue != null && rawValue !== "" && (actorValue == null || actorValue === "")) {
+          updateData[actorKey] = rawValue
+          mergeReport.fields_merged[rawKey] = { source: "submission", value: rawValue }
+        }
       }
     }
 

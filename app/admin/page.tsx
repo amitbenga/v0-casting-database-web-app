@@ -76,6 +76,24 @@ interface ActorSubmission {
 const normalizeEmail = (email?: string) => email?.toLowerCase().trim() || ""
 const normalizePhone = (phone?: string) => phone?.replace(/\D/g, "") || ""
 
+/** Convert plain Hebrew skill strings from submissions to {id, key, label} objects for actors table */
+function convertSkillStringsToObjects(skills: string[]): Array<{id: string, key: string, label: string}> {
+  return skills.map((label, index) => ({
+    id: String(index + 1),
+    key: label,
+    label: label,
+  }))
+}
+
+/** Convert plain Hebrew language strings from submissions to {id, key, label} objects for actors table */
+function convertLanguageStringsToObjects(languages: string[]): Array<{id: string, key: string, label: string}> {
+  return languages.map((label, index) => ({
+    id: String(index + 1),
+    key: label,
+    label: label,
+  }))
+}
+
 function AdminPageContent() {
   const { toast } = useToast()
   const [submissions, setSubmissions] = useState<ActorSubmission[]>([])
@@ -199,9 +217,11 @@ function AdminPageContent() {
         singing_level: submission.singing_level || "",
         is_singer: submission.is_singer || false,
         is_course_grad: submission.is_course_graduate || false,
-        vat_status: submission.vat_status || "exempt",
-        skills: submission.skills || [],
-        languages: submission.languages || [],
+        vat_status: submission.vat_status || "ptor",
+        skills: convertSkillStringsToObjects(submission.skills || []),
+        languages: convertLanguageStringsToObjects(submission.languages || []),
+        city: submission.raw_payload?.city || "",
+        dubbing_experience_years: submission.raw_payload?.dubbing_experience_years || 0,
         notes: submission.notes,
       })
 

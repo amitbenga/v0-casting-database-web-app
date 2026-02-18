@@ -233,6 +233,7 @@ export interface ProjectScript {
 export interface ScriptExtractedRole {
   id: string
   script_id: string
+  project_id?: string
   role_name: string
   role_type: ExtractedRoleType
   dialogue_count: number
@@ -244,9 +245,10 @@ export interface ScriptExtractedRole {
 
 export interface ScriptCastingWarning {
   id: string
-  script_id: string
-  role_id_a: string
-  role_id_b: string
+  script_id?: string
+  project_id?: string
+  role_id_a?: string
+  role_id_b?: string
   role_1_name?: string
   role_2_name?: string
   warning_type: string

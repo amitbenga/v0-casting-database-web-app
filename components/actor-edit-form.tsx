@@ -57,6 +57,8 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
           dubbing_experience_years: formData.dubbing_experience_years || 0,
           singing_styles: formData.singing_styles || [],
           singing_styles_other: formData.singing_styles_other || [],
+          singing_sample_url: formData.singing_sample_url || "",
+          youtube_link: formData.youtube_link || "",
           updated_at: new Date().toISOString(),
         })
         .eq("id", actor.id)

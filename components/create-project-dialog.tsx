@@ -117,7 +117,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
                 type="date"
                 value={formData.project_date}
                 onChange={(e) => setFormData({ ...formData, project_date: e.target.value })}
-                min={new Date().toISOString().split("T")[0]}
+                min={new Date().toLocaleDateString("en-CA")}
                 max="2030-12-31"
                 className="text-right"
                 dir="rtl"

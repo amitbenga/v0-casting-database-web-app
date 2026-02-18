@@ -262,7 +262,7 @@ export default function ProjectDetailPage() {
                     <div className="flex-1">
                       <p className="text-xs text-muted-foreground">תאריך פרויקט</p>
                       <p className="text-sm font-medium">
-                        {new Date(project.project_date).toLocaleDateString("he-IL")}
+                        {new Date(project.project_date + "T00:00:00").toLocaleDateString("he-IL")}
                       </p>
                     </div>
                   </div>

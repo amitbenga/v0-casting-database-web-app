@@ -14,7 +14,7 @@ import type {
 // API Configuration
 // ===================================
 
-const USE_MOCKS = true // Toggle this when backend is ready
+const USE_MOCKS = false // Backend is ready
 
 // ===================================
 // Mock Data

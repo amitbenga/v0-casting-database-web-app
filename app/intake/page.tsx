@@ -167,7 +167,7 @@ export default function ActorIntakePage() {
         notes: formData.notes || "",
         is_singer: formData.is_singer,
         is_course_grad: formData.is_course_graduate,
-        vat_status: formData.vat_status || "none",
+        vat_status: formData.vat_status || "ptor",
         image_url: uploadedPhoto || "",
         voice_sample_url: uploadedAudio || "",
         singing_sample_url: uploadedSinging || "",
@@ -374,9 +374,9 @@ export default function ActorIntakePage() {
                           <SelectValue placeholder="בחר מעמד" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="licensed">עוסק מורשה</SelectItem>
-                          <SelectItem value="exempt">עוסק פטור</SelectItem>
-                          <SelectItem value="none">לא רשום</SelectItem>
+                          <SelectItem value="ptor">עוסק פטור</SelectItem>
+                          <SelectItem value="murshe">עוסק מורשה</SelectItem>
+                          <SelectItem value="artist_salary">שכר אמנים</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
