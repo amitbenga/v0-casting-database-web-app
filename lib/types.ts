@@ -256,6 +256,35 @@ export interface ScriptCastingWarning {
   created_at: string
 }
 
+// Script Workspace — Module 4
+// Recording status values (match the Excel "REC" column)
+export type RecStatus = "הוקלט" | "Optional" | "לא הוקלט"
+
+export interface ScriptLine {
+  id: string
+  project_id: string
+  script_id?: string
+  line_number?: number
+  timecode?: string
+  role_name: string
+  source_text?: string
+  translation?: string
+  rec_status?: RecStatus | null
+  notes?: string
+  created_at: string
+}
+
+// Used when importing lines before they have DB ids
+export interface ScriptLineInput {
+  line_number: number
+  timecode?: string
+  role_name: string
+  source_text?: string
+  translation?: string
+  rec_status?: RecStatus | null
+  notes?: string
+}
+
 // Folder type
 export interface Folder {
   id: string
