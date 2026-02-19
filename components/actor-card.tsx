@@ -247,7 +247,7 @@ export function ActorCard({
             size="icon"
             variant="ghost"
             className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200"
-            onClick={handleBookmark}
+            onClick={handleAddToFolder}
           >
             <Bookmark className="h-3.5 w-3.5 md:h-4 md:w-4" />
           </Button>

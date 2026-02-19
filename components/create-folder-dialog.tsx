@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { createFolder } from "@/lib/actions/folder-actions"
 
 interface CreateFolderDialogProps {
   open: boolean
@@ -40,25 +40,15 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
     setSubmitting(true)
 
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("folders")
-        .insert([
-          {
-            name: formData.name,
-            description: formData.description || null,
-            color: formData.color,
-          },
-        ])
-        .select()
+      const result = await createFolder(formData.name, formData.description || undefined, formData.color)
 
-      if (error) {
-        console.error("[v0] Error creating folder:", error)
+      if (!result.success) {
+        console.error("[v0] Error creating folder:", result.error)
         toast({ title: "שגיאה", description: "שגיאה ביצירת התיקייה", variant: "destructive" })
         return
       }
 
-      console.log("[v0] Folder created:", data)
+      console.log("[v0] Folder created:", result.folder)
       onOpenChange(false)
       setFormData({ name: "", description: "", color: "blue" })
 

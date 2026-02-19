@@ -79,8 +79,8 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     try {
       const supabase = createBrowserClient()
       const { data, error } = await supabase
-        .from("project_scripts")
-        .select("*")
+        .from("casting_project_scripts")
+        .select("id, project_id, file_name, file_url, file_type, file_size_bytes, processing_status, processing_error, applied_at, created_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
 
@@ -185,7 +185,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     try {
       const supabase = createBrowserClient()
       const { error } = await supabase
-        .from("project_scripts")
+        .from("casting_project_scripts")
         .delete()
         .eq("id", scriptId)
 
