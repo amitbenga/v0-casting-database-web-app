@@ -138,7 +138,7 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
 
     // 4. Mark script as applied
     await supabase
-      .from("project_scripts")
+      .from("casting_project_scripts")
       .update({
         applied_at: new Date().toISOString()
       })
@@ -385,7 +385,7 @@ export async function getProjectRolesWithCasting(
     const { data: roles, error: rolesError } = await supabase
       .from("project_roles")
       .select(`
-        *,
+        id, project_id, role_name, role_name_normalized, parent_role_id, description, replicas_count, replicas_needed, source, created_at,
         role_castings (
           id,
           actor_id,
@@ -422,8 +422,10 @@ export async function getProjectRolesWithCasting(
     const transformedRoles = roles.map(role => {
       const casting = role.role_castings && role.role_castings.length > 0 ? {
         ...role.role_castings[0],
-        actor: role.role_castings[0].actors,
-        name: role.role_castings[0].actors?.full_name // for v0 UI
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        actor: role.role_castings[0].actors as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        name: (role.role_castings[0].actors as any)?.full_name // for v0 UI
       } : null;
       
       return {

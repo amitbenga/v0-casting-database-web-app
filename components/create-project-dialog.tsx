@@ -35,7 +35,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
     try {
       const supabase = createClient()
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("casting_projects")
         .insert([
           {
@@ -47,7 +47,6 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
             notes: formData.notes,
           },
         ])
-        .select()
 
       if (error) {
         console.error("[v0] Error creating project:", error)
@@ -55,7 +54,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
         return
       }
 
-      console.log("[v0] Project created:", data)
+      console.log("[v0] Project created successfully")
       onOpenChange(false)
       setFormData({ name: "", director: "", casting_director: "", project_date: "", notes: "", status: "not_started" })
 

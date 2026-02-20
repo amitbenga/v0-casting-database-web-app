@@ -67,7 +67,7 @@ export default function ProjectDetailPage() {
       // Load project
       const { data: projectData, error: projectError } = await supabase
         .from("casting_projects")
-        .select("*")
+        .select("id, name, status, notes, director, casting_director, project_date, created_at, updated_at")
         .eq("id", projectId)
         .single()
 
@@ -77,7 +77,7 @@ export default function ProjectDetailPage() {
       // Load stats
       const [rolesResult, scriptsResult, castingsResult] = await Promise.all([
         supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
+        supabase.from("casting_project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
         supabase.from("role_castings").select("actor_id").eq("project_id", projectId),
       ])
 

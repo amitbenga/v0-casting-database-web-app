@@ -137,7 +137,7 @@ function ActorsDatabaseContent() {
     ([, cursor]) => fetchActorsPage(cursor as string | null),
     {
       revalidateOnFocus: false,
-      revalidateFirstPage: false,
+      revalidateFirstPage: true,
       dedupingInterval: 60000, // 1 minute cache
     }
   )
