@@ -12,7 +12,7 @@ export function AppHeader() {
           {/* לוגו וכותרת */}
           <div className="flex items-center gap-3 md:gap-4">
             <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
-              <Image src="/logo.png" alt="Soprodub" width={120} height={30} className="h-6 md:h-8 w-auto" />
+              <Image src="/logo.png" alt="Soprodub" width={120} height={30} className="h-6 md:h-8 w-auto" priority />
             </Link>
           </div>
 
