@@ -197,13 +197,10 @@ function AdminPageContent() {
   }
 
   async function handleApprove(submission: ActorSubmission) {
-    console.log("[v0] handleApprove called for:", submission.full_name)
     try {
       const supabase = createBrowserClient()
 
       const genderInEnglish = submission.gender === "זכר" ? "male" : "female"
-
-      console.log("[v0] Inserting actor into database:", { full_name: submission.full_name, gender: genderInEnglish })
 
       // שינוי is_course_graduate ל-is_course_grad בהתאמה לשם השדה בטבלת actors
       const { error: insertError } = await supabase.from("actors").insert({
@@ -228,12 +225,7 @@ function AdminPageContent() {
         notes: submission.notes,
       })
 
-      if (insertError) {
-        console.error("[v0] Insert error:", insertError)
-        throw insertError
-      }
-
-      console.log("[v0] Actor inserted successfully, updating submission status")
+      if (insertError) throw insertError
 
       const { error: updateError } = await supabase
         .from("actor_submissions")
@@ -242,19 +234,15 @@ function AdminPageContent() {
         })
         .eq("id", submission.id)
 
-      if (updateError) {
-        console.error("[v0] Update error:", updateError)
-        throw updateError
-      }
+      if (updateError) throw updateError
 
-      console.log("[v0] Submission approved successfully")
       toast({ title: "הצלחה", description: `הבקשה של ${submission.full_name} אושרה בהצלחה` })
       
       await loadSubmissions()
       setIsReviewDialogOpen(false)
       setSelectedSubmission(null)
     } catch (error) {
-      console.error("[v0] Error approving submission:", error)
+      console.error("Error approving submission:", error)
       toast({ 
         title: "שגיאה", 
         description: error instanceof Error ? error.message : "שגיאה באישור הבקשה", 
@@ -264,7 +252,6 @@ function AdminPageContent() {
   }
 
   async function handleReject(submission: ActorSubmission) {
-    console.log("[v0] handleReject called for:", submission.full_name)
     try {
       const supabase = createBrowserClient()
 
@@ -275,19 +262,15 @@ function AdminPageContent() {
         })
         .eq("id", submission.id)
 
-      if (error) {
-        console.error("[v0] Reject error:", error)
-        throw error
-      }
+      if (error) throw error
 
-      console.log("[v0] Submission rejected successfully")
       toast({ title: "הצלחה", description: `הבקשה של ${submission.full_name} נדחתה` })
 
       await loadSubmissions()
       setIsReviewDialogOpen(false)
       setSelectedSubmission(null)
     } catch (error) {
-      console.error("[v0] Error rejecting submission:", error)
+      console.error("Error rejecting submission:", error)
       toast({ 
         title: "שגיאה", 
         description: error instanceof Error ? error.message : "שגיאה בדחיית הבקשה", 
