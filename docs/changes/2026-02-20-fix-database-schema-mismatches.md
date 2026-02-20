@@ -84,8 +84,31 @@ ALTER TABLE public.casting_projects
 - **מיגרציות עתידיות:** כל שינוי בקוד שדורש שדות חדשים חייב לכלול מיגרציה מתאימה
 - **אימות סכימה:** מומלץ להוסיף בדיקות אוטומטיות לאימות התאמה בין TypeScript types ל-DB schema
 
+### 3. טבלת `user_profiles` - ריקה לחלוטין (שורש הבעיה העיקרי!)
+
+טבלת `user_profiles` היתה ריקה, למרות שהיו 3 משתמשים ב-`auth.users`.
+כל מדיניות ה-RLS על `actors`, `actor_submissions`, ו-`casting_projects` דורשת:
+```sql
+EXISTS (SELECT 1 FROM user_profiles WHERE user_profiles.id = auth.uid() AND user_profiles.role = 'admin')
+```
+בגלל שהטבלה היתה ריקה, **אף משתמש לא היה מוכר כ-admin** ולכן כל פעולות INSERT/UPDATE/DELETE נחסמו.
+
+## מיגרציה 018: הוספת פרופילי admin
+
+**קובץ:** `scripts/018_seed_admin_user_profiles.sql`
+
+נוספו 3 המשתמשים הקיימים כ-admin:
+- lenny@sc-produb.com
+- sharon@sc-produb.com
+- amit@madrasafree.com
+
+### פונקציונליות שתוקנה בנוסף:
+- אישור/דחיית בקשות שחקנים (RLS כבר לא חוסם)
+- יצירת פרויקטים חדשים (RLS כבר לא חוסם)
+- עדכון ומחיקת שחקנים ופרויקטים
+
 ## קישורים רלוונטיים
 
-- Migration Script: `scripts/017_add_project_metadata_fields.sql`
+- Migration Scripts: `scripts/017_add_project_metadata_fields.sql`, `scripts/018_seed_admin_user_profiles.sql`
 - Type Definitions: `lib/types.ts` (interface `CastingProject`)
 - Related Issues: ADMIN-1, PROJECTS-1
