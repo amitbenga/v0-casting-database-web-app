@@ -107,8 +107,24 @@ EXISTS (SELECT 1 FROM user_profiles WHERE user_profiles.id = auth.uid() AND user
 - יצירת פרויקטים חדשים (RLS כבר לא חוסם)
 - עדכון ומחיקת שחקנים ופרויקטים
 
+## מיגרציה 019: תיקון מדיניות RLS לגישה ציבורית
+
+**קובץ:** `scripts/019_fix_rls_policies_public_access.sql`
+
+האפליקציה מנהלת אותנטיקציה ברמת האפליקציה (AuthContext), לא דרך Supabase Auth.
+כתוצאה, כל הקריאות מ-browser מגיעות כ-`anon` role ולא כ-`authenticated`.
+מדיניות ה-RLS הישנות דרשו `authenticated` role, מה שחסם **את כל הפעולות** - כולל קריאה (SELECT), הוספה (INSERT), עדכון (UPDATE) ומחיקה (DELETE).
+
+### טבלאות שתוקנו:
+- `actors` - SELECT, INSERT, UPDATE, DELETE
+- `actor_submissions` - SELECT, INSERT, UPDATE
+- `casting_projects` - SELECT, INSERT, UPDATE, DELETE
+- `project_roles` - SELECT, INSERT, UPDATE, DELETE
+
+### שינוי: כל ה-policies הוחלפו ל-`USING (true)` / `WITH CHECK (true)` כדי לאפשר גישה מלאה מכל role.
+
 ## קישורים רלוונטיים
 
-- Migration Scripts: `scripts/017_add_project_metadata_fields.sql`, `scripts/018_seed_admin_user_profiles.sql`
+- Migration Scripts: `scripts/017_add_project_metadata_fields.sql`, `scripts/018_seed_admin_user_profiles.sql`, `scripts/019_fix_rls_policies_public_access.sql`
 - Type Definitions: `lib/types.ts` (interface `CastingProject`)
 - Related Issues: ADMIN-1, PROJECTS-1
