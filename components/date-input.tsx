@@ -3,9 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, X } from "lucide-react"
+import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface DateInputProps {
@@ -16,7 +14,6 @@ interface DateInputProps {
   max?: string
   className?: string
   id?: string
-  dir?: string
 }
 
 function formatDateForDisplay(isoDate: string): string {
@@ -38,9 +35,8 @@ function parseDisplayDate(display: string): string {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`
 }
 
-export function DateInput({ value, onChange, placeholder = "dd/mm/yyyy", min, max, className, id, dir }: DateInputProps) {
+export function DateInput({ value, onChange, placeholder = "dd/mm/yyyy", min, max, className, id }: DateInputProps) {
   const [displayValue, setDisplayValue] = useState(formatDateForDisplay(value))
-  const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -50,11 +46,13 @@ export function DateInput({ value, onChange, placeholder = "dd/mm/yyyy", min, ma
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     let raw = e.target.value.replace(/[^\d/]/g, "")
 
-    // Auto-add slashes
-    if (raw.length === 2 && !raw.includes("/")) {
-      raw = raw + "/"
-    } else if (raw.length === 5 && raw.indexOf("/") === 2 && raw.lastIndexOf("/") === 2) {
-      raw = raw + "/"
+    // Auto-add slashes after day and month
+    const digits = raw.replace(/\//g, "")
+    if (digits.length >= 2 && raw.length <= 3) {
+      raw = digits.slice(0, 2) + "/" + digits.slice(2)
+    }
+    if (digits.length >= 4 && raw.length <= 6) {
+      raw = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4)
     }
 
     // Limit length
@@ -85,20 +83,10 @@ export function DateInput({ value, onChange, placeholder = "dd/mm/yyyy", min, ma
     }
   }
 
-  function handleCalendarSelect(date: Date | undefined) {
-    if (date) {
-      const iso = date.toISOString().split("T")[0]
-      onChange(iso)
-      setOpen(false)
-    }
-  }
-
   function handleClear() {
     onChange("")
     setDisplayValue("")
   }
-
-  const selectedDate = value ? new Date(value + "T00:00:00") : undefined
 
   return (
     <div className={cn("relative flex items-center", className)}>
@@ -110,43 +98,21 @@ export function DateInput({ value, onChange, placeholder = "dd/mm/yyyy", min, ma
         onBlur={handleBlur}
         placeholder={placeholder}
         dir="ltr"
-        className="pr-16 text-right"
+        className="pr-2 pl-10 text-right"
         maxLength={10}
       />
-      <div className="absolute left-1 flex items-center gap-0.5">
-        {value && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={handleClear}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            >
-              <CalendarIcon className="h-4 w-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={handleCalendarSelect}
-              defaultMonth={selectedDate}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
+      {value && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute left-1 h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={handleClear}
+        >
+          <X className="h-3.5 w-3.5" />
+          <span className="sr-only">נקה תאריך</span>
+        </Button>
+      )}
     </div>
   )
 }
