@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { UserPlus, X, RefreshCw, FileText, Play, Loader2, Trash2, AlertTriangle } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   assignActorToRole,
   unassignActorFromRole,
@@ -45,9 +46,11 @@ interface RoleCastingCardProps {
   conflicts?: RoleConflict[]
   isChild?: boolean
   onUpdate: () => void
+  isSelected?: boolean
+  onToggleSelect?: (id: string) => void
 }
 
-export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdate }: RoleCastingCardProps) {
+export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdate, isSelected = false, onToggleSelect }: RoleCastingCardProps) {
   const { toast } = useToast()
   const [isAssigning, setIsAssigning] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -187,8 +190,18 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   }
 
   return (
-    <Card className={`p-4 ${isChild ? "mr-6 border-r-4 border-r-muted" : ""}`}>
+    <Card className={`p-4 ${isChild ? "mr-6 border-r-4 border-r-muted" : ""} ${isSelected ? "ring-2 ring-primary" : ""}`}>
       <div className="flex items-center justify-between gap-4">
+        {/* Checkbox for bulk selection */}
+        {onToggleSelect && (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => onToggleSelect(role.id)}
+            aria-label={`בחר תפקיד ${role.role_name}`}
+            className="flex-shrink-0"
+          />
+        )}
+
         {/* Role Info */}
         <div className="flex items-center gap-4 min-w-0 flex-1">
           <div className="min-w-0 flex-1">
