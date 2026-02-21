@@ -13,6 +13,7 @@ import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { CastingWorkspace } from "@/components/projects/casting-workspace"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
+import { ScriptWorkspaceTab } from "@/components/projects/script-workspace-tab"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
@@ -308,7 +309,7 @@ export default function ProjectDetailPage() {
           {/* Main Content */}
           <div className="lg:col-span-3 space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="roles">
                   תפקידים ({stats.rolesCount})
                 </TabsTrigger>
@@ -317,6 +318,9 @@ export default function ProjectDetailPage() {
                 </TabsTrigger>
                 <TabsTrigger value="actors">
                   שחקנים ({stats.actorsCount})
+                </TabsTrigger>
+                <TabsTrigger value="workspace">
+                  סביבת עבודה
                 </TabsTrigger>
               </TabsList>
 
@@ -336,6 +340,10 @@ export default function ProjectDetailPage() {
 
               <TabsContent value="actors" className="mt-6">
                 <ActorsTab projectId={project.id} />
+              </TabsContent>
+
+              <TabsContent value="workspace" className="mt-6">
+                <ScriptWorkspaceTab projectId={project.id} />
               </TabsContent>
             </Tabs>
           </div>

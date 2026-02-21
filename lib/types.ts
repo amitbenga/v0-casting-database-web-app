@@ -256,6 +256,41 @@ export interface ScriptCastingWarning {
   created_at: string
 }
 
+// Script Workspace — Module 4
+// Recording status values (match the Excel "REC" column)
+export type RecStatus = "הוקלט" | "Optional" | "לא הוקלט"
+
+export interface ScriptLine {
+  id: string
+  project_id: string
+  script_id?: string
+  line_number?: number
+  timecode?: string
+  role_name: string
+  /** The specific actor recording this line (from casting assignment) */
+  actor_id?: string | null
+  /** Joined from actors.full_name — not stored in DB, populated by getScriptLines() */
+  actor_name?: string | null
+  source_text?: string
+  translation?: string
+  rec_status?: RecStatus | null
+  notes?: string
+  created_at: string
+}
+
+// Used when importing lines before they have DB ids
+export interface ScriptLineInput {
+  line_number: number
+  timecode?: string
+  role_name: string
+  /** Optional: set actor at import time */
+  actor_id?: string | null
+  source_text?: string
+  translation?: string
+  rec_status?: RecStatus | null
+  notes?: string
+}
+
 // Folder type
 export interface Folder {
   id: string
