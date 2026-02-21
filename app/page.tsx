@@ -113,7 +113,7 @@ function ActorsDatabaseContent() {
     skills: [],
     languages: [],
     vatStatus: [],
-    sortBy: "newest",
+    sortBy: "shuffle",
     dubbingExperience: [],
     singingStyles: [],
   })
@@ -404,8 +404,7 @@ function ActorsDatabaseContent() {
     const currentYear = new Date().getFullYear()
     const query = deferredSearchQuery.trim().toLowerCase()
 
-    return displayedActors
-      .filter((actor) => {
+    const filtered = displayedActors.filter((actor) => {
         const actorAge = currentYear - (actor.birth_year ?? 0)
         const matchesSearch =
           query.length === 0 ||
@@ -457,19 +456,23 @@ function ActorsDatabaseContent() {
 
         return true
       })
-      .sort((a, b) => {
-        switch (filters.sortBy) {
-          case "alphabetical":
-            return a.full_name.localeCompare(b.full_name, "he")
-          case "age-asc":
-            return (a.birth_year ?? 0) - (b.birth_year ?? 0)
-          case "age-desc":
-            return (b.birth_year ?? 0) - (a.birth_year ?? 0)
-          case "newest":
-          default:
-            return b.created_at.localeCompare(a.created_at)
-        }
-      })
+
+    // When sortBy is "shuffle", preserve the shuffle order from shuffledActors (no re-sort)
+    if (filters.sortBy === "shuffle") return filtered
+
+    return filtered.sort((a, b) => {
+      switch (filters.sortBy) {
+        case "alphabetical":
+          return a.full_name.localeCompare(b.full_name, "he")
+        case "age-asc":
+          return (a.birth_year ?? 0) - (b.birth_year ?? 0)
+        case "age-desc":
+          return (b.birth_year ?? 0) - (a.birth_year ?? 0)
+        case "newest":
+        default:
+          return b.created_at.localeCompare(a.created_at)
+      }
+    })
   }, [deferredSearchQuery, displayedActors, filters])
   if (isLoading && !data) {
     return (

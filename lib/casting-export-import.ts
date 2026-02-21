@@ -19,21 +19,35 @@ export async function exportCastingToExcel(
       }
     }
 
-    // הכנת הנתונים - כל תפקיד = שורה
-    const data = allRoles.map((role) => {
-      const actor = role.casting?.actor || role.casting?.actors;
-      const actorName = actor?.full_name || null;
-
-      return {
-        "תפקיד": role.role_name,
-        "סוג": role.parent_role_id ? "גרסה" : "ראשי",
-        "רפליקות": role.replicas_count || role.replicas_needed || 0,
-        "שחקן": actorName || "לא משובץ",
-        "סטטוס": role.casting?.status || "—",
-        "קשור לתפקיד": role.parent_role_id ? allRoles.find(r => r.id === role.parent_role_id)?.role_name || "—" : "—",
-        "מקור": role.source || "ידני",
-      };
-    });
+    // הכנת הנתונים - כל תפקיד = שורה (תפקיד עם מרובה שחקנים = מרובה שורות)
+    const data: Record<string, string | number>[] = []
+    for (const role of allRoles) {
+      if (role.castings.length === 0) {
+        data.push({
+          "תפקיד": role.role_name,
+          "סוג": role.parent_role_id ? "גרסה" : "ראשי",
+          "רפליקות": role.replicas_count || role.replicas_needed || 0,
+          "שחקן": "לא משובץ",
+          "סטטוס": "—",
+          "קשור לתפקיד": role.parent_role_id ? allRoles.find(r => r.id === role.parent_role_id)?.role_name || "—" : "—",
+          "מקור": role.source || "ידני",
+        })
+      } else {
+        for (const casting of role.castings) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const actor = (casting as any).actor
+          data.push({
+            "תפקיד": role.role_name,
+            "סוג": role.parent_role_id ? "גרסה" : "ראשי",
+            "רפליקות": role.replicas_count || role.replicas_needed || 0,
+            "שחקן": actor?.full_name || "שחקן",
+            "סטטוס": casting.status || "—",
+            "קשור לתפקיד": role.parent_role_id ? allRoles.find(r => r.id === role.parent_role_id)?.role_name || "—" : "—",
+            "מקור": role.source || "ידני",
+          })
+        }
+      }
+    }
 
     const ws = XLSX.utils.json_to_sheet(data);
     
@@ -53,7 +67,7 @@ export async function exportCastingToExcel(
     XLSX.utils.book_append_sheet(wb, ws, "ליהוק");
 
     // הוסף גיליון שני עם סטטיסטיקות
-    const assignedCount = allRoles.filter(r => r.casting).length;
+    const assignedCount = allRoles.filter(r => r.castings.length > 0).length;
     const stats = {
       "סה״כ תפקידים": allRoles.length,
       "תפקידים ראשיים": allRoles.filter(r => !r.parent_role_id).length,

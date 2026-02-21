@@ -65,7 +65,7 @@ export interface FilterState {
   skills: string[]
   languages: string[]
   vatStatus: string[]
-  sortBy: "newest" | "alphabetical" | "age-asc" | "age-desc"
+  sortBy: "shuffle" | "newest" | "alphabetical" | "age-asc" | "age-desc"
   dubbingExperience: string[]
   singingStyles: string[]
 }
@@ -123,7 +123,7 @@ export interface RoleConflict {
 }
 
 export interface ProjectRoleWithCasting extends ProjectRole {
-  casting?: RoleCasting | null
+  castings: RoleCasting[]
   children?: ProjectRoleWithCasting[]
   replicas_count: number // for v0 UI compatibility
 }
