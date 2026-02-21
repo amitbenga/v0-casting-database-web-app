@@ -19,18 +19,14 @@ import {
   AlertTriangle,
   Link2,
   ExternalLink,
-  Trash2,
-  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Checkbox } from "@/components/ui/checkbox"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { softDeleteSubmissions } from "@/lib/actions/submission-actions"
 
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 
@@ -72,8 +68,8 @@ interface ActorSubmission {
   review_status: "pending" | "approved" | "rejected"
   match_status?: string
   matched_actor_id?: string
-  merge_report?: unknown
-  raw_payload?: Record<string, unknown>
+  merge_report?: any
+  raw_payload?: any
   created_at: string
 }
 
@@ -110,10 +106,6 @@ function AdminPageContent() {
   const [isPlaying, setIsPlaying] = useState<string | null>(null)
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
 
-  // Feature 2: Multi-select state for pending tab
-  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set())
-  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
-
   useEffect(() => {
     loadSubmissions()
   }, [])
@@ -122,11 +114,10 @@ function AdminPageContent() {
     try {
       const supabase = createBrowserClient()
 
-      // טען submissions — מסנן deleted_at IS NULL
+      // טען submissions
       const { data: submissionsData, error: submissionsError } = await supabase
         .from("actor_submissions")
         .select("*")
-        .is("deleted_at", null)
         .order("created_at", { ascending: false })
 
       if (submissionsError) throw submissionsError
@@ -196,7 +187,7 @@ function AdminPageContent() {
           duplicates[submission.id] = Array.from(matchesByActorId.values())
         }
       }
-
+      
       setDuplicatesMap(duplicates)
     } catch (error) {
       console.error("[v0] Error loading submissions:", error)
@@ -245,18 +236,12 @@ function AdminPageContent() {
 
       if (updateError) throw updateError
 
-      toast({ title: "הצלחה", description: `הבקשה של ${submission.full_name} אושרה בהצלחה` })
-
       await loadSubmissions()
       setIsReviewDialogOpen(false)
       setSelectedSubmission(null)
     } catch (error) {
-      console.error("Error approving submission:", error)
-      toast({
-        title: "שגיאה",
-        description: error instanceof Error ? error.message : "שגיאה באישור הבקשה",
-        variant: "destructive"
-      })
+      console.error("[v0] Error approving submission:", error)
+      toast({ title: "שגיאה", description: "שגיאה באישור הבקשה", variant: "destructive" })
     }
   }
 
@@ -273,101 +258,12 @@ function AdminPageContent() {
 
       if (error) throw error
 
-      toast({ title: "הצלחה", description: `הבקשה של ${submission.full_name} נדחתה` })
-
       await loadSubmissions()
       setIsReviewDialogOpen(false)
       setSelectedSubmission(null)
     } catch (error) {
-      console.error("Error rejecting submission:", error)
-      toast({
-        title: "שגיאה",
-        description: error instanceof Error ? error.message : "שגיאה בדחיית הבקשה",
-        variant: "destructive"
-      })
-    }
-  }
-
-  // Feature 1: Clear handlers
-  async function handleClearSubmission(id: string) {
-    const result = await softDeleteSubmissions([id])
-    if (result.success) {
-      setSubmissions((prev: ActorSubmission[]) => prev.filter((s: ActorSubmission) => s.id !== id))
-    } else {
-      toast({ title: "שגיאה", description: result.error || "שגיאה במחיקה", variant: "destructive" })
-    }
-  }
-
-  async function handleClearAllApproved() {
-    const ids = approvedSubmissions.map((s: ActorSubmission) => s.id)
-    if (ids.length === 0) return
-    const result = await softDeleteSubmissions(ids)
-    if (result.success) {
-      setSubmissions((prev: ActorSubmission[]) => prev.filter((s: ActorSubmission) => !ids.includes(s.id)))
-      toast({ title: "הצלחה", description: `${ids.length} בקשות מאושרות נמחקו` })
-    } else {
-      toast({ title: "שגיאה", description: result.error || "שגיאה במחיקה", variant: "destructive" })
-    }
-  }
-
-  async function handleClearAllRejected() {
-    const ids = rejectedSubmissions.map((s: ActorSubmission) => s.id)
-    if (ids.length === 0) return
-    const result = await softDeleteSubmissions(ids)
-    if (result.success) {
-      setSubmissions((prev: ActorSubmission[]) => prev.filter((s: ActorSubmission) => !ids.includes(s.id)))
-      toast({ title: "הצלחה", description: `${ids.length} בקשות שנדחו נמחקו` })
-    } else {
-      toast({ title: "שגיאה", description: result.error || "שגיאה במחיקה", variant: "destructive" })
-    }
-  }
-
-  // Feature 2: Multi-select handlers
-  function handleToggleSelectPending(id: string) {
-    setSelectedPendingIds((prev: Set<string>) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  function handleSelectAllPending() {
-    setSelectedPendingIds(new Set(pendingSubmissions.map((s: ActorSubmission) => s.id)))
-  }
-
-  function handleDeselectAllPending() {
-    setSelectedPendingIds(new Set())
-  }
-
-  async function handleBulkApprove() {
-    if (selectedPendingIds.size === 0) return
-    setIsBulkProcessing(true)
-    try {
-      const toApprove = pendingSubmissions.filter((s: ActorSubmission) => selectedPendingIds.has(s.id))
-      for (const submission of toApprove) {
-        await handleApprove(submission)
-      }
-      setSelectedPendingIds(new Set())
-    } finally {
-      setIsBulkProcessing(false)
-    }
-  }
-
-  async function handleBulkReject() {
-    if (selectedPendingIds.size === 0) return
-    setIsBulkProcessing(true)
-    try {
-      const toReject = pendingSubmissions.filter((s: ActorSubmission) => selectedPendingIds.has(s.id))
-      for (const submission of toReject) {
-        await handleReject(submission)
-      }
-      setSelectedPendingIds(new Set())
-    } finally {
-      setIsBulkProcessing(false)
+      console.error("[v0] Error rejecting submission:", error)
+      toast({ title: "שגיאה", description: "שגיאה בדחיית הבקשה", variant: "destructive" })
     }
   }
 
@@ -462,96 +358,24 @@ function AdminPageContent() {
                 <p className="text-muted-foreground text-lg">אין בקשות ממתינות</p>
               </Card>
             ) : (
-              <>
-                {/* Feature 2: Select all / deselect all + bulk action bar */}
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={
-                      selectedPendingIds.size === pendingSubmissions.length
-                        ? handleDeselectAllPending
-                        : handleSelectAllPending
-                    }
-                  >
-                    {selectedPendingIds.size === pendingSubmissions.length
-                      ? "בטל בחירה"
-                      : `בחר הכל (${pendingSubmissions.length})`}
-                  </Button>
-                  {selectedPendingIds.size > 0 && (
-                    <span className="text-sm text-muted-foreground">
-                      {selectedPendingIds.size} נבחרו
-                    </span>
-                  )}
-                </div>
-
-                {selectedPendingIds.size > 0 && (
-                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                    {isBulkProcessing ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        מעבד...
-                      </div>
-                    ) : (
-                      <>
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={handleBulkApprove}
-                          disabled={isBulkProcessing}
-                        >
-                          <Check className="h-4 w-4 ml-2" />
-                          אשר נבחרים ({selectedPendingIds.size})
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={handleBulkReject}
-                          disabled={isBulkProcessing}
-                        >
-                          <X className="h-4 w-4 ml-2" />
-                          דחה נבחרים ({selectedPendingIds.size})
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {pendingSubmissions.map((submission) => (
-                  <SubmissionCard
-                    key={submission.id}
-                    submission={submission}
-                    duplicates={duplicatesMap[submission.id]}
-                    onReview={(action) => {
-                      setSelectedSubmission(submission)
-                      setReviewAction(action)
-                      setIsReviewDialogOpen(true)
-                    }}
-                    onPlayAudio={handlePlayAudio}
-                    isPlaying={isPlaying === submission.id}
-                    showCheckbox={true}
-                    isSelected={selectedPendingIds.has(submission.id)}
-                    onToggleSelect={handleToggleSelectPending}
-                  />
-                ))}
-              </>
+              pendingSubmissions.map((submission) => (
+                <SubmissionCard
+                  key={submission.id}
+                  submission={submission}
+                  duplicates={duplicatesMap[submission.id]}
+                  onReview={(action) => {
+                    setSelectedSubmission(submission)
+                    setReviewAction(action)
+                    setIsReviewDialogOpen(true)
+                  }}
+                  onPlayAudio={handlePlayAudio}
+                  isPlaying={isPlaying === submission.id}
+                />
+              ))
             )}
           </TabsContent>
 
           <TabsContent value="approved" className="space-y-4">
-            {approvedSubmissions.length > 0 && (
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearAllApproved}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 ml-2" />
-                  נקה הכל
-                </Button>
-              </div>
-            )}
             {approvedSubmissions.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground">אין בקשות מאושרות</p>
@@ -563,26 +387,12 @@ function AdminPageContent() {
                   submission={submission}
                   onPlayAudio={handlePlayAudio}
                   isPlaying={isPlaying === submission.id}
-                  onClear={handleClearSubmission}
                 />
               ))
             )}
           </TabsContent>
 
           <TabsContent value="rejected" className="space-y-4">
-            {rejectedSubmissions.length > 0 && (
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearAllRejected}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 ml-2" />
-                  נקה הכל
-                </Button>
-              </div>
-            )}
             {rejectedSubmissions.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground">אין בקשות שנדחו</p>
@@ -594,7 +404,6 @@ function AdminPageContent() {
                   submission={submission}
                   onPlayAudio={handlePlayAudio}
                   isPlaying={isPlaying === submission.id}
-                  onClear={handleClearSubmission}
                 />
               ))
             )}
@@ -647,37 +456,18 @@ function SubmissionCard({
   onReview,
   onPlayAudio,
   isPlaying,
-  onClear,
-  showCheckbox,
-  isSelected,
-  onToggleSelect,
 }: {
   submission: ActorSubmission
   duplicates?: DuplicateMatch[]
   onReview?: (action: "approve" | "reject") => void
   onPlayAudio: (url: string, id: string, e: React.MouseEvent) => void
   isPlaying: boolean
-  onClear?: (id: string) => void
-  showCheckbox?: boolean
-  isSelected?: boolean
-  onToggleSelect?: (id: string) => void
 }) {
   const age = new Date().getFullYear() - submission.birth_year
 
   return (
     <Card className="p-6">
       <div className="flex gap-6">
-        {/* Checkbox (only for pending tab) */}
-        {showCheckbox && (
-          <div className="flex-shrink-0 flex items-start pt-1">
-            <Checkbox
-              checked={isSelected ?? false}
-              onCheckedChange={() => onToggleSelect?.(submission.id)}
-              aria-label={`בחר ${submission.full_name}`}
-            />
-          </div>
-        )}
-
         {/* Avatar */}
         <div className="flex-shrink-0">
           {submission.image_url ? (
@@ -722,32 +512,19 @@ function SubmissionCard({
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={
-                  submission.review_status === "pending"
-                    ? "default"
-                    : submission.review_status === "approved"
-                      ? "secondary"
-                      : "destructive"
-                }
-              >
-                {submission.review_status === "pending" && "ממתין"}
-                {submission.review_status === "approved" && "אושר"}
-                {submission.review_status === "rejected" && "נדחה"}
-              </Badge>
-              {onClear && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={() => onClear(submission.id)}
-                  aria-label="מחק"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+            <Badge
+              variant={
+                submission.review_status === "pending"
+                  ? "default"
+                  : submission.review_status === "approved"
+                    ? "secondary"
+                    : "destructive"
+              }
+            >
+              {submission.review_status === "pending" && "ממתין"}
+              {submission.review_status === "approved" && "אושר"}
+              {submission.review_status === "rejected" && "נדחה"}
+            </Badge>
           </div>
 
           {/* Details */}

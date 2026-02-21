@@ -12,14 +12,11 @@
  * Note: This runs client-side due to PDF.js requirements
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
-  // Dynamic import of PDF.js — use standard entry point (v5.x)
-  const pdfjsLib = await import("pdfjs-dist")
-
-  // Disable the worker for client-side use (avoids worker URL configuration issues)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = ""
-
+  // Dynamic import of PDF.js legacy build to avoid worker issues
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({
+  const pdf = await pdfjsLib.getDocument({ 
     data: arrayBuffer,
     useWorkerFetch: false,
     isEvalSupported: false,
@@ -391,7 +388,7 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
           warnings.push("DOC format extraction may be less accurate. Consider converting to DOCX for better results.")
         } catch (docError) {
           console.error("DOC extraction error:", docError)
-          throw new Error("פורמט DOC ישן אינו נתמך לחילוץ טקסט. המר ל-DOCX ונסה שוב.")
+          throw new Error("Failed to extract text from DOC. Please convert to DOCX or TXT format.")
         }
         break
 
@@ -417,7 +414,7 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         break
         
       default:
-        throw new Error(`פורמט קובץ לא נתמך: .${extension ?? "unknown"}`)
+        throw new Error(`Unsupported file format: .${extension}`)
     }
     
     // Basic validation
