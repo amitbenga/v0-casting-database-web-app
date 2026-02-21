@@ -123,7 +123,7 @@ export interface RoleConflict {
 }
 
 export interface ProjectRoleWithCasting extends ProjectRole {
-  casting?: RoleCasting | null
+  castings: RoleCasting[]
   children?: ProjectRoleWithCasting[]
   replicas_count: number // for v0 UI compatibility
 }

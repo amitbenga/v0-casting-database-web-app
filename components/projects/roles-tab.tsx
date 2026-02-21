@@ -183,8 +183,8 @@ export function RolesTab({ projectId }: RolesTabProps) {
     // Unassigned filter
     if (filters.showOnlyUnassigned) {
       result = result.filter((role) => {
-        const parentUnassigned = !role.casting
-        const hasUnassignedChild = role.children?.some((child) => !child.casting)
+        const parentUnassigned = role.castings.length === 0
+        const hasUnassignedChild = role.children?.some((child) => child.castings.length === 0)
         return parentUnassigned || hasUnassignedChild
       })
     }
@@ -221,7 +221,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
     const countRole = (role: ProjectRoleWithCasting) => {
       totalRoles++
       totalReplicas += role.replicas_count
-      if (role.casting) {
+      if (role.castings.length > 0) {
         assignedRoles++
         assignedReplicas += role.replicas_count
       }
@@ -490,8 +490,8 @@ export function RolesTab({ projectId }: RolesTabProps) {
                     </CollapsibleTrigger>
 
                     <CollapsibleContent className="space-y-2">
-                      {/* Parent role card if it has its own casting */}
-                      {role.casting && (
+                      {/* Parent role card if it has its own castings */}
+                      {role.castings.length > 0 && (
                         <RoleCastingCard
                           role={role}
                           conflicts={conflicts}
