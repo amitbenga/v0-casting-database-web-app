@@ -101,16 +101,23 @@ components/
   actor-card.tsx           # כרטיס שחקן (shuffle, favorite, folder)
   actor-edit-form.tsx      # עריכת שחקן
   projects/
-    roles-tab.tsx          # ניהול תפקידים
-    scripts-tab.tsx        # תסריטים + parsing
+    roles-tab.tsx                    # ניהול תפקידים
+    scripts-tab.tsx                  # תסריטים + parsing
+    script-workspace-tab.tsx         # סביבת עבודה — Module 4
+    script-lines-import-dialog.tsx   # דיאלוג ייבוא Excel לסביבת עבודה
+
+lib/actions/
+  script-line-actions.ts  # CRUD לשורות תסריט (saveScriptLines, getScriptLines, updateScriptLine)
 
 migrations/
-  002_fix_schema_gaps.sql  # רץ בהצלחה — skills/languages TEXT[]→JSONB
+  002_fix_schema_gaps.sql         # רץ בהצלחה — skills/languages TEXT[]→JSONB
+  003_multi_actor_per_role.sql    # מ-v0 — מאפשר כמה שחקנים לתפקיד
+  004_script_lines.sql            # Module 4 — טבלת שורות תסריט
 ```
 
 ---
 
-## 6. מצב DB (אחרי migration 002, פב 2026)
+## 6. מצב DB (אחרי migrations 002–004, פב 2026)
 
 - `actors.skills` / `actors.languages` → **JSONB**: `[{ id, key, label }]`
 - `actors.vat_status` → `"ptor"` | `"murshe"` | `"artist_salary"`
@@ -120,6 +127,16 @@ migrations/
 - `casting_project_scripts` (לא `project_scripts`)
 - `script_casting_warnings` → `role_1_name`/`role_2_name` (לא `role_id_a`/`role_id_b`)
 - **Mock Mode: `USE_MOCKS = false`** ב-`lib/projects/api.ts`
+- `role_castings` → constraint השתנה: מאפשר **כמה שחקנים לאותו תפקיד** (unique על `role_id, actor_id`)
+- `script_lines` → **טבלה חדשה** (migration 004): שורות תסריט לסביבת עבודה
+  - עמודות: `id, project_id, script_id, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes`
+  - `actor_id` → FK ל-`actors.id` — השחקן שמקליט את השורה
+
+### סדר הרצת migrations ב-Supabase (חדש)
+```
+003_multi_actor_per_role.sql  ← קודם (מ-v0/amit-2370-1641a336)
+004_script_lines.sql          ← אחר כך (מ-claude/add-script-handling-IH2JC)
+```
 
 ---
 
@@ -180,7 +197,7 @@ migrations/
 | 1 | **Actors** — מאגר שחקנים גלובלי | ✅ פועל (עם באגים) |
 | 2 | **Casting Projects** — פרויקטים, תפקידים, שיבוץ | 🟡 חלקי |
 | 3 | **Script Intelligence** — העלאה, חילוץ תפקידים, parser | 🟡 חלקי |
-| 4 | **Script Workspace** — מחליף את האקסל | 🔴 לא קיים עדיין |
+| 4 | **Script Workspace** — מחליף את האקסל | 🟡 חלקי (ייבוא + עריכה, חסר שיוך שחקן מה-casting) |
 
 ### מודול 4 — Script Workspace (היעד הבא אחרי סגירת באגים)
 
@@ -198,11 +215,16 @@ migrations/
 
 ### שלבי עבודה
 
-| שלב | ברנץ' | תיאור |
-| --- | --- | --- |
-| א | `claude/fix-known-bugs` | סגירת כל הבאגים הקריטיים והגבוהים |
-| ב | `claude/fix-ux-consistency` | ניקויי UX + מיזוג שחקן קיים |
-| ג | `claude/script-workspace` | בניית מודול 4 — DB schema + UI |
+| שלב | ברנץ' | תיאור | סטטוס |
+| --- | --- | --- | --- |
+| א | `claude/fix-known-bugs` | סגירת כל הבאגים הקריטיים והגבוהים | ⏳ ממתין |
+| ב | `claude/fix-ux-consistency` | ניקויי UX + מיזוג שחקן קיים | ⏳ ממתין |
+| ג | `claude/add-script-handling-IH2JC` | Module 4 — Script Workspace (ייבוא Excel, עריכה inline, עמודת שחקן) | 🟡 בפיתוח — ממתין למיזוג ל-v0/amit-2370-1641a336 |
+
+### מיזוג `claude/add-script-handling-IH2JC` → `v0/amit-2370-1641a336`
+בזמן ה-PR יהיו קונפליקטים ב-2 קבצים — לפתור ידנית:
+- `lib/types.ts`: לקבל `castings: RoleCasting[]` של v0 + להחזיר ScriptLine/RecStatus
+- `app/projects/[id]/page.tsx`: להחזיר `grid-cols-4` + טאב "סביבת עבודה"
 
 ---
 

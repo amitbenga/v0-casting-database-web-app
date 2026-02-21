@@ -461,7 +461,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                 <TableRow className="bg-muted/50">
                   <TableHead className="text-right w-10 text-xs">#</TableHead>
                   <TableHead className="text-right w-28 text-xs">TC</TableHead>
-                  <TableHead className="text-right w-40 text-xs">תפקיד</TableHead>
+                  <TableHead className="text-right w-36 text-xs">תפקיד</TableHead>
+                  <TableHead className="text-right w-32 text-xs">שחקן</TableHead>
                   <TableHead className="text-right w-24 text-xs">סטטוס</TableHead>
                   <TableHead className="text-right text-xs min-w-[180px]">תרגום</TableHead>
                   <TableHead className="text-right text-xs min-w-[180px]">טקסט מקור</TableHead>
@@ -483,12 +484,19 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <TableCell className="text-right font-mono text-xs py-1.5 w-28">
                         {line.timecode ?? "—"}
                       </TableCell>
-                      <TableCell className="text-right py-1.5 w-40">
+                      <TableCell className="text-right py-1.5 w-36">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(line.role_name, roleIndex)}`}
                         >
                           {line.role_name}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-right py-1.5 w-32 text-sm">
+                        {line.actor_name ? (
+                          <span className="font-medium">{line.actor_name}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">לא שובץ</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right py-1.5 w-24">
                         {recConfig ? (

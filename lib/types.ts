@@ -267,6 +267,10 @@ export interface ScriptLine {
   line_number?: number
   timecode?: string
   role_name: string
+  /** The specific actor recording this line (from casting assignment) */
+  actor_id?: string | null
+  /** Joined from actors.full_name — not stored in DB, populated by getScriptLines() */
+  actor_name?: string | null
   source_text?: string
   translation?: string
   rec_status?: RecStatus | null
@@ -279,6 +283,8 @@ export interface ScriptLineInput {
   line_number: number
   timecode?: string
   role_name: string
+  /** Optional: set actor at import time (e.g. from LINECOUNT sheet) */
+  actor_id?: string | null
   source_text?: string
   translation?: string
   rec_status?: RecStatus | null

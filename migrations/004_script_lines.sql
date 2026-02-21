@@ -1,6 +1,7 @@
--- Migration 003: Script Workspace — script_lines table
+-- Migration 004: Script Workspace — script_lines table
 -- Module 4: Script Workspace (replaces Excel for dubbing line management)
 -- Each row = one replica/line in the dubbing script
+-- Note: run AFTER migration 003_multi_actor_per_role.sql
 
 CREATE TABLE IF NOT EXISTS script_lines (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -13,6 +14,8 @@ CREATE TABLE IF NOT EXISTS script_lines (
   timecode TEXT,
   -- Role / character name (as appears in script, not normalized)
   role_name TEXT NOT NULL,
+  -- The specific actor recording this line (linked from casting — nullable)
+  actor_id TEXT REFERENCES actors(id) ON DELETE SET NULL,
   -- Source dialogue (original language — English, French, etc.)
   source_text TEXT,
   -- Hebrew translation (editable in workspace)
@@ -33,6 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_script_lines_project_role
 
 CREATE INDEX IF NOT EXISTS idx_script_lines_line_number
   ON script_lines(project_id, line_number);
+
+CREATE INDEX IF NOT EXISTS idx_script_lines_actor_id
+  ON script_lines(actor_id);
 
 -- RLS: same pattern as other tables — project members can read/write
 ALTER TABLE script_lines ENABLE ROW LEVEL SECURITY;

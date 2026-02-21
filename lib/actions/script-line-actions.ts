@@ -47,6 +47,7 @@ export async function saveScriptLines(
       line_number: line.line_number,
       timecode: line.timecode ?? null,
       role_name: line.role_name,
+      actor_id: line.actor_id ?? null,
       source_text: line.source_text ?? null,
       translation: line.translation ?? null,
       rec_status: line.rec_status ?? null,
@@ -83,7 +84,7 @@ export async function getScriptLines(
   let query = supabase
     .from("script_lines")
     .select(
-      "id, project_id, script_id, line_number, timecode, role_name, source_text, translation, rec_status, notes, created_at"
+      "id, project_id, script_id, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at"
     )
     .eq("project_id", projectId)
     .order("line_number", { ascending: true })
@@ -105,7 +106,15 @@ export async function getScriptLines(
     return []
   }
 
-  return (data ?? []) as ScriptLine[]
+  // Flatten the joined actors relation into actor_name
+  return (data ?? []).map((row: Record<string, unknown>) => {
+    const actorRel = row.actors as { full_name: string } | null
+    return {
+      ...row,
+      actors: undefined,
+      actor_name: actorRel?.full_name ?? null,
+    } as ScriptLine
+  })
 }
 
 /**
@@ -114,7 +123,7 @@ export async function getScriptLines(
  */
 export async function updateScriptLine(
   lineId: string,
-  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes">>
+  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "actor_id">>
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
