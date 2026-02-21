@@ -65,7 +65,7 @@ export interface FilterState {
   skills: string[]
   languages: string[]
   vatStatus: string[]
-  sortBy: "newest" | "alphabetical" | "age-asc" | "age-desc"
+  sortBy: "shuffle" | "newest" | "alphabetical" | "age-asc" | "age-desc"
   dubbingExperience: string[]
   singingStyles: string[]
 }

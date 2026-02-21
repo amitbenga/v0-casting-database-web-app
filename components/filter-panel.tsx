@@ -27,7 +27,7 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
     skills: [],
     languages: [],
     vatStatus: [],
-    sortBy: "newest",
+    sortBy: "shuffle",
     dubbingExperience: [],
     singingStyles: [],
   })
@@ -90,7 +90,7 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
                 skills: [],
                 languages: [],
                 vatStatus: [],
-                sortBy: "newest",
+                sortBy: "shuffle",
                 dubbingExperience: [],
                 singingStyles: [],
               }
@@ -339,9 +339,15 @@ export function FilterPanel({ onFilterChange }: FilterPanelProps) {
                 className="space-y-2 md:space-y-3"
               >
                 <div className="flex items-center gap-2">
+                  <RadioGroupItem value="shuffle" id="sort-shuffle" />
+                  <Label htmlFor="sort-shuffle" className="text-xs md:text-sm font-normal cursor-pointer">
+                    שאפל (ברירת מחדל)
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
                   <RadioGroupItem value="newest" id="sort-newest" />
                   <Label htmlFor="sort-newest" className="text-xs md:text-sm font-normal cursor-pointer">
-                    חדשים ראשון (ברירת מחדל)
+                    חדשים ראשון
                   </Label>
                 </div>
                 <div className="flex items-center gap-2">
