@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { DateInput } from "@/components/date-input"
 
 interface EditProjectDialogProps {
   open: boolean
@@ -120,14 +121,11 @@ export function EditProjectDialog({ open, onOpenChange, project, onProjectUpdate
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="project_date">תאריך פרויקט</Label>
-                <Input
+                <DateInput
                   id="project_date"
-                  type="date"
                   value={formData.project_date}
-                  onChange={(e) => setFormData({ ...formData, project_date: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, project_date: val })}
                   max="2100-12-31"
-                  dir="ltr"
-                  className="text-right"
                 />
               </div>
 
