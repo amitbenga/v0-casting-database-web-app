@@ -281,7 +281,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv"
+              accept=".pdf,.doc,.docx,.txt"
               multiple
               onChange={handleFilesSelected}
               className="hidden"
@@ -289,7 +289,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm font-medium">לחץ לבחירת קבצים או גרור לכאן</p>
             <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-TXT, PDF, DOC, DOCX, XLSX, XLS, CSV
+              תומך ב-TXT, PDF, DOC, DOCX
             </p>
           </div>
 
