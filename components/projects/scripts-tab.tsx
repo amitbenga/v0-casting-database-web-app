@@ -32,9 +32,10 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { parseScriptFiles, type ParsedScriptBundle } from "@/lib/parser"
 import { ScriptPreviewDialog } from "./script-preview-dialog"
-import { parseExcelFile, isExcelFile, type ExcelParseResult, type ExcelMappedRole } from "@/lib/parser/excel-parser"
+import { parseExcelFile, isExcelFile, autoDetectScriptLineColumns, parseScriptLinesFromExcel, type ExcelParseResult, type ExcelMappedRole, type ScriptLineColumnMapping } from "@/lib/parser/excel-parser"
 import { ExcelPreviewDialog } from "./excel-preview-dialog"
 import { FileSpreadsheet } from "lucide-react"
+import { saveScriptLines } from "@/lib/actions/script-line-actions"
 
 interface ProjectScript {
   id: string
@@ -550,7 +551,45 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               }))
               const { error } = await supabase.from("project_roles").insert(rolesToInsert)
               if (error) throw error
-              toast({ title: "תפקידים יובאו בהצלחה", description: `${roles.length} תפקידים נוספו מקובץ Excel` })
+
+              // Agent 3: Auto-sync — detect and save script lines from the same Excel
+              let linesSynced = 0
+              if (excelResult) {
+                try {
+                  const sheet = excelResult.sheets[0]
+                  const lineMapping = autoDetectScriptLineColumns(sheet)
+                  // Only auto-import if this looks like a line-by-line script (has timecode or source text)
+                  const hasLineData = !!(lineMapping.timecodeColumn || lineMapping.sourceTextColumn)
+                  if (lineMapping.roleNameColumn && hasLineData) {
+                    // Construct full mapping (roleNameColumn is confirmed truthy above)
+                    const fullMapping: ScriptLineColumnMapping = {
+                      sheetIndex: lineMapping.sheetIndex ?? 0,
+                      roleNameColumn: lineMapping.roleNameColumn,
+                      timecodeColumn: lineMapping.timecodeColumn,
+                      sourceTextColumn: lineMapping.sourceTextColumn,
+                      translationColumn: lineMapping.translationColumn,
+                      recStatusColumn: lineMapping.recStatusColumn,
+                      notesColumn: lineMapping.notesColumn,
+                      skipEmptyRole: lineMapping.skipEmptyRole ?? true,
+                    }
+                    const scriptLines = parseScriptLinesFromExcel(sheet, fullMapping)
+                    if (scriptLines.length > 0) {
+                      const syncResult = await saveScriptLines(projectId, scriptLines, { replaceAll: true })
+                      if (syncResult.success) {
+                        linesSynced = syncResult.linesCreated ?? 0
+                      }
+                    }
+                  }
+                } catch (lineErr) {
+                  // Non-critical: role import succeeded, line sync failed
+                  console.warn("Auto-sync script lines failed (non-critical):", lineErr)
+                }
+              }
+
+              const description = linesSynced > 0
+                ? `${roles.length} תפקידים + ${linesSynced} שורות יובאו לסביבת העבודה`
+                : `${roles.length} תפקידים נוספו מקובץ Excel`
+              toast({ title: "ייבוא הצליח", description })
               setShowExcelPreview(false)
               setExcelResult(null)
               onScriptApplied?.()

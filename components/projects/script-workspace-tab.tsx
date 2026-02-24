@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2 } from "lucide-react"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
 import { saveScriptLines, updateScriptLine, getScriptLines } from "@/lib/actions/script-line-actions"
@@ -125,6 +125,104 @@ function TranslationCell({
   )
 }
 
+// Searchable role combobox (Agent 5)
+function RoleCombobox({
+  value,
+  onChange,
+  roles,
+  replicaCounts,
+}: {
+  value: string
+  onChange: (v: string) => void
+  roles: string[]
+  replicaCounts: Map<string, number>
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const filtered = useMemo(() => {
+    if (!query) return roles
+    const q = query.toLowerCase()
+    return roles.filter((r) => r.toLowerCase().includes(q))
+  }, [roles, query])
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery("")
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClick)
+      return () => document.removeEventListener("mousedown", handleClick)
+    }
+  }, [open])
+
+  const selectedLabel = value === "__all__" ? "כל התפקידים" : value
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((prev) => !prev)
+          setQuery("")
+          setTimeout(() => inputRef.current?.focus(), 0)
+        }}
+        className="flex items-center justify-between h-8 w-48 text-sm border rounded-md px-3 bg-background hover:bg-muted/50 transition-colors gap-2"
+        dir="rtl"
+      >
+        <span className="truncate text-right flex-1">{selectedLabel}</span>
+        <svg className="h-4 w-4 opacity-50 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-full mt-1 z-50 w-56 bg-popover border rounded-md shadow-lg overflow-hidden" dir="rtl" style={{ right: 0 }}>
+          <div className="p-1.5 border-b">
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="חיפוש תפקיד..."
+              className="w-full h-7 text-sm px-2 rounded border-0 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              dir="rtl"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => { onChange("__all__"); setOpen(false); setQuery("") }}
+              className={`w-full text-right px-3 py-1.5 text-sm hover:bg-muted/70 transition-colors ${value === "__all__" ? "bg-muted font-medium" : ""}`}
+            >
+              כל התפקידים
+            </button>
+            {filtered.length === 0 && (
+              <p className="px-3 py-2 text-xs text-muted-foreground text-right">לא נמצאו תפקידים</p>
+            )}
+            {filtered.map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => { onChange(role); setOpen(false); setQuery("") }}
+                className={`w-full text-right px-3 py-1.5 text-sm hover:bg-muted/70 transition-colors flex items-center justify-between gap-2 ${value === role ? "bg-muted font-medium" : ""}`}
+              >
+                <span className="truncate">{role}</span>
+                <span className="text-xs text-muted-foreground flex-shrink-0">({replicaCounts.get(role)})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Main component
 export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const { toast } = useToast()
@@ -154,6 +252,30 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Jump-to-line (Agent 6)
+  const [jumpToLine, setJumpToLine] = useState("")
+  const tableBodyRef = useRef<HTMLTableSectionElement>(null)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+
+  function handleJumpToLine() {
+    const num = parseInt(jumpToLine)
+    if (isNaN(num)) return
+    // Find the row with this line number in filteredLines
+    const idx = filteredLines.findIndex((l) => l.line_number === num)
+    if (idx === -1) {
+      toast({ title: "שורה לא נמצאה", description: `שורה מספר ${num} לא קיימת`, variant: "destructive" })
+      return
+    }
+    // Scroll to the row in the container
+    if (tableBodyRef.current && tableContainerRef.current) {
+      const rows = tableBodyRef.current.querySelectorAll("tr")
+      const targetRow = rows[idx] as HTMLTableRowElement | undefined
+      if (targetRow) {
+        tableContainerRef.current.scrollTo({ top: targetRow.offsetTop - 48, behavior: "smooth" })
+      }
+    }
+  }
+
   // Build a stable role color index map
   const roleIndex = useMemo(() => {
     const map = new Map<string, number>()
@@ -167,7 +289,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
   // Unique roles for filter dropdown
   const uniqueRoles = useMemo(() => {
-    return Array.from(roleIndex.keys()).sort((a, b) => a.localeCompare(b, "he"))
+    return Array.from<string>(roleIndex.keys()).sort((a, b) => a.localeCompare(b, "he"))
   }, [roleIndex])
 
   // Replica count per role
@@ -286,9 +408,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const hasLines = lines.length > 0
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap" dir="rtl">
         <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileSelect} />
         <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
           <Upload className="h-4 w-4" />
@@ -311,16 +433,18 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         )}
       </div>
 
-      {/* Filters */}
+      {/* Filters (Agent 5: combobox for role; Agent 6: jump-to-line) */}
       {!loading && hasLines && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap" dir="rtl">
+          {/* Search text */}
           <div className="relative">
             <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="חיפוש..."
               value={searchRole}
               onChange={(e) => setSearchRole(e.target.value)}
-              className="pr-7 h-8 text-sm w-48"
+              className="pr-7 h-8 text-sm w-44"
+              dir="rtl"
             />
             {searchRole && (
               <button onClick={() => setSearchRole("")} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -329,28 +453,20 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
             )}
           </div>
 
-          <Select value={filterRole} onValueChange={setFilterRole}>
-            <SelectTrigger className="h-8 w-40 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">{"כל התפקידים"}</SelectItem>
-              {uniqueRoles.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {role}
-                  <span className="text-muted-foreground mr-1">
-                    ({replicaCounts.get(role)})
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Searchable role combobox (Agent 5) */}
+          <RoleCombobox
+            value={filterRole}
+            onChange={setFilterRole}
+            roles={uniqueRoles}
+            replicaCounts={replicaCounts}
+          />
 
+          {/* Status filter */}
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="h-8 w-36 text-sm">
+            <SelectTrigger className="h-8 w-36 text-sm" dir="rtl">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent dir="rtl">
               <SelectItem value="__all__">{"כל הסטטוסים"}</SelectItem>
               <SelectItem value="pending">{"ממתין"}</SelectItem>
               {REC_STATUS_OPTIONS.map((s) => (
@@ -361,6 +477,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
             </SelectContent>
           </Select>
 
+          {/* Clear filters */}
           {(filterRole !== "__all__" || filterStatus !== "__all__" || searchRole) && (
             <Button
               variant="ghost"
@@ -376,12 +493,32 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
               {"נקה"}
             </Button>
           )}
+
+          <div className="flex-1" />
+
+          {/* Jump-to-line (Agent 6) */}
+          <div className="flex items-center gap-1">
+            <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              type="number"
+              min={1}
+              placeholder="קפוץ לשורה"
+              value={jumpToLine}
+              onChange={(e) => setJumpToLine(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleJumpToLine() }}
+              className="h-8 w-28 text-sm"
+              dir="rtl"
+            />
+            <Button variant="outline" size="sm" className="h-8" onClick={handleJumpToLine}>
+              {"קפוץ"}
+            </Button>
+          </div>
         </div>
       )}
 
       {/* Role counts summary */}
       {!loading && hasLines && filterRole === "__all__" && !searchRole && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5" dir="rtl">
           <TooltipProvider>
             {uniqueRoles.map((role) => (
               <Tooltip key={role}>
@@ -422,32 +559,38 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         </div>
       )}
 
-      {/* Lines table */}
+      {/* Lines table — Agent 4: RTL, Agent 6: full-width */}
       {!loading && hasLines && (
-        <div className="border rounded-lg overflow-auto max-h-[calc(100vh-300px)]">
-          <Table>
+        <div
+          ref={tableContainerRef}
+          className="border rounded-lg overflow-auto max-h-[calc(100vh-280px)] w-full"
+          dir="rtl"
+        >
+          <Table className="w-full" style={{ direction: "rtl" }}>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                <TableHead className="w-12 text-center">{"#"}</TableHead>
-                <TableHead className="w-24">{"TC"}</TableHead>
-                <TableHead className="w-32">{"תפקיד"}</TableHead>
-                <TableHead className="w-28">{"שחקן"}</TableHead>
-                <TableHead className="w-24">{"סטטוס"}</TableHead>
-                <TableHead className="min-w-[200px]">{"תרגום"}</TableHead>
-                <TableHead className="min-w-[200px]">{"טקסט מקור"}</TableHead>
+                {/* # — sticky right (Agent 4) */}
+                <TableHead className="w-12 text-right sticky right-0 z-20 bg-background border-l">{"#"}</TableHead>
+                <TableHead className="w-24 text-right">{"TC"}</TableHead>
+                <TableHead className="w-32 text-right">{"תפקיד"}</TableHead>
+                <TableHead className="w-28 text-right">{"שחקן"}</TableHead>
+                <TableHead className="w-24 text-right">{"סטטוס"}</TableHead>
+                <TableHead className="min-w-[200px] text-right">{"תרגום"}</TableHead>
+                <TableHead className="min-w-[200px] text-right" dir="ltr">{"טקסט מקור"}</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody ref={tableBodyRef}>
               {filteredLines.map((line) => {
                 const recConfig = line.rec_status
                   ? REC_STATUS_CONFIG[line.rec_status]
                   : null
                 return (
                   <TableRow key={line.id} className="hover:bg-muted/30">
-                    <TableCell className="text-center text-xs text-muted-foreground">
+                    {/* # — sticky right (Agent 4) */}
+                    <TableCell className="text-right text-xs text-muted-foreground sticky right-0 z-10 bg-background border-l">
                       {line.line_number ?? ""}
                     </TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground">
+                    <TableCell className="text-xs font-mono text-muted-foreground text-right">
                       {line.timecode ?? "\u2014"}
                     </TableCell>
                     <TableCell>
@@ -455,7 +598,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         {line.role_name}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm text-right">
                       {line.actor_name ? (
                         <span className="font-medium">{line.actor_name}</span>
                       ) : (
