@@ -455,6 +455,95 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
 }
 
 /**
+ * Normalize extracted text before parsing.
+ *
+ * Runs after extraction and before the regex parser to improve character
+ * detection across common formatting variations:
+ *  1. Remove repeated header/footer lines (page numbers, show title, etc.)
+ *  2. Merge broken line-wraps (short lines that continue on the next line)
+ *  3. Normalize whitespace: collapse multiple spaces/tabs to single space
+ *  4. Normalize speaker-colon format: "NAME: dialogue" → "NAME\n    dialogue"
+ */
+export function normalizeText(text: string): string {
+  const rawLines = text.split(/\r?\n/)
+
+  // ── Step 1: Remove repeated header/footer lines ───────────────────────────
+  // Count how many times each trimmed non-empty line appears.
+  // Lines that repeat more than once across every N lines are likely
+  // page headers or footers (show title, page number, etc.).
+  const lineFreq = new Map<string, number>()
+  for (const line of rawLines) {
+    const t = line.trim()
+    if (t.length === 0) continue
+    lineFreq.set(t, (lineFreq.get(t) ?? 0) + 1)
+  }
+
+  // Threshold: a line that appears on ≥10% of all non-empty lines is a header/footer.
+  const nonEmpty = Array.from(lineFreq.values()).reduce((s, v) => s + v, 0)
+  const repeatThreshold = Math.max(3, Math.floor(nonEmpty * 0.10))
+
+  const filteredLines = rawLines.filter((line) => {
+    const t = line.trim()
+    if (t.length === 0) return true // keep empty lines (they act as separators)
+    const freq = lineFreq.get(t) ?? 1
+    if (freq >= repeatThreshold) return false
+    // Also drop pure page-number lines: optional digits surrounded by whitespace
+    if (/^\d{1,4}\.?$/.test(t)) return false
+    return true
+  })
+
+  // ── Step 2: Normalize whitespace per line ─────────────────────────────────
+  // Collapse runs of spaces/tabs to a single space while keeping leading
+  // whitespace intact (leading spaces signal "centered" screenplay elements).
+  const wsNormalized = filteredLines.map((line) => {
+    const leadMatch = line.match(/^(\s*)/)
+    const leading = leadMatch ? leadMatch[1] : ""
+    const body = line.trimStart().replace(/[ \t]{2,}/g, " ")
+    return leading + body
+  })
+
+  // ── Step 3: Merge broken line-wraps ──────────────────────────────────────
+  // Dialogue lines in PDF-extracted text are sometimes broken mid-sentence.
+  // Heuristic: if a line is short (< 60 chars), ends without punctuation,
+  // and the NEXT line also starts with a lowercase letter, merge them.
+  const merged: string[] = []
+  for (let i = 0; i < wsNormalized.length; i++) {
+    const line = wsNormalized[i]
+    const next = wsNormalized[i + 1]
+
+    if (
+      next !== undefined &&
+      line.trim().length > 0 &&
+      line.trim().length < 60 &&
+      !/[.!?…:,\-—]$/.test(line.trim()) &&
+      /^[a-z\u05D0-\u05EA]/.test(next.trim()) // lowercase Latin or Hebrew letter
+    ) {
+      merged.push(line.trimEnd() + " " + next.trimStart())
+      i++ // skip next line
+    } else {
+      merged.push(line)
+    }
+  }
+
+  // ── Step 4: Normalize speaker-colon format ────────────────────────────────
+  // Some scripts use "CHARACTER: dialogue text" on a single line.
+  // Expand these to two lines so the regex parser sees them separately.
+  const speakerExpanded = merged.map((line) => {
+    const trimmed = line.trim()
+    // Match lines starting with an all-caps name followed by a colon and text
+    const colonMatch = trimmed.match(/^([A-Z][A-Z0-9 \-'.]{1,40}):\s+(.+)$/)
+    if (colonMatch) {
+      const leading = line.length - line.trimStart().length
+      const indent = " ".repeat(leading)
+      return `${indent}${colonMatch[1]}\n${indent}    ${colonMatch[2]}`
+    }
+    return line
+  })
+
+  return speakerExpanded.join("\n")
+}
+
+/**
  * Get file info for display
  */
 export function getFileInfo(file: File): {

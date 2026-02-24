@@ -19,7 +19,7 @@ export * from "./script-parser"
 export * from "./fuzzy-matcher"
 export * from "./text-extractor"
 
-import { extractText, getFileInfo } from "./text-extractor"
+import { extractText, getFileInfo, normalizeText } from "./text-extractor"
 import { parseScript, mergeParseResults, type ScriptParseResult, type ExtractedCharacter } from "./script-parser"
 import { findSimilarCharacters, generateSimilarityWarnings, groupSimilarCharacters, type CharacterGroup } from "./fuzzy-matcher"
 
@@ -177,10 +177,11 @@ export async function parseScriptFiles(
     }
 
     try {
-      const { text, warnings } = await extractText(file)
+      const { text: rawText, warnings } = await extractText(file)
       extractionWarnings.push(...warnings.map(w => `${file.name}: ${w}`))
-      rawTexts.push(text)
+      rawTexts.push(rawText)
 
+      const text = normalizeText(rawText)
       const parseResult = parseScript(text)
       results.push(parseResult)
 

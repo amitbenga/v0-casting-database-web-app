@@ -621,9 +621,10 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             type: pf.file.type || pf.file.name.split('.').pop() || 'unknown',
             size: pf.file.size,
           }))}
-          onApplied={async () => {
-            // Task 3C: create stub script_lines from parsed characters
-            // so the workspace immediately shows rows after DOCX/PDF upload
+          onApplied={async (scriptId?: string) => {
+            // Create stub script_lines from parsed characters so the workspace
+            // immediately shows rows after DOCX/PDF upload. script_id is now
+            // populated so rows are linked to the casting_project_scripts record.
             if (parseResult && parseResult.parseResult.characters.length > 0) {
               try {
                 let lineNum = 1
@@ -635,7 +636,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                   }
                 }
                 if (stubs.length > 0) {
-                  await saveScriptLines(projectId, stubs, { replaceAll: true })
+                  await saveScriptLines(projectId, stubs, { replaceAll: true, scriptId })
                 }
               } catch (e) {
                 // Non-critical: roles were applied, stub creation failed
