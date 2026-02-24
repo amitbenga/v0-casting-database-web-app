@@ -406,14 +406,8 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         break
         
       case "doc":
-        try {
-          text = await extractTextFromDOC(file)
-          warnings.push("DOC format extraction may be less accurate. Consider converting to DOCX for better results.")
-        } catch (docError) {
-          console.error("DOC extraction error:", docError)
-          throw new Error("פורמט DOC ישן אינו נתמך לחילוץ טקסט. המר ל-DOCX ונסה שוב.")
-        }
-        break
+        // Block old .doc format with a clear Hebrew error message (3B)
+        throw new Error("פורמט DOC ישן אינו נתמך. אנא המר את הקובץ לפורמט DOCX ונסה שוב.")
 
       case "xlsx":
       case "xls":
@@ -470,7 +464,8 @@ export function getFileInfo(file: File): {
   supported: boolean
 } {
   const extension = file.name.split(".").pop()?.toLowerCase() || ""
-  const supported = ["txt", "pdf", "docx", "doc", "xlsx", "xls", "csv"].includes(extension)
+  // .doc (old binary Word) is explicitly blocked — users must convert to .docx
+  const supported = ["txt", "pdf", "docx", "xlsx", "xls", "csv"].includes(extension)
   
   let size: string
   if (file.size < 1024) {

@@ -73,20 +73,28 @@ export async function saveScriptLines(
 
 /**
  * Fetch script lines for a project with optional filters.
+ * Uses range(0, 9999) to bypass Supabase's default 1000-row cap.
+ * Returns lines array + total count.
  */
 export async function getScriptLines(
   projectId: string,
-  filters: { roleName?: string; recStatus?: string } = {}
-): Promise<ScriptLine[]> {
+  filters: { roleName?: string; recStatus?: string } = {},
+  pagination: { from?: number; to?: number } = {}
+): Promise<{ lines: ScriptLine[]; total: number }> {
   const supabase = await createClient()
+
+  const from = pagination.from ?? 0
+  const to = pagination.to ?? 9999
 
   let query = supabase
     .from("script_lines")
     .select(
-      "id, project_id, script_id, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at"
+      "id, project_id, script_id, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at",
+      { count: "exact" }
     )
     .eq("project_id", projectId)
     .order("line_number", { ascending: true })
+    .range(from, to)
 
   if (filters.roleName) {
     query = query.eq("role_name", filters.roleName)
@@ -99,21 +107,22 @@ export async function getScriptLines(
     }
   }
 
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) {
     console.error("getScriptLines error:", error)
-    return []
+    return { lines: [], total: 0 }
   }
 
-  // Flatten the joined actors relation into actor_name
-  return (data ?? []).map((row: Record<string, unknown>) => {
+  const lines = (data ?? []).map((row: Record<string, unknown>) => {
     const actorRel = row.actors as { full_name: string } | null
     return {
       ...row,
       actors: undefined,
       actor_name: actorRel?.full_name ?? null,
-    } as ScriptLine
+    } as unknown as ScriptLine
   })
+
+  return { lines, total: count ?? lines.length }
 }
 
 /**

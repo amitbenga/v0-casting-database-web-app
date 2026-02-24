@@ -282,7 +282,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv"
+              accept=".pdf,.docx,.txt,.xlsx,.xls,.csv"
               multiple
               onChange={handleFilesSelected}
               className="hidden"
@@ -290,7 +290,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm font-medium">לחץ לבחירת קבצים או גרור לכאן</p>
             <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-TXT, PDF, DOC, DOCX, XLSX, XLS, CSV
+              תומך ב-TXT, PDF, DOCX, XLSX, XLS, CSV (קובץ DOC ישן — יש להמיר ל-DOCX)
             </p>
           </div>
 
@@ -521,11 +521,14 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <div className="text-sm">
               <p className="font-medium">איך זה עובד?</p>
               <ol className="mt-2 space-y-1 text-muted-foreground list-decimal list-inside">
-                <li>בחר קבצי תסריט (ניתן לבחור מספר קבצים לפרויקט אחד)</li>
-                <li>לחץ "חלץ תפקידים" - המערכת תזהה אוטומטית את התפקידים</li>
-                <li>בדוק את התוצאות, ערוך ומזג תפקידים לפי הצורך</li>
-                <li>אשר את התפקידים - הם יועברו לטאב "תפקידים" לשיבוץ</li>
+                <li>בחר קבצי תסריט — PDF, DOCX, TXT (לא DOC ישן)</li>
+                <li>לחץ "חלץ תפקידים" — המערכת תזהה אוטומטית את הדמויות</li>
+                <li>בדוק, ערוך ומזג תפקידים לפי הצורך</li>
+                <li>אשר — התפקידים וסביבת העבודה יתמלאו אוטומטית</li>
               </ol>
+              <p className="mt-2 text-xs text-muted-foreground">
+                לייבוא Excel עם שורות מפורטות (TC, תרגום וכו') — השתמש בכפתור הירוק למעלה
+              </p>
             </div>
           </div>
         </CardContent>
@@ -615,7 +618,27 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             type: pf.file.type || pf.file.name.split('.').pop() || 'unknown',
             size: pf.file.size,
           }))}
-          onApplied={() => {
+          onApplied={async () => {
+            // Task 3C: create stub script_lines from parsed characters
+            // so the workspace immediately shows rows after DOCX/PDF upload
+            if (parseResult && parseResult.parseResult.characters.length > 0) {
+              try {
+                let lineNum = 1
+                const stubs: Array<{ line_number: number; role_name: string }> = []
+                for (const char of parseResult.parseResult.characters) {
+                  const replicas = Math.min(char.replicaCount, 500)
+                  for (let i = 0; i < replicas; i++) {
+                    stubs.push({ line_number: lineNum++, role_name: char.name })
+                  }
+                }
+                if (stubs.length > 0) {
+                  await saveScriptLines(projectId, stubs, { replaceAll: false })
+                }
+              } catch (e) {
+                // Non-critical: roles were applied, stub creation failed
+                console.warn("Stub script_lines creation failed (non-critical):", e)
+              }
+            }
             setShowPreview(false)
             setPendingFiles([])
             setParseResult(null)

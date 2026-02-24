@@ -223,27 +223,47 @@ function RoleCombobox({
   )
 }
 
+const PAGE_SIZE = 1000
+
 // Main component
 export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const { toast } = useToast()
 
   const [lines, setLines] = useState<ScriptLine[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searchRole, setSearchRole] = useState("")
 
-  // Load lines on mount
+  // Load initial page of lines
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getScriptLines(projectId)
-      .then((data) => {
-        if (!cancelled) setLines(data)
+    getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+      .then(({ lines: data, total: count }) => {
+        if (!cancelled) {
+          setLines(data)
+          setTotal(count)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
   }, [projectId])
+
+  const hasMore = lines.length < total
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const { lines: more } = await getScriptLines(projectId, {}, { from: lines.length, to: lines.length + PAGE_SIZE - 1 })
+      setLines((prev) => [...prev, ...more])
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const [filterRole, setFilterRole] = useState<string>("__all__")
   const [filterStatus, setFilterStatus] = useState<string>("__all__")
@@ -350,8 +370,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
         setShowImportDialog(false)
         setExcelResult(null)
-        const freshLines = await getScriptLines(projectId)
+        const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
         setLines(freshLines)
+        setTotal(freshTotal)
         toast({
           title: "ייבוא הצליח",
           description: `${result.linesCreated} שורות יובאו לסביבת העבודה`,
@@ -428,7 +449,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
         {hasLines && (
           <span className="text-sm text-muted-foreground">
-            {filteredLines.length.toLocaleString()} / {lines.length.toLocaleString()} {"שורות"}
+            {filteredLines.length.toLocaleString()} / {total.toLocaleString()} {"שורות"}
+            {hasMore && ` (${lines.length.toLocaleString()} טעונות)`}
           </span>
         )}
       </div>
@@ -516,28 +538,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         </div>
       )}
 
-      {/* Role counts summary */}
-      {!loading && hasLines && filterRole === "__all__" && !searchRole && (
-        <div className="flex flex-wrap gap-1.5" dir="rtl">
-          <TooltipProvider>
-            {uniqueRoles.map((role) => (
-              <Tooltip key={role}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setFilterRole(role)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-opacity hover:opacity-80 ${getRoleColor(role, roleIndex)}`}
-                  >
-                    {role}
-                    <span className="opacity-60">{replicaCounts.get(role)}</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{"סנן לפי"} {role}</TooltipContent>
-              </Tooltip>
-            ))}
-          </TooltipProvider>
-        </div>
-      )}
-
       {/* Loading state */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
@@ -593,10 +593,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     <TableCell className="text-xs font-mono text-muted-foreground text-right">
                       {line.timecode ?? "\u2014"}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={`text-xs ${getRoleColor(line.role_name, roleIndex)}`}>
-                        {line.role_name}
-                      </Badge>
+                    <TableCell className="max-w-[130px]">
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className={`text-xs max-w-full truncate block ${getRoleColor(line.role_name, roleIndex)}`}>
+                              {line.role_name}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" dir="rtl">{line.role_name}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-sm text-right">
                       {line.actor_name ? (
@@ -628,6 +635,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           {filteredLines.length === 0 && (
             <p className="text-center py-8 text-muted-foreground">{"לא נמצאו שורות התואמות לסינון"}</p>
           )}
+        </div>
+      )}
+
+      {/* Load more (pagination) — Task 2A/2B */}
+      {!loading && hasMore && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore} className="gap-2">
+            {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loadingMore ? "טוען..." : `טען עוד (${(total - lines.length).toLocaleString()} נותרו)`}
+          </Button>
         </div>
       )}
 
