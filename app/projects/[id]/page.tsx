@@ -327,7 +327,7 @@ export default function ProjectDetailPage() {
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <CastingWorkspace projectId={project.id} />
+                <CastingWorkspace projectId={project.id} onCastingChange={loadData} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">

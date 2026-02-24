@@ -473,24 +473,96 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
-  // Excel export
+  // Inline rec_status update (Agent 1)
+  const handleRecStatusChange = useCallback(
+    async (lineId: string, newStatus: RecStatus | null) => {
+      // Optimistic update
+      setLines((prev) =>
+        prev.map((l) =>
+          l.id === lineId ? { ...l, rec_status: newStatus } : l
+        )
+      )
+      const result = await updateScriptLine(lineId, { rec_status: newStatus })
+      if (!result.success) {
+        toast({ title: "שגיאה", description: "שגיאה בשמירת סטטוס", variant: "destructive" })
+        // Revert
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, rec_status: l.rec_status } : l
+          )
+        )
+      }
+    },
+    [toast]
+  )
+
+  // Excel export — RTL, bold headers, freeze pane, auto widths, filters (Agent 6)
   async function handleExport() {
     try {
       const XLSX = await import("xlsx")
-      const exportData = lines.map((l) => ({
-        "#": l.line_number ?? "",
-        TC: l.timecode ?? "",
-        "תפקיד": l.role_name,
-        "סטטוס הקלטה": l.rec_status ?? "",
-        "תרגום": l.translation ?? "",
-        "טקסט מקור": l.source_text ?? "",
-        "הערות": l.notes ?? "",
-      }))
-      const ws = XLSX.utils.json_to_sheet(exportData)
+
+      const HEADERS = ["#", "TC", "תפקיד", "שחקן", "סטטוס הקלטה", "תרגום", "טקסט מקור", "הערות"]
+
+      // Build rows as arrays (preserves column order)
+      const dataRows = lines.map((l) => [
+        l.line_number ?? "",
+        l.timecode ?? "",
+        l.role_name,
+        l.actor_name ?? "",
+        l.rec_status ?? "",
+        l.translation ?? "",
+        l.source_text ?? "",
+        l.notes ?? "",
+      ])
+
+      const allRows = [HEADERS, ...dataRows]
+      const ws = XLSX.utils.aoa_to_sheet(allRows)
+
+      // Column widths (characters)
+      ws["!cols"] = [
+        { wch: 6 },   // #
+        { wch: 14 },  // TC
+        { wch: 22 },  // תפקיד
+        { wch: 18 },  // שחקן
+        { wch: 14 },  // סטטוס
+        { wch: 40 },  // תרגום
+        { wch: 40 },  // טקסט מקור
+        { wch: 24 },  // הערות
+      ]
+
+      // Freeze first row (header)
+      ws["!freeze"] = { xSplit: 0, ySplit: 1 }
+
+      // AutoFilter on header row
+      const lastCol = String.fromCharCode(65 + HEADERS.length - 1) // 'H'
+      ws["!autofilter"] = { ref: `A1:${lastCol}1` }
+
+      // Bold header row + RTL alignment for all cells
+      const boldStyle = { font: { bold: true }, alignment: { horizontal: "right", readingOrder: 2 } }
+      const cellStyle = { alignment: { horizontal: "right", readingOrder: 2, wrapText: true } }
+
+      for (let c = 0; c < HEADERS.length; c++) {
+        const headerAddr = XLSX.utils.encode_cell({ r: 0, c })
+        if (!ws[headerAddr]) ws[headerAddr] = { v: HEADERS[c], t: "s" }
+        ws[headerAddr].s = boldStyle
+      }
+      for (let r = 1; r <= dataRows.length; r++) {
+        for (let c = 0; c < HEADERS.length; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c })
+          if (ws[addr]) ws[addr].s = cellStyle
+        }
+      }
+
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "Script Workspace")
+      // RTL sheet direction
+      XLSX.utils.book_append_sheet(wb, ws, "סביבת עבודה")
+      wb.Workbook = wb.Workbook ?? { Views: [], Sheets: [] }
+      wb.Workbook.Sheets = wb.Workbook.Sheets ?? []
+      wb.Workbook.Sheets[0] = wb.Workbook.Sheets[0] ?? {}
+      wb.Workbook.Sheets[0].RTL = true
+
       XLSX.writeFile(wb, `workspace-${projectId}.xlsx`)
-      toast({ title: "ייצוא הצליח" })
+      toast({ title: "ייצוא הצליח", description: `${lines.length.toLocaleString()} שורות יוצאו` })
     } catch {
       toast({ title: "שגיאה בייצוא", variant: "destructive" })
     }
@@ -730,14 +802,38 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         <span className="text-muted-foreground text-xs italic">{"לא שובץ"}</span>
                       )}
                     </TableCell>
+                    {/* Editable rec_status (Agent 1) */}
                     <TableCell>
-                      {recConfig ? (
-                        <Badge variant="secondary" className={`text-xs ${recConfig.className}`}>
-                          {recConfig.label}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{"ממתין"}</span>
-                      )}
+                      <Select
+                        value={line.rec_status ?? "__pending__"}
+                        onValueChange={(v) =>
+                          handleRecStatusChange(
+                            line.id,
+                            v === "__pending__" ? null : (v as RecStatus)
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          className={`h-7 w-28 text-xs border-0 shadow-none px-2 ${
+                            line.rec_status
+                              ? REC_STATUS_CONFIG[line.rec_status].className
+                              : "text-muted-foreground"
+                          }`}
+                          dir="rtl"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent dir="rtl">
+                          <SelectItem value="__pending__" className="text-xs text-muted-foreground">
+                            {"ממתין"}
+                          </SelectItem>
+                          {REC_STATUS_OPTIONS.map((s) => (
+                            <SelectItem key={s.value} value={s.value} className="text-xs">
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />

@@ -274,7 +274,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* File Input Area */}
+          {/* Single upload area — PDF, DOCX, TXT */}
           <div
             className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
@@ -282,7 +282,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx,.txt,.xlsx,.xls,.csv"
+              accept=".pdf,.docx,.txt"
               multiple
               onChange={handleFilesSelected}
               className="hidden"
@@ -290,15 +290,15 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm font-medium">לחץ לבחירת קבצים או גרור לכאן</p>
             <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-TXT, PDF, DOCX, XLSX, XLS, CSV (קובץ DOC ישן — יש להמיר ל-DOCX)
+              פורמטים נתמכים: PDF, DOCX, TXT
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-0.5">
+              קובץ DOC ישן אינו נתמך — יש להמיר ל-DOCX
             </p>
           </div>
 
-          {/* Excel Import Area */}
-          <div
-            className="border-2 border-dashed border-green-300 dark:border-green-700 rounded-lg p-6 text-center hover:border-green-400 hover:bg-green-50/50 dark:hover:bg-green-950/20 transition-colors cursor-pointer"
-            onClick={() => excelInputRef.current?.click()}
-          >
+          {/* Excel roles import — compact button */}
+          <div className="flex items-center gap-2">
             <input
               ref={excelInputRef}
               type="file"
@@ -318,11 +318,16 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               }}
               className="hidden"
             />
-            <FileSpreadsheet className="h-10 w-10 mx-auto text-green-600 dark:text-green-400 mb-3" />
-            <p className="text-sm font-medium">ייבוא תפקידים מקובץ Excel</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-XLSX, XLS - מיפוי עמודות ידני
-            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => excelInputRef.current?.click()}
+              className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              ייבוא תפקידים מ-Excel
+            </Button>
+            <span className="text-xs text-muted-foreground">XLSX / XLS — מיפוי עמודות ידני</span>
           </div>
 
           {/* Pending Files List */}
