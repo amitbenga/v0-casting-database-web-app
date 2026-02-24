@@ -15,15 +15,25 @@ export async function extractTextFromPDF(file: File): Promise<string> {
   // Dynamic import of PDF.js — use standard entry point (v5.x)
   const pdfjsLib = await import("pdfjs-dist")
 
-  // Disable the worker for client-side use (avoids worker URL configuration issues)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = ""
+  // Set worker source to the bundled worker file
+  // In Next.js, we use a CDN fallback or the installed package worker
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    try {
+      // Try to use the package worker URL (works in modern bundlers)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+    } catch {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
+    }
+  }
 
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({
     data: arrayBuffer,
     useWorkerFetch: false,
     isEvalSupported: false,
-    useSystemFonts: true
+    useSystemFonts: true,
+    disableAutoFetch: true,
+    disableStream: true,
   }).promise
   
   const textParts: string[] = []
@@ -89,14 +99,24 @@ export async function extractTextFromPDF(file: File): Promise<string> {
  */
 export async function extractTextFromDOCX(file: File): Promise<string> {
   // DOCX is a ZIP file containing XML
-  const JSZip = (await import("jszip")).default
-  
+  let JSZip: typeof import("jszip").default
+  try {
+    JSZip = (await import("jszip")).default
+  } catch {
+    throw new Error("JSZip library not available for DOCX extraction")
+  }
+
   const arrayBuffer = await file.arrayBuffer()
-  const zip = await JSZip.loadAsync(arrayBuffer)
-  
+  let zip: import("jszip")
+  try {
+    zip = await JSZip.loadAsync(arrayBuffer)
+  } catch {
+    throw new Error("Invalid DOCX file: cannot open as ZIP archive")
+  }
+
   // Main document content is in word/document.xml
   const docXml = await zip.file("word/document.xml")?.async("text")
-  
+
   if (!docXml) {
     throw new Error("Invalid DOCX file: missing document.xml")
   }

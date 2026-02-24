@@ -185,16 +185,15 @@ export const SINGING_STYLES_LIST: { key: SingingStyle; label: string }[] = [
 
 export const SKILLS_LIST: Skill[] = [
   { id: "1", key: "acting", label: "משחק" },
-  { id: "2", key: "singing", label: "שירה" },
   { id: "3", key: "voice_acting", label: "קריינות" },
-  { id: "4", key: "carpentry", label: "נגרות" },
+  { id: "2", key: "singing", label: "שירה" },
   { id: "5", key: "russian_accent", label: "מבטא רוסי" },
   { id: "6", key: "french_accent", label: "מבטא צרפתי" },
-  { id: "7", key: "spanish_accent", label: "מבטא ספרדי" },
-  { id: "8", key: "german_accent", label: "מבטא גרמני" },
-  { id: "9", key: "english_accent", label: "מבטא אנגלי" },
   { id: "10", key: "italian_accent", label: "מבטא איטלקי" },
+  { id: "9", key: "english_accent", label: "מבטא אנגלי" },
+  { id: "8", key: "german_accent", label: "מבטא גרמני" },
   { id: "11", key: "any_accent", label: "כל מבטא אפשרי" },
+  { id: "12", key: "other", label: "אחר" },
 ]
 
 export const LANGUAGES_LIST: Language[] = [
