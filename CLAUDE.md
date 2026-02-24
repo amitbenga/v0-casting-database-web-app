@@ -81,7 +81,7 @@ app/
   intake/page.tsx          # Internal intake (VAT: ptor/murshe/artist_salary)
   actors/[id]/page.tsx     # Actor profile
   projects/page.tsx        # Projects list
-  projects/[id]/page.tsx   # Project detail (roles, actors, scripts)
+  projects/[id]/page.tsx   # Project detail (roles, actors, scripts, workspace)
   folders/page.tsx         # Folders
 
 lib/
@@ -90,8 +90,10 @@ lib/
     submission-actions.ts  # Admin approve/reject + merge
     casting-actions.ts     # Role casting
     script-actions.ts      # Script upload + processing
+    script-line-actions.ts # Script Workspace — CRUD for script_lines
   parser/
     script-parser.ts       # Parser מודרגש (פב 2026)
+    excel-parser.ts        # Excel parser + script line extraction
     fuzzy-matcher.ts
     index.ts               # Pipeline
     __tests__/             # 77 unit tests
@@ -100,44 +102,72 @@ lib/
 components/
   actor-card.tsx           # כרטיס שחקן (shuffle, favorite, folder)
   actor-edit-form.tsx      # עריכת שחקן
+  date-input.tsx           # קומפוננטת תאריך dd/mm/yyyy
   projects/
     roles-tab.tsx          # ניהול תפקידים
     scripts-tab.tsx        # תסריטים + parsing
+    script-workspace-tab.tsx      # מודול 4 — סביבת עבודה (ייבוא אקסל)
+    script-lines-import-dialog.tsx # דיאלוג ייבוא שורות מאקסל
 
 migrations/
   002_fix_schema_gaps.sql  # רץ בהצלחה — skills/languages TEXT[]→JSONB
+  003_multi_actor_per_role.sql  # רץ בהצלחה — UNIQUE(role_id)→UNIQUE(role_id,actor_id)
 ```
 
 ---
 
-## 6. מצב DB (אחרי migration 002, פב 2026)
+## 6. מצב DB (אחרי migrations 002-003 + scripts 017-025, פב 2026)
 
-- `actors.skills` / `actors.languages` → **JSONB**: `[{ id, key, label }]`
-- `actors.vat_status` → `"ptor"` | `"murshe"` | `"artist_salary"`
-- `actors.id` → `text` (לא UUID)
-- `casting_projects.id` → `text`
+### טבלאות
+| טבלה | הערות |
+| --- | --- |
+| `actors` | skills/languages = JSONB `[{id,key,label}]`, id = text |
+| `actor_submissions` | בקשות מטופס חיצוני, review_status = pending/approved/rejected |
+| `casting_projects` | כולל director, casting_director, project_date (נוספו ב-017) |
+| `project_roles` | תפקידים בפרויקט |
+| `role_castings` | UNIQUE(role_id, actor_id) — מרובי שחקנים לתפקיד (003) |
+| `casting_project_scripts` | תסריטים מעובדים |
+| `script_lines` | **חדש** — שורות סקריפט לסביבת עבודה (025) |
+| `folders` / `folder_actors` | תיקיות שחקנים |
+| `user_profiles` | פרופילי admin (018) |
+
+### שמות שדות חשובים (לא להתבלבל)
 - `folder_actors` (לא `actor_folders`)
 - `casting_project_scripts` (לא `project_scripts`)
 - `script_casting_warnings` → `role_1_name`/`role_2_name` (לא `role_id_a`/`role_id_b`)
-- **Mock Mode: `USE_MOCKS = false`** ב-`lib/projects/api.ts`
+- `actors.vat_status` → `"ptor"` | `"murshe"` | `"artist_salary"`
+
+### RLS — גישה ציבורית (זמני)
+**כל הטבלאות** מוגדרות כרגע עם `USING (true)` / `WITH CHECK (true)` לכל הפעולות.
+**סיבה:** האפליקציה מנהלת auth ברמת ה-AuthContext (לא דרך Supabase Auth), כך שכל הקריאות מגיעות כ-`anon` role.
+**סטטוס:** לא הוחלט עדיין אם להוסיף Supabase Auth אמיתי בעתיד.
+
+### Mock Mode
+`USE_MOCKS = false` ב-`lib/projects/api.ts`
 
 ---
 
 ## 7. TODO — באגים ידועים
 
 > **כלל:** קודם לסגור את כל הבאגים, אחר כך פיתוח חדש.
-> **ברנץ' הבא:** `claude/fix-known-bugs`
+> **סטטוס:** חלק מהבאגים תוקנו (פב 2026), השאר בטיפול ידני של הצוות.
 
-### 🔴 קריטי
+### תוקנו (פב 2026)
+
+| ID | מה תוקן | איך |
+| --- | --- | --- |
+| ADMIN-1 | כפתור "אשר" לא עבד | RLS חסם — נוספו user_profiles (018) + policies פתוחות (019) |
+| PROJECTS-1 | אי אפשר ליצור פרויקט | חסרו שדות director/casting_director/project_date ב-DB (017) + RLS |
+| PROJECTS-2 | עריכת פרויקט לא שמרה | תוקן יחד עם RLS fix |
+| PROJECTS-4 | פורמט תאריך | נוצרה קומפוננטת `date-input.tsx` עם פורמט dd/mm/yyyy (חלקי — חסר calendar picker) |
+
+### עדיין פתוחים — קריטי
 
 | ID | מיקום | תיאור |
 | --- | --- | --- |
-| ADMIN-1 | `app/admin/page.tsx` → `handleApprove()` | כפתור "אשר" לא מוסיף שחקן ל-`actors` |
 | FOLDERS-1 | `app/folders/page.tsx` | אי אפשר ליצור תיקייה (UI קיים, פונקציה שבורה) |
-| PROJECTS-1 | `components/create-project-dialog.tsx` | אי אפשר ליצור פרויקט חדש |
-| PROJECTS-2 | `app/projects/[id]/page.tsx` | עריכת פרויקט לא שומרת שינויים |
 
-### 🟠 גבוה
+### עדיין פתוחים — גבוה
 
 | ID | מיקום | תיאור |
 | --- | --- | --- |
@@ -147,17 +177,19 @@ migrations/
 | PROJECTS-3 | `projects/[id]/page.tsx` | שם שחקן לא מופיע ליד תפקיד (כתוב "לא משובץ") |
 | SCRIPTS-1 | `components/projects/scripts-tab.tsx` | טעינת קבצים מחזירה שגיאות — לבדוק end-to-end עם parser |
 
-### 🟡 בינוני (UX + ניקויים)
+### עדיין פתוחים — בינוני (UX + ניקויים)
 
 | ID | מיקום | תיאור |
 | --- | --- | --- |
 | ACTORS-3 | `app/page.tsx` | בבחירה מרובה — הסר אפשרות "הוסף לפרויקט" |
 | ACTORS-4 | `components/actor-edit-form.tsx` | שדות חייבים להיות תואמים לטופס הציבורי (scprodub) |
 | ADMIN-3 | `app/admin/page.tsx` | בקשות דחויות: הוסף "נקה הכל" + בחירה סלקטיבית |
-| PROJECTS-4 | תאריכים בכל הפרויקטים | פורמט צריך להיות `DD/MM/YYYY`, קלנדר עם ניווט שנים |
+| PROJECTS-4 | תאריכים בכל הפרויקטים | calendar picker עם ניווט שנים (קומפוננטת dd/mm/yyyy קיימת) |
 | PROJECTS-5 | יצירה + רשימה | סטטוסי פרויקט לא אחידים |
 | ROLES-1 | `components/projects/roles-tab.tsx` | הסר אינדיקטור מקור תפקיד (ידני/תסריט) — מיותר |
 | ROLES-2 | `components/projects/roles-tab.tsx` | הוסף "בחר הכל" לבחירה מרובה |
+
+> **הערה:** הצוות עובד כרגע על דיבאגים ותיקוני UI קלים בעצמו. סוכנים אחרים — אל תיגעו בבאגים הפתוחים בלי תיאום.
 
 ---
 
@@ -177,32 +209,34 @@ migrations/
 
 | # | מודול | סטטוס |
 | --- | --- | --- |
-| 1 | **Actors** — מאגר שחקנים גלובלי | ✅ פועל (עם באגים) |
-| 2 | **Casting Projects** — פרויקטים, תפקידים, שיבוץ | 🟡 חלקי |
+| 1 | **Actors** — מאגר שחקנים גלובלי | ✅ פועל (עם באגים פתוחים) |
+| 2 | **Casting Projects** — פרויקטים, תפקידים, שיבוץ | ✅ פועל (RLS תוקן, multi-actor תוקן) |
 | 3 | **Script Intelligence** — העלאה, חילוץ תפקידים, parser | 🟡 חלקי |
-| 4 | **Script Workspace** — מחליף את האקסל | 🔴 לא קיים עדיין |
+| 4 | **Script Workspace** — מחליף את האקסל | 🟡 חלקי — ייבוא אקסל בלבד |
 
-### מודול 4 — Script Workspace (היעד הבא אחרי סגירת באגים)
+### מודול 4 — Script Workspace (סטטוס נוכחי)
 
-יחידת עבודה בסיסית: **שורת תסריט (רפליקה)**
+**DB:** טבלת `script_lines` קיימת ופעילה (migration 025).
+**UI:** טאב "סביבת עבודה" בדף פרויקט (`script-workspace-tab.tsx`).
+**עובד:** ייבוא שורות מאקסל (Excel import) + הצגת טבלה.
 
-כל שורה תכיל: Timecode · תפקיד · שחקן משובץ · טקסט מקור · תרגום טיוטה · תרגום מאושר · סטטוס · הערות
-
-**פונקציות שעוברות מהאקסל:**
-- הצגת timecodes לצד טקסט
+**חסר עדיין:**
 - עריכת תרגום inline
 - סינון לפי תפקיד/שחקן
 - הדגשת שורות לפי תפקיד
 - ספירת רפליקות
-- ייצוא Excel (output בלבד)
+- ייצוא Excel (output)
+- שיוך אוטומטי של שחקנים לשורות לפי role_castings
+
+**טיפוסים:** `ScriptLine`, `ScriptLineInput`, `RecStatus` — מוגדרים ב-`lib/types.ts`.
 
 ### שלבי עבודה
 
-| שלב | ברנץ' | תיאור |
+| שלב | ברנץ' | סטטוס |
 | --- | --- | --- |
-| א | `claude/fix-known-bugs` | סגירת כל הבאגים הקריטיים והגבוהים |
-| ב | `claude/fix-ux-consistency` | ניקויי UX + מיזוג שחקן קיים |
-| ג | `claude/script-workspace` | בניית מודול 4 — DB schema + UI |
+| א | `claude/fix-known-bugs` | 🟡 חלק תוקן, חלק פתוח (ראה §7) |
+| ב | `claude/fix-ux-consistency` | 🔴 טרם התחיל |
+| ג | `claude/add-script-handling-IH2JC` | 🟡 מוזג חלקית ל-v0 branch — ייבוא בלבד |
 
 ---
 
@@ -220,15 +254,24 @@ pnpm test                # חייב: כל הטסטים עוברים
 - `actors.id` הוא `text`, לא UUID
 
 ### Supabase
-- תמיד `createClient()` מהקונטקסט
+- תמיד `createClient()` / `createBrowserClient()` מהקונטקסט
 - לא `select('*')` — ציין שדות
 - כל mutations דרך Server Actions ב-`lib/actions/`
+- **RLS כרגע פתוח (public)** — אל תניח שיש authenticated user
+- כל מיגרציה חדשה חייבת לכלול RLS policies עם `USING (true)`
+
+### DB Migrations
+- מיגרציות חדשות בתיקיית `migrations/` (סדרתי: 002, 003, 004...)
+- סקריפטים ישנים בתיקיית `scripts/` (017-025) — כבר הורצו, לא לשנות
+- **חובה:** תיעוד כל מיגרציה ב-`docs/changes/`
+- **חובה:** לבדוק שינויים מול הטופס הציבורי (scprodub) — כל שדה ב-actors/submissions חייב להתאים
 
 ### כלי פיתוח
 - **Claude Code** — לוגיקה, TypeScript, DB, bug fixes
-- **v0.app** — styling ו-UI בלבד, לא לוגיקה
+- **v0.app** — styling, UI, DB schema fixes, מיזוגים
 
 ### ברנץ'ים
 - שם: `[agent]/[תיאור]`
 - merge רק דרך PR
 - לא לדחוף ישירות ל-`main`
+- v0 branch נוכחי: `v0/amit-2370-1641a336`
