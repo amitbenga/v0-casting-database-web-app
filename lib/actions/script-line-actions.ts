@@ -170,6 +170,42 @@ export async function deleteAllScriptLines(projectId: string): Promise<ActionRes
 }
 
 /**
+ * Delete specific script lines by ID (bulk delete from workspace).
+ * Safety check: only deletes lines belonging to the given project.
+ */
+export async function deleteScriptLinesByIds(
+  projectId: string,
+  ids: string[]
+): Promise<ActionResult & { deletedCount?: number }> {
+  const supabase = await createClient()
+
+  try {
+    if (ids.length === 0) return { success: true, deletedCount: 0 }
+
+    // Process in batches to avoid URL length limits
+    const BATCH = 500
+    let deleted = 0
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH)
+      const { error, count } = await supabase
+        .from("script_lines")
+        .delete({ count: "exact" })
+        .in("id", batch)
+        .eq("project_id", projectId)
+
+      if (error) throw error
+      deleted += count ?? batch.length
+    }
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true, deletedCount: deleted }
+  } catch (err) {
+    console.error("deleteScriptLinesByIds error:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+/**
  * Get unique role names for a project (for filter dropdown).
  */
 export async function getScriptRoles(projectId: string): Promise<string[]> {

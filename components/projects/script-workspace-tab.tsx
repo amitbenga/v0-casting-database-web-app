@@ -25,10 +25,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines } from "@/lib/actions/script-line-actions"
+import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
@@ -235,6 +242,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [searchRole, setSearchRole] = useState("")
 
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null)
+
   // Load initial page of lines
   useEffect(() => {
     let cancelled = false
@@ -337,6 +350,63 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       return true
     })
   }, [lines, filterRole, filterStatus, searchRole])
+
+  // Selection helpers
+  const allFilteredSelected = filteredLines.length > 0 && filteredLines.every((l) => selectedIds.has(l.id))
+  const someFilteredSelected = filteredLines.some((l) => selectedIds.has(l.id))
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = someFilteredSelected && !allFilteredSelected
+    }
+  }, [someFilteredSelected, allFilteredSelected])
+
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filteredLines.forEach((l) => next.delete(l.id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filteredLines.forEach((l) => next.add(l.id))
+        return next
+      })
+    }
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setIsDeleting(true)
+    try {
+      const result = await deleteScriptLinesByIds(projectId, ids)
+      if (!result.success) throw new Error(result.error)
+
+      setLines((prev) => prev.filter((l) => !selectedIds.has(l.id)))
+      setTotal((prev) => prev - ids.length)
+      setSelectedIds(new Set())
+      setShowDeleteConfirm(false)
+      toast({
+        title: "נמחקו בהצלחה",
+        description: `${result.deletedCount} שורות נמחקו`,
+      })
+    } catch (err) {
+      toast({ title: "שגיאה במחיקה", description: String(err), variant: "destructive" })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   // File selection
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -455,6 +525,30 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         )}
       </div>
 
+      {/* Bulk action bar — shown when rows are selected */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2 bg-muted/60 rounded-lg border" dir="rtl">
+          <span className="text-sm font-medium">{selectedIds.size.toLocaleString()} שורות נבחרו</span>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-1.5 mr-auto"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            {"מחיקה"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-muted-foreground"
+          >
+            {"ביטול בחירה"}
+          </Button>
+        </div>
+      )}
+
       {/* Filters (Agent 5: combobox for role; Agent 6: jump-to-line) */}
       {!loading && hasLines && (
         <div className="flex items-center gap-2 flex-wrap" dir="rtl">
@@ -571,6 +665,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
               <TableRow>
                 {/* # — sticky right (Agent 4) */}
                 <TableHead className="w-12 text-right sticky right-0 z-20 bg-background border-l">{"#"}</TableHead>
+                {/* Checkbox column */}
+                <TableHead className="w-10 text-center">
+                  <input
+                    ref={selectAllCheckboxRef}
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleAll}
+                    className="cursor-pointer accent-primary h-4 w-4"
+                    aria-label="בחר הכל"
+                  />
+                </TableHead>
                 <TableHead className="w-24 text-right">{"TC"}</TableHead>
                 <TableHead className="w-32 text-right">{"תפקיד"}</TableHead>
                 <TableHead className="w-28 text-right">{"שחקן"}</TableHead>
@@ -585,10 +690,23 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                   ? REC_STATUS_CONFIG[line.rec_status]
                   : null
                 return (
-                  <TableRow key={line.id} className="hover:bg-muted/30">
+                  <TableRow
+                    key={line.id}
+                    className={`hover:bg-muted/30 ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
+                  >
                     {/* # — sticky right (Agent 4) */}
                     <TableCell className="text-right text-xs text-muted-foreground sticky right-0 z-10 bg-background border-l">
                       {line.line_number ?? ""}
+                    </TableCell>
+                    {/* Row checkbox */}
+                    <TableCell className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(line.id)}
+                        onChange={() => toggleRow(line.id)}
+                        className="cursor-pointer accent-primary h-4 w-4"
+                        aria-label={`בחר שורה ${line.line_number ?? ""}`}
+                      />
                     </TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground text-right">
                       {line.timecode ?? "\u2014"}
@@ -647,6 +765,38 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           </Button>
         </div>
       )}
+
+      {/* Bulk delete confirmation dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{"מחיקת שורות"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {"האם למחוק את השורות שנבחרו?"}{" "}
+            <span className="font-medium text-foreground">({selectedIds.size.toLocaleString()} שורות)</span>
+            {" "}{"פעולה זו בלתי הפיכה."}
+          </p>
+          <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={isDeleting}
+            >
+              {"ביטול"}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="gap-1.5"
+            >
+              {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {"מחק"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Import dialog */}
       {excelResult && (
