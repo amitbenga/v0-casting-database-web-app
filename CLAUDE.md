@@ -86,14 +86,22 @@ app/
 
 lib/
   types.ts                 # כל הטיפוסים (source of truth)
+                           # כולל: RecStatus, ScriptLine, ScriptLineInput
   actions/
     submission-actions.ts  # Admin approve/reject + merge
     casting-actions.ts     # Role casting
     script-actions.ts      # Script upload + processing
-    script-line-actions.ts # Script Workspace — CRUD for script_lines
+    script-line-actions.ts # Script Workspace CRUD:
+                           #   saveScriptLines(projectId, lines, options)
+                           #   getScriptLines(projectId, filters)
+                           #   updateScriptLine(lineId, updates)
+                           #   deleteAllScriptLines(projectId)
+                           #   getScriptRoles(projectId)
   parser/
     script-parser.ts       # Parser מודרגש (פב 2026)
-    excel-parser.ts        # Excel parser + script line extraction
+    excel-parser.ts        # 2 חלקים:
+                           #   (1) parseExcelFile / applyExcelMapping → תפקידים מ-Excel
+                           #   (2) parseScriptLinesFromExcel / autoDetectScriptLineColumns → שורות לסביבת עבודה
     fuzzy-matcher.ts
     index.ts               # Pipeline
     __tests__/             # 77 unit tests
@@ -104,14 +112,15 @@ components/
   actor-edit-form.tsx      # עריכת שחקן
   date-input.tsx           # קומפוננטת תאריך dd/mm/yyyy
   projects/
-    roles-tab.tsx          # ניהול תפקידים
-    scripts-tab.tsx        # תסריטים + parsing
-    script-workspace-tab.tsx      # מודול 4 — סביבת עבודה (ייבוא אקסל)
-    script-lines-import-dialog.tsx # דיאלוג ייבוא שורות מאקסל
+    roles-tab.tsx                  # ניהול תפקידים
+    scripts-tab.tsx                # תסריטים + parsing
+    script-workspace-tab.tsx       # מודול 4 — טבלת שורות + עריכה inline + צבעי תפקידים + סינון
+    script-lines-import-dialog.tsx # דיאלוג מיפוי עמודות Excel לפני ייבוא שורות
 
 migrations/
-  002_fix_schema_gaps.sql  # רץ בהצלחה — skills/languages TEXT[]→JSONB
-  003_multi_actor_per_role.sql  # רץ בהצלחה — UNIQUE(role_id)→UNIQUE(role_id,actor_id)
+  002_fix_schema_gaps.sql        # רץ בהצלחה — skills/languages TEXT[]→JSONB
+  003_multi_actor_per_role.sql   # רץ בהצלחה — UNIQUE(role_id)→UNIQUE(role_id,actor_id)
+  004_script_lines.sql           # רץ בהצלחה — טבלת script_lines (ראה §6)
 ```
 
 ---
@@ -127,9 +136,29 @@ migrations/
 | `project_roles` | תפקידים בפרויקט |
 | `role_castings` | UNIQUE(role_id, actor_id) — מרובי שחקנים לתפקיד (003) |
 | `casting_project_scripts` | תסריטים מעובדים |
-| `script_lines` | **חדש** — שורות סקריפט לסביבת עבודה (025) |
+| `script_lines` | שורות סקריפט לסביבת עבודה (025) — ראה פרטים מלאים למטה |
 | `folders` / `folder_actors` | תיקיות שחקנים |
 | `user_profiles` | פרופילי admin (018) |
+
+### script_lines — עמודות מלאות
+```
+id            TEXT PK (gen_random_uuid()::text)
+project_id    TEXT NOT NULL → FK casting_projects(id) ON DELETE CASCADE
+script_id     TEXT (nullable — מקשר לקובץ תסריט, לא חובה)
+line_number   INTEGER
+timecode      TEXT (פורמט HH:MM:SS:FF או HH:MM:SS)
+role_name     TEXT NOT NULL (שם הדמות כמו שמופיע בתסריט)
+actor_id      TEXT → FK actors(id) ON DELETE SET NULL (nullable)
+source_text   TEXT (טקסט מקור — אנגלית/צרפתית וכו')
+translation   TEXT (תרגום לעברית — עריכה inline)
+rec_status    TEXT — 'הוקלט' | 'Optional' | 'לא הוקלט' | NULL (= pending)
+notes         TEXT
+created_at    TIMESTAMPTZ DEFAULT NOW()
+```
+**אינדקסים:** project_id, (project_id, role_name), (project_id, line_number), actor_id
+
+### טיפוס RecStatus (lib/types.ts)
+`RecStatus = "הוקלט" | "Optional" | "לא הוקלט"`
 
 ### שמות שדות חשובים (לא להתבלבל)
 - `folder_actors` (לא `actor_folders`)
@@ -212,23 +241,26 @@ migrations/
 | 1 | **Actors** — מאגר שחקנים גלובלי | ✅ פועל (עם באגים פתוחים) |
 | 2 | **Casting Projects** — פרויקטים, תפקידים, שיבוץ | ✅ פועל (RLS תוקן, multi-actor תוקן) |
 | 3 | **Script Intelligence** — העלאה, חילוץ תפקידים, parser | 🟡 חלקי |
-| 4 | **Script Workspace** — מחליף את האקסל | 🟡 חלקי — ייבוא אקסל בלבד |
+| 4 | **Script Workspace** — מחליף את האקסל | ✅ הושלם בבראנצ' claude (מוזג חלקית ל-v0) |
 
-### מודול 4 — Script Workspace (סטטוס נוכחי)
+### מודול 4 — Script Workspace
 
-**DB:** טבלת `script_lines` קיימת ופעילה (migration 025).
+**DB:** טבלת `script_lines` קיימת ופעילה (migration 004/025).
 **UI:** טאב "סביבת עבודה" בדף פרויקט (`script-workspace-tab.tsx`).
-**עובד:** ייבוא שורות מאקסל (Excel import) + הצגת טבלה.
-
-**חסר עדיין:**
-- עריכת תרגום inline
-- סינון לפי תפקיד/שחקן
-- הדגשת שורות לפי תפקיד
-- ספירת רפליקות
-- ייצוא Excel (output)
-- שיוך אוטומטי של שחקנים לשורות לפי role_castings
-
 **טיפוסים:** `ScriptLine`, `ScriptLineInput`, `RecStatus` — מוגדרים ב-`lib/types.ts`.
+
+**מה הושלם (בבראנצ' claude/add-script-handling-IH2JC):**
+- ייבוא Excel עם auto-detect עמודות + מיפוי ידני
+- טבלת שורות עם עריכה inline (תרגום, rec_status, הערות)
+- צבעי תפקידים אוטומטיים
+- סינון לפי תפקיד ו-rec_status
+- שמירה ב-DB (batch של 500 בכל פעם)
+- actor_id בכל שורה — מוכן לשיוך מה-casting
+
+**חסר עדיין (לפיתוח עתידי):**
+- ייצוא Excel
+- שיוך שחקן אוטומטי מה-casting (actor_id נשמר אבל UI לא מציג את שם השחקן מה-casting)
+- עריכת timecode inline
 
 ### שלבי עבודה
 
@@ -236,7 +268,12 @@ migrations/
 | --- | --- | --- |
 | א | `claude/fix-known-bugs` | 🟡 חלק תוקן, חלק פתוח (ראה §7) |
 | ב | `claude/fix-ux-consistency` | 🔴 טרם התחיל |
-| ג | `claude/add-script-handling-IH2JC` | 🟡 מוזג חלקית ל-v0 branch — ייבוא בלבד |
+| ג | `claude/add-script-handling-IH2JC` | ✅ הושלם — מוזג ל-v0 branch (קונפליקטים נפתרו) |
+
+### מיזוג claude → v0
+**קונפליקטים שנפתרו:**
+- `lib/types.ts` — נשמרו `castings: RoleCasting[]` מ-v0 + `ScriptLine`/`RecStatus`/`ScriptLineInput` מ-claude
+- `app/projects/[id]/page.tsx` — נשמר `grid-cols-4` מ-v0 + טאב "סביבת עבודה" + `ScriptWorkspaceTab` import מ-claude
 
 ---
 
@@ -265,6 +302,9 @@ pnpm test                # חייב: כל הטסטים עוברים
 - סקריפטים ישנים בתיקיית `scripts/` (017-025) — כבר הורצו, לא לשנות
 - **חובה:** תיעוד כל מיגרציה ב-`docs/changes/`
 - **חובה:** לבדוק שינויים מול הטופס הציבורי (scprodub) — כל שדה ב-actors/submissions חייב להתאים
+
+### תלויות חשובות
+- `xlsx` (SheetJS) — לקריאת קבצי Excel client-side (דינמי import בתוך `parseExcelFile`)
 
 ### כלי פיתוח
 - **Claude Code** — לוגיקה, TypeScript, DB, bug fixes
