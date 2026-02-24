@@ -171,7 +171,7 @@ export async function parseScriptFiles(
         name: file.name,
         size: fileInfo.size,
         status: "error",
-        error: `Unsupported format: .${fileInfo.extension}`
+        error: `פורמט קובץ לא נתמך: .${fileInfo.extension}`
       })
       continue
     }

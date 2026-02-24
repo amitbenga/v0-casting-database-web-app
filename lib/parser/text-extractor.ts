@@ -388,20 +388,20 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         try {
           text = await extractTextFromPDF(file)
           if (text.trim().length < 100) {
-            warnings.push("PDF extraction resulted in very little text. The PDF may be image-based.")
+            warnings.push("לא חולץ טקסט מספיק מה-PDF. ייתכן שהקובץ סרוק או מבוסס תמונה.")
           }
         } catch (pdfError) {
           console.error("PDF extraction error:", pdfError)
-          throw new Error("Failed to extract text from PDF. Try converting to TXT format.")
+          throw new Error("לא הצלחנו לחלץ טקסט מה-PDF. אם הקובץ סרוק או כתמונה, נסה להעלות אקסל או לייצא PDF עם טקסט.")
         }
         break
-        
+
       case "docx":
         try {
           text = await extractTextFromDOCX(file)
         } catch (docxError) {
           console.error("DOCX extraction error:", docxError)
-          throw new Error("Failed to extract text from DOCX. Try converting to TXT format.")
+          throw new Error("לא הצלחנו לחלץ טקסט מה-DOCX. נסה לשמור מחדש או להעלות קובץ אחר.")
         }
         break
         
@@ -413,20 +413,20 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
       case "xls":
         try {
           text = await extractTextFromExcel(file)
-          warnings.push("Excel file imported as role list. Ensure the first column has role names and the second has replica counts.")
+          warnings.push("קובץ Excel יובא כרשימת תפקידים. ודא שהעמודה הראשונה מכילה שמות תפקידים והשנייה — מספר רפליקות.")
         } catch (excelError) {
           console.error("Excel extraction error:", excelError)
-          throw new Error("Failed to read Excel file. Ensure it contains role names in the first column.")
+          throw new Error("לא ניתן לקרוא את קובץ ה-Excel. ודא שהעמודה הראשונה מכילה שמות תפקידים.")
         }
         break
 
       case "csv":
         try {
           text = await extractTextFromCSV(file)
-          warnings.push("CSV file imported as role list. Ensure the first column has role names and the second has replica counts.")
+          warnings.push("קובץ CSV יובא כרשימת תפקידים. ודא שהעמודה הראשונה מכילה שמות תפקידים והשנייה — מספר רפליקות.")
         } catch (csvError) {
           console.error("CSV extraction error:", csvError)
-          throw new Error("Failed to read CSV file.")
+          throw new Error("לא ניתן לקרוא את קובץ ה-CSV.")
         }
         break
         
@@ -436,15 +436,15 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
     
     // Basic validation
     if (!text || text.trim().length === 0) {
-      throw new Error("File appears to be empty")
+      throw new Error("הקובץ ריק או לא ניתן לחלץ ממנו טקסט.")
     }
-    
+
     // Check for common issues
     const lines = text.split("\n")
     const uppercaseLines = lines.filter(l => l.trim() && l.trim() === l.trim().toUpperCase())
-    
+
     if (uppercaseLines.length < 5) {
-      warnings.push("Very few uppercase lines detected. Make sure this is a properly formatted screenplay.")
+      warnings.push("זוהו מעט מאוד שורות באותיות גדולות. ודא שהקובץ בפורמט תסריט תקני.")
     }
     
     return { text, warnings }

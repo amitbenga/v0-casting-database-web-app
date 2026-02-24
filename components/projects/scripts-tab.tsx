@@ -526,6 +526,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                 <li>בדוק, ערוך ומזג תפקידים לפי הצורך</li>
                 <li>אשר — התפקידים וסביבת העבודה יתמלאו אוטומטית</li>
               </ol>
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                שים לב: אישור תסריט חדש מחליף את כל שורות סביבת העבודה הקיימות.
+              </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 לייבוא Excel עם שורות מפורטות (TC, תרגום וכו') — השתמש בכפתור הירוק למעלה
               </p>
@@ -632,7 +635,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                   }
                 }
                 if (stubs.length > 0) {
-                  await saveScriptLines(projectId, stubs, { replaceAll: false })
+                  await saveScriptLines(projectId, stubs, { replaceAll: true })
                 }
               } catch (e) {
                 // Non-critical: roles were applied, stub creation failed
