@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -213,11 +212,6 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
         >
           {role.role_name}
         </button>
-        {role.source === "script" && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 flex-shrink-0">
-            תסריט
-          </Badge>
-        )}
       </div>
 
       {/* Replicas count */}
@@ -315,9 +309,11 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
 
 interface CastingWorkspaceProps {
   projectId: string
+  /** Called after any assign/unassign/status change so the parent can refresh header counts */
+  onCastingChange?: () => void
 }
 
-export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
+export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspaceProps) {
   const { toast } = useToast()
   const BULK_CONCURRENCY = 8
   const [roles, setRoles] = useState<ProjectRoleWithCasting[]>([])
@@ -351,13 +347,15 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
+      // Notify parent to refresh header actor count
+      onCastingChange?.()
     } catch (err) {
       setError("שגיאה בטעינת תפקידים")
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, onCastingChange])
 
   useEffect(() => {
     loadRoles()

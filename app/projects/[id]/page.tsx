@@ -229,8 +229,9 @@ export default function ProjectDetailPage() {
       </header>
 
       <div className="container mx-auto px-4 md:px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
-          {/* Sidebar */}
+        <div className={`grid grid-cols-1 gap-6 md:gap-8 ${activeTab === "workspace" ? "" : "lg:grid-cols-4"}`}>
+          {/* Sidebar — hidden on workspace tab */}
+          {activeTab !== "workspace" && (
           <div className="space-y-6">
             <Card className="p-6 space-y-4">
               <h3 className="font-semibold text-lg">פרטי הפרויקט</h3>
@@ -305,9 +306,10 @@ export default function ProjectDetailPage() {
               </Card>
             )}
           </div>
+          )}
 
           {/* Main Content */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className={activeTab === "workspace" ? "space-y-6" : "lg:col-span-3 space-y-6"}>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="roles">
@@ -325,7 +327,7 @@ export default function ProjectDetailPage() {
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <CastingWorkspace projectId={project.id} />
+                <CastingWorkspace projectId={project.id} onCastingChange={loadData} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">

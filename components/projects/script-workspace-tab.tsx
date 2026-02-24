@@ -25,10 +25,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines } from "@/lib/actions/script-line-actions"
+import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
@@ -223,27 +230,53 @@ function RoleCombobox({
   )
 }
 
+const PAGE_SIZE = 1000
+
 // Main component
 export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const { toast } = useToast()
 
   const [lines, setLines] = useState<ScriptLine[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searchRole, setSearchRole] = useState("")
 
-  // Load lines on mount
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null)
+
+  // Load initial page of lines
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getScriptLines(projectId)
-      .then((data) => {
-        if (!cancelled) setLines(data)
+    getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+      .then(({ lines: data, total: count }) => {
+        if (!cancelled) {
+          setLines(data)
+          setTotal(count)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
   }, [projectId])
+
+  const hasMore = lines.length < total
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const { lines: more } = await getScriptLines(projectId, {}, { from: lines.length, to: lines.length + PAGE_SIZE - 1 })
+      setLines((prev) => [...prev, ...more])
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const [filterRole, setFilterRole] = useState<string>("__all__")
   const [filterStatus, setFilterStatus] = useState<string>("__all__")
@@ -318,6 +351,63 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     })
   }, [lines, filterRole, filterStatus, searchRole])
 
+  // Selection helpers
+  const allFilteredSelected = filteredLines.length > 0 && filteredLines.every((l) => selectedIds.has(l.id))
+  const someFilteredSelected = filteredLines.some((l) => selectedIds.has(l.id))
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = someFilteredSelected && !allFilteredSelected
+    }
+  }, [someFilteredSelected, allFilteredSelected])
+
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filteredLines.forEach((l) => next.delete(l.id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filteredLines.forEach((l) => next.add(l.id))
+        return next
+      })
+    }
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    setIsDeleting(true)
+    try {
+      const result = await deleteScriptLinesByIds(projectId, ids)
+      if (!result.success) throw new Error(result.error)
+
+      setLines((prev) => prev.filter((l) => !selectedIds.has(l.id)))
+      setTotal((prev) => prev - ids.length)
+      setSelectedIds(new Set())
+      setShowDeleteConfirm(false)
+      toast({
+        title: "נמחקו בהצלחה",
+        description: `${result.deletedCount} שורות נמחקו`,
+      })
+    } catch (err) {
+      toast({ title: "שגיאה במחיקה", description: String(err), variant: "destructive" })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   // File selection
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -350,8 +440,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
         setShowImportDialog(false)
         setExcelResult(null)
-        const freshLines = await getScriptLines(projectId)
+        const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
         setLines(freshLines)
+        setTotal(freshTotal)
         toast({
           title: "ייבוא הצליח",
           description: `${result.linesCreated} שורות יובאו לסביבת העבודה`,
@@ -382,24 +473,96 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
-  // Excel export
+  // Inline rec_status update (Agent 1)
+  const handleRecStatusChange = useCallback(
+    async (lineId: string, newStatus: RecStatus | null) => {
+      // Optimistic update
+      setLines((prev) =>
+        prev.map((l) =>
+          l.id === lineId ? { ...l, rec_status: newStatus } : l
+        )
+      )
+      const result = await updateScriptLine(lineId, { rec_status: newStatus })
+      if (!result.success) {
+        toast({ title: "שגיאה", description: "שגיאה בשמירת סטטוס", variant: "destructive" })
+        // Revert
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, rec_status: l.rec_status } : l
+          )
+        )
+      }
+    },
+    [toast]
+  )
+
+  // Excel export — RTL, bold headers, freeze pane, auto widths, filters (Agent 6)
   async function handleExport() {
     try {
       const XLSX = await import("xlsx")
-      const exportData = lines.map((l) => ({
-        "#": l.line_number ?? "",
-        TC: l.timecode ?? "",
-        "תפקיד": l.role_name,
-        "סטטוס הקלטה": l.rec_status ?? "",
-        "תרגום": l.translation ?? "",
-        "טקסט מקור": l.source_text ?? "",
-        "הערות": l.notes ?? "",
-      }))
-      const ws = XLSX.utils.json_to_sheet(exportData)
+
+      const HEADERS = ["#", "TC", "תפקיד", "שחקן", "סטטוס הקלטה", "תרגום", "טקסט מקור", "הערות"]
+
+      // Build rows as arrays (preserves column order)
+      const dataRows = lines.map((l) => [
+        l.line_number ?? "",
+        l.timecode ?? "",
+        l.role_name,
+        l.actor_name ?? "",
+        l.rec_status ?? "",
+        l.translation ?? "",
+        l.source_text ?? "",
+        l.notes ?? "",
+      ])
+
+      const allRows = [HEADERS, ...dataRows]
+      const ws = XLSX.utils.aoa_to_sheet(allRows)
+
+      // Column widths (characters)
+      ws["!cols"] = [
+        { wch: 6 },   // #
+        { wch: 14 },  // TC
+        { wch: 22 },  // תפקיד
+        { wch: 18 },  // שחקן
+        { wch: 14 },  // סטטוס
+        { wch: 40 },  // תרגום
+        { wch: 40 },  // טקסט מקור
+        { wch: 24 },  // הערות
+      ]
+
+      // Freeze first row (header)
+      ws["!freeze"] = { xSplit: 0, ySplit: 1 }
+
+      // AutoFilter on header row
+      const lastCol = String.fromCharCode(65 + HEADERS.length - 1) // 'H'
+      ws["!autofilter"] = { ref: `A1:${lastCol}1` }
+
+      // Bold header row + RTL alignment for all cells
+      const boldStyle = { font: { bold: true }, alignment: { horizontal: "right", readingOrder: 2 } }
+      const cellStyle = { alignment: { horizontal: "right", readingOrder: 2, wrapText: true } }
+
+      for (let c = 0; c < HEADERS.length; c++) {
+        const headerAddr = XLSX.utils.encode_cell({ r: 0, c })
+        if (!ws[headerAddr]) ws[headerAddr] = { v: HEADERS[c], t: "s" }
+        ws[headerAddr].s = boldStyle
+      }
+      for (let r = 1; r <= dataRows.length; r++) {
+        for (let c = 0; c < HEADERS.length; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c })
+          if (ws[addr]) ws[addr].s = cellStyle
+        }
+      }
+
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "Script Workspace")
+      // RTL sheet direction
+      XLSX.utils.book_append_sheet(wb, ws, "סביבת עבודה")
+      wb.Workbook = wb.Workbook ?? { Views: [], Sheets: [] }
+      wb.Workbook.Sheets = wb.Workbook.Sheets ?? []
+      wb.Workbook.Sheets[0] = wb.Workbook.Sheets[0] ?? {}
+      wb.Workbook.Sheets[0].RTL = true
+
       XLSX.writeFile(wb, `workspace-${projectId}.xlsx`)
-      toast({ title: "ייצוא הצליח" })
+      toast({ title: "ייצוא הצליח", description: `${lines.length.toLocaleString()} שורות יוצאו` })
     } catch {
       toast({ title: "שגיאה בייצוא", variant: "destructive" })
     }
@@ -428,10 +591,35 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
         {hasLines && (
           <span className="text-sm text-muted-foreground">
-            {filteredLines.length.toLocaleString()} / {lines.length.toLocaleString()} {"שורות"}
+            {filteredLines.length.toLocaleString()} / {total.toLocaleString()} {"שורות"}
+            {hasMore && ` (${lines.length.toLocaleString()} טעונות)`}
           </span>
         )}
       </div>
+
+      {/* Bulk action bar — shown when rows are selected */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2 bg-muted/60 rounded-lg border" dir="rtl">
+          <span className="text-sm font-medium">{selectedIds.size.toLocaleString()} שורות נבחרו</span>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-1.5 mr-auto"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            {"מחיקה"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-muted-foreground"
+          >
+            {"ביטול בחירה"}
+          </Button>
+        </div>
+      )}
 
       {/* Filters (Agent 5: combobox for role; Agent 6: jump-to-line) */}
       {!loading && hasLines && (
@@ -516,28 +704,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         </div>
       )}
 
-      {/* Role counts summary */}
-      {!loading && hasLines && filterRole === "__all__" && !searchRole && (
-        <div className="flex flex-wrap gap-1.5" dir="rtl">
-          <TooltipProvider>
-            {uniqueRoles.map((role) => (
-              <Tooltip key={role}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setFilterRole(role)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-opacity hover:opacity-80 ${getRoleColor(role, roleIndex)}`}
-                  >
-                    {role}
-                    <span className="opacity-60">{replicaCounts.get(role)}</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{"סנן לפי"} {role}</TooltipContent>
-              </Tooltip>
-            ))}
-          </TooltipProvider>
-        </div>
-      )}
-
       {/* Loading state */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
@@ -571,6 +737,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
               <TableRow>
                 {/* # — sticky right (Agent 4) */}
                 <TableHead className="w-12 text-right sticky right-0 z-20 bg-background border-l">{"#"}</TableHead>
+                {/* Checkbox column */}
+                <TableHead className="w-10 text-center">
+                  <input
+                    ref={selectAllCheckboxRef}
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleAll}
+                    className="cursor-pointer accent-primary h-4 w-4"
+                    aria-label="בחר הכל"
+                  />
+                </TableHead>
                 <TableHead className="w-24 text-right">{"TC"}</TableHead>
                 <TableHead className="w-32 text-right">{"תפקיד"}</TableHead>
                 <TableHead className="w-28 text-right">{"שחקן"}</TableHead>
@@ -585,18 +762,38 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                   ? REC_STATUS_CONFIG[line.rec_status]
                   : null
                 return (
-                  <TableRow key={line.id} className="hover:bg-muted/30">
+                  <TableRow
+                    key={line.id}
+                    className={`hover:bg-muted/30 ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
+                  >
                     {/* # — sticky right (Agent 4) */}
                     <TableCell className="text-right text-xs text-muted-foreground sticky right-0 z-10 bg-background border-l">
                       {line.line_number ?? ""}
                     </TableCell>
+                    {/* Row checkbox */}
+                    <TableCell className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(line.id)}
+                        onChange={() => toggleRow(line.id)}
+                        className="cursor-pointer accent-primary h-4 w-4"
+                        aria-label={`בחר שורה ${line.line_number ?? ""}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground text-right">
                       {line.timecode ?? "\u2014"}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={`text-xs ${getRoleColor(line.role_name, roleIndex)}`}>
-                        {line.role_name}
-                      </Badge>
+                    <TableCell className="max-w-[130px]">
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className={`text-xs max-w-full truncate block ${getRoleColor(line.role_name, roleIndex)}`}>
+                              {line.role_name}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" dir="rtl">{line.role_name}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-sm text-right">
                       {line.actor_name ? (
@@ -605,14 +802,38 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         <span className="text-muted-foreground text-xs italic">{"לא שובץ"}</span>
                       )}
                     </TableCell>
+                    {/* Editable rec_status (Agent 1) */}
                     <TableCell>
-                      {recConfig ? (
-                        <Badge variant="secondary" className={`text-xs ${recConfig.className}`}>
-                          {recConfig.label}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{"ממתין"}</span>
-                      )}
+                      <Select
+                        value={line.rec_status ?? "__pending__"}
+                        onValueChange={(v) =>
+                          handleRecStatusChange(
+                            line.id,
+                            v === "__pending__" ? null : (v as RecStatus)
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          className={`h-7 w-28 text-xs border-0 shadow-none px-2 ${
+                            line.rec_status
+                              ? REC_STATUS_CONFIG[line.rec_status].className
+                              : "text-muted-foreground"
+                          }`}
+                          dir="rtl"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent dir="rtl">
+                          <SelectItem value="__pending__" className="text-xs text-muted-foreground">
+                            {"ממתין"}
+                          </SelectItem>
+                          {REC_STATUS_OPTIONS.map((s) => (
+                            <SelectItem key={s.value} value={s.value} className="text-xs">
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
@@ -630,6 +851,48 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           )}
         </div>
       )}
+
+      {/* Load more (pagination) — Task 2A/2B */}
+      {!loading && hasMore && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore} className="gap-2">
+            {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loadingMore ? "טוען..." : `טען עוד (${(total - lines.length).toLocaleString()} נותרו)`}
+          </Button>
+        </div>
+      )}
+
+      {/* Bulk delete confirmation dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{"מחיקת שורות"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {"האם למחוק את השורות שנבחרו?"}{" "}
+            <span className="font-medium text-foreground">({selectedIds.size.toLocaleString()} שורות)</span>
+            {" "}{"פעולה זו בלתי הפיכה."}
+          </p>
+          <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={isDeleting}
+            >
+              {"ביטול"}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="gap-1.5"
+            >
+              {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {"מחק"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Import dialog */}
       {excelResult && (

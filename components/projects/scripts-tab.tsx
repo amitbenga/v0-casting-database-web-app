@@ -274,7 +274,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* File Input Area */}
+          {/* Single upload area — PDF, DOCX, TXT */}
           <div
             className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
@@ -282,7 +282,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv"
+              accept=".pdf,.docx,.txt"
               multiple
               onChange={handleFilesSelected}
               className="hidden"
@@ -290,15 +290,15 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm font-medium">לחץ לבחירת קבצים או גרור לכאן</p>
             <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-TXT, PDF, DOC, DOCX, XLSX, XLS, CSV
+              פורמטים נתמכים: PDF, DOCX, TXT
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-0.5">
+              קובץ DOC ישן אינו נתמך — יש להמיר ל-DOCX
             </p>
           </div>
 
-          {/* Excel Import Area */}
-          <div
-            className="border-2 border-dashed border-green-300 dark:border-green-700 rounded-lg p-6 text-center hover:border-green-400 hover:bg-green-50/50 dark:hover:bg-green-950/20 transition-colors cursor-pointer"
-            onClick={() => excelInputRef.current?.click()}
-          >
+          {/* Excel roles import — compact button */}
+          <div className="flex items-center gap-2">
             <input
               ref={excelInputRef}
               type="file"
@@ -318,11 +318,16 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               }}
               className="hidden"
             />
-            <FileSpreadsheet className="h-10 w-10 mx-auto text-green-600 dark:text-green-400 mb-3" />
-            <p className="text-sm font-medium">ייבוא תפקידים מקובץ Excel</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              תומך ב-XLSX, XLS - מיפוי עמודות ידני
-            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => excelInputRef.current?.click()}
+              className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              ייבוא תפקידים מ-Excel
+            </Button>
+            <span className="text-xs text-muted-foreground">XLSX / XLS — מיפוי עמודות ידני</span>
           </div>
 
           {/* Pending Files List */}
@@ -521,11 +526,17 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <div className="text-sm">
               <p className="font-medium">איך זה עובד?</p>
               <ol className="mt-2 space-y-1 text-muted-foreground list-decimal list-inside">
-                <li>בחר קבצי תסריט (ניתן לבחור מספר קבצים לפרויקט אחד)</li>
-                <li>לחץ "חלץ תפקידים" - המערכת תזהה אוטומטית את התפקידים</li>
-                <li>בדוק את התוצאות, ערוך ומזג תפקידים לפי הצורך</li>
-                <li>אשר את התפקידים - הם יועברו לטאב "תפקידים" לשיבוץ</li>
+                <li>בחר קבצי תסריט — PDF, DOCX, TXT (לא DOC ישן)</li>
+                <li>לחץ "חלץ תפקידים" — המערכת תזהה אוטומטית את הדמויות</li>
+                <li>בדוק, ערוך ומזג תפקידים לפי הצורך</li>
+                <li>אשר — התפקידים וסביבת העבודה יתמלאו אוטומטית</li>
               </ol>
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                שים לב: אישור תסריט חדש מחליף את כל שורות סביבת העבודה הקיימות.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                לייבוא Excel עם שורות מפורטות (TC, תרגום וכו') — השתמש בכפתור הירוק למעלה
+              </p>
             </div>
           </div>
         </CardContent>
@@ -615,7 +626,28 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             type: pf.file.type || pf.file.name.split('.').pop() || 'unknown',
             size: pf.file.size,
           }))}
-          onApplied={() => {
+          onApplied={async (scriptId?: string) => {
+            // Create stub script_lines from parsed characters so the workspace
+            // immediately shows rows after DOCX/PDF upload. script_id is now
+            // populated so rows are linked to the casting_project_scripts record.
+            if (parseResult && parseResult.parseResult.characters.length > 0) {
+              try {
+                let lineNum = 1
+                const stubs: Array<{ line_number: number; role_name: string }> = []
+                for (const char of parseResult.parseResult.characters) {
+                  const replicas = Math.min(char.replicaCount, 500)
+                  for (let i = 0; i < replicas; i++) {
+                    stubs.push({ line_number: lineNum++, role_name: char.name })
+                  }
+                }
+                if (stubs.length > 0) {
+                  await saveScriptLines(projectId, stubs, { replaceAll: true, scriptId })
+                }
+              } catch (e) {
+                // Non-critical: roles were applied, stub creation failed
+                console.warn("Stub script_lines creation failed (non-critical):", e)
+              }
+            }
             setShowPreview(false)
             setPendingFiles([])
             setParseResult(null)

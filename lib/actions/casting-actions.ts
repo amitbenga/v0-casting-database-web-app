@@ -228,12 +228,25 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
 
 /**
  * Unassigns a specific actor from a role.
+ * If the casting was "מלוהק", also clears script_lines assignments for that role.
  */
 export async function unassignActorFromRole(roleId: string, actorId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    const { data: role } = await supabase
+      .from("project_roles")
+      .select("project_id, role_name")
+      .eq("id", roleId)
+      .single()
+
+    // Check if this casting was "מלוהק" before deleting
+    const { data: casting } = await supabase
+      .from("role_castings")
+      .select("status")
+      .eq("role_id", roleId)
+      .eq("actor_id", actorId)
+      .maybeSingle()
 
     const { error } = await supabase
       .from("role_castings")
@@ -243,27 +256,69 @@ export async function unassignActorFromRole(roleId: string, actorId: string): Pr
 
     if (error) throw error
 
+    // If actor was "מלוהק", clear their script_lines assignments
+    if (role && casting?.status === "מלוהק") {
+      await supabase
+        .from("script_lines")
+        .update({ actor_id: null })
+        .eq("project_id", role.project_id)
+        .eq("role_name", role.role_name)
+        .eq("actor_id", actorId)
+    }
+
     if (role) revalidatePath(`/projects/${role.project_id}`)
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error unassigning actor:", error)
-    return { success: false, error: error.message || "שגיאה בהסרת שיבוץ" }
+    return { success: false, error: error instanceof Error ? error.message : "שגיאה בהסרת שיבוץ" }
   }
 }
 
 /**
  * Updates casting status by casting id.
+ * Side-effect: when status becomes "מלוהק", auto-assigns all script_lines for
+ * that role to this actor. When status moves away from "מלוהק", clears those
+ * assignments. Enforces max one "מלוהק" actor per role.
  */
 export async function updateCastingStatus(castingId: string, status: CastingStatus): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    const { data: casting } = await supabase
+    // Fetch full casting context
+    const { data: casting, error: castingFetchErr } = await supabase
       .from("role_castings")
-      .select("role_id")
+      .select("role_id, actor_id, status")
       .eq("id", castingId)
       .single()
 
+    if (castingFetchErr || !casting) throw new Error("לא נמצא שיבוץ")
+
+    const { data: role, error: roleFetchErr } = await supabase
+      .from("project_roles")
+      .select("project_id, role_name")
+      .eq("id", casting.role_id)
+      .single()
+
+    if (roleFetchErr || !role) throw new Error("לא נמצא תפקיד")
+
+    // Guard: only one "מלוהק" per role
+    if (status === "מלוהק") {
+      const { data: existingCasted } = await supabase
+        .from("role_castings")
+        .select("id, actor_id")
+        .eq("role_id", casting.role_id)
+        .eq("status", "מלוהק")
+        .neq("id", castingId)
+
+      if (existingCasted && existingCasted.length > 0) {
+        return {
+          success: false,
+          error: "לתפקיד הזה כבר יש שחקן מלוהק. בטל קודם את השיבוץ הקיים.",
+        }
+      }
+    }
+
+    // Update the casting status
     const { error } = await supabase
       .from("role_castings")
       .update({ status, updated_at: new Date().toISOString() })
@@ -271,18 +326,29 @@ export async function updateCastingStatus(castingId: string, status: CastingStat
 
     if (error) throw error
 
-    if (casting?.role_id) {
-      const { data: role } = await supabase
-        .from("project_roles")
-        .select("project_id")
-        .eq("id", casting.role_id)
-        .single()
-      if (role) revalidatePath(`/projects/${role.project_id}`)
+    // Sync script_lines assignments
+    if (status === "מלוהק") {
+      // Assign all script_lines for this role to this actor
+      await supabase
+        .from("script_lines")
+        .update({ actor_id: casting.actor_id })
+        .eq("project_id", role.project_id)
+        .eq("role_name", role.role_name)
+    } else if (casting.status === "מלוהק") {
+      // Moving away from "מלוהק" — clear this actor's assignments for the role
+      await supabase
+        .from("script_lines")
+        .update({ actor_id: null })
+        .eq("project_id", role.project_id)
+        .eq("role_name", role.role_name)
+        .eq("actor_id", casting.actor_id)
     }
+
+    revalidatePath(`/projects/${role.project_id}`)
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating status:", error)
-    return { success: false, error: error.message || "שגיאה בעדכון סטטוס" }
+    return { success: false, error: error instanceof Error ? error.message : "שגיאה בעדכון סטטוס" }
   }
 }
 
