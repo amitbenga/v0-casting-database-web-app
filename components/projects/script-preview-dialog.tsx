@@ -57,7 +57,8 @@ interface ScriptPreviewDialogProps {
   onOpenChange: (open: boolean) => void
   parseResult: ParsedScriptBundle
   projectId: string
-  onApplied: () => void
+  /** Called after all roles are applied. Receives the first saved scriptId (if any). */
+  onApplied: (scriptId?: string) => void
   /** Info about the files that were parsed, for saving the script record */
   fileInfo?: { name: string; type: string; size: number }[]
 }
@@ -198,15 +199,19 @@ export function ScriptPreviewDialog({
       const result = await applyParsedRoles(projectId, roles, conflicts)
 
       if (result.success) {
-        // Save script record(s) to project_scripts table
+        // Save script record(s) to project_scripts table; capture the first scriptId
+        let firstScriptId: string | undefined
         if (fileInfo && fileInfo.length > 0) {
           for (const file of fileInfo) {
-            await saveScriptRecord(
+            const scriptRecord = await saveScriptRecord(
               projectId,
               file.name,
               file.type,
               file.size
             )
+            if (scriptRecord.success && scriptRecord.scriptId && !firstScriptId) {
+              firstScriptId = scriptRecord.scriptId
+            }
           }
         }
 
@@ -214,7 +219,7 @@ export function ScriptPreviewDialog({
           title: "התפקידים נוספו בהצלחה",
           description: `${result.rolesCreated} תפקידים ו-${result.conflictsCreated} קונפליקטים נוספו לפרויקט`,
         })
-        onApplied()
+        onApplied(firstScriptId)
       } else {
         toast({
           title: "שגיאה",

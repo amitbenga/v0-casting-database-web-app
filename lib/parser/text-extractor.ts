@@ -12,15 +12,28 @@
  * Note: This runs client-side due to PDF.js requirements
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
-  // Dynamic import of PDF.js legacy build to avoid worker issues
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  
+  // Dynamic import of PDF.js — use standard entry point (v5.x)
+  const pdfjsLib = await import("pdfjs-dist")
+
+  // Set worker source to the bundled worker file
+  // In Next.js, we use a CDN fallback or the installed package worker
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    try {
+      // Try to use the package worker URL (works in modern bundlers)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+    } catch {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
+    }
+  }
+
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ 
+  const pdf = await pdfjsLib.getDocument({
     data: arrayBuffer,
     useWorkerFetch: false,
     isEvalSupported: false,
-    useSystemFonts: true
+    useSystemFonts: true,
+    disableAutoFetch: true,
+    disableStream: true,
   }).promise
   
   const textParts: string[] = []
@@ -86,14 +99,24 @@ export async function extractTextFromPDF(file: File): Promise<string> {
  */
 export async function extractTextFromDOCX(file: File): Promise<string> {
   // DOCX is a ZIP file containing XML
-  const JSZip = (await import("jszip")).default
-  
+  let JSZip: typeof import("jszip").default
+  try {
+    JSZip = (await import("jszip")).default
+  } catch {
+    throw new Error("JSZip library not available for DOCX extraction")
+  }
+
   const arrayBuffer = await file.arrayBuffer()
-  const zip = await JSZip.loadAsync(arrayBuffer)
-  
+  let zip: import("jszip")
+  try {
+    zip = await JSZip.loadAsync(arrayBuffer)
+  } catch {
+    throw new Error("Invalid DOCX file: cannot open as ZIP archive")
+  }
+
   // Main document content is in word/document.xml
   const docXml = await zip.file("word/document.xml")?.async("text")
-  
+
   if (!docXml) {
     throw new Error("Invalid DOCX file: missing document.xml")
   }
@@ -365,69 +388,63 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         try {
           text = await extractTextFromPDF(file)
           if (text.trim().length < 100) {
-            warnings.push("PDF extraction resulted in very little text. The PDF may be image-based.")
+            warnings.push("לא חולץ טקסט מספיק מה-PDF. ייתכן שהקובץ סרוק או מבוסס תמונה.")
           }
         } catch (pdfError) {
           console.error("PDF extraction error:", pdfError)
-          throw new Error("Failed to extract text from PDF. Try converting to TXT format.")
+          throw new Error("לא הצלחנו לחלץ טקסט מה-PDF. אם הקובץ סרוק או כתמונה, נסה להעלות אקסל או לייצא PDF עם טקסט.")
         }
         break
-        
+
       case "docx":
         try {
           text = await extractTextFromDOCX(file)
         } catch (docxError) {
           console.error("DOCX extraction error:", docxError)
-          throw new Error("Failed to extract text from DOCX. Try converting to TXT format.")
+          throw new Error("לא הצלחנו לחלץ טקסט מה-DOCX. נסה לשמור מחדש או להעלות קובץ אחר.")
         }
         break
         
       case "doc":
-        try {
-          text = await extractTextFromDOC(file)
-          warnings.push("DOC format extraction may be less accurate. Consider converting to DOCX for better results.")
-        } catch (docError) {
-          console.error("DOC extraction error:", docError)
-          throw new Error("Failed to extract text from DOC. Please convert to DOCX or TXT format.")
-        }
-        break
+        // Block old .doc format with a clear Hebrew error message (3B)
+        throw new Error("פורמט DOC ישן אינו נתמך. אנא המר את הקובץ לפורמט DOCX ונסה שוב.")
 
       case "xlsx":
       case "xls":
         try {
           text = await extractTextFromExcel(file)
-          warnings.push("Excel file imported as role list. Ensure the first column has role names and the second has replica counts.")
+          warnings.push("קובץ Excel יובא כרשימת תפקידים. ודא שהעמודה הראשונה מכילה שמות תפקידים והשנייה — מספר רפליקות.")
         } catch (excelError) {
           console.error("Excel extraction error:", excelError)
-          throw new Error("Failed to read Excel file. Ensure it contains role names in the first column.")
+          throw new Error("לא ניתן לקרוא את קובץ ה-Excel. ודא שהעמודה הראשונה מכילה שמות תפקידים.")
         }
         break
 
       case "csv":
         try {
           text = await extractTextFromCSV(file)
-          warnings.push("CSV file imported as role list. Ensure the first column has role names and the second has replica counts.")
+          warnings.push("קובץ CSV יובא כרשימת תפקידים. ודא שהעמודה הראשונה מכילה שמות תפקידים והשנייה — מספר רפליקות.")
         } catch (csvError) {
           console.error("CSV extraction error:", csvError)
-          throw new Error("Failed to read CSV file.")
+          throw new Error("לא ניתן לקרוא את קובץ ה-CSV.")
         }
         break
         
       default:
-        throw new Error(`Unsupported file format: .${extension}`)
+        throw new Error(`פורמט קובץ לא נתמך: .${extension ?? "unknown"}`)
     }
     
     // Basic validation
     if (!text || text.trim().length === 0) {
-      throw new Error("File appears to be empty")
+      throw new Error("הקובץ ריק או לא ניתן לחלץ ממנו טקסט.")
     }
-    
+
     // Check for common issues
     const lines = text.split("\n")
     const uppercaseLines = lines.filter(l => l.trim() && l.trim() === l.trim().toUpperCase())
-    
+
     if (uppercaseLines.length < 5) {
-      warnings.push("Very few uppercase lines detected. Make sure this is a properly formatted screenplay.")
+      warnings.push("זוהו מעט מאוד שורות באותיות גדולות. ודא שהקובץ בפורמט תסריט תקני.")
     }
     
     return { text, warnings }
@@ -435,6 +452,95 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
   } catch (error) {
     throw error
   }
+}
+
+/**
+ * Normalize extracted text before parsing.
+ *
+ * Runs after extraction and before the regex parser to improve character
+ * detection across common formatting variations:
+ *  1. Remove repeated header/footer lines (page numbers, show title, etc.)
+ *  2. Merge broken line-wraps (short lines that continue on the next line)
+ *  3. Normalize whitespace: collapse multiple spaces/tabs to single space
+ *  4. Normalize speaker-colon format: "NAME: dialogue" → "NAME\n    dialogue"
+ */
+export function normalizeText(text: string): string {
+  const rawLines = text.split(/\r?\n/)
+
+  // ── Step 1: Remove repeated header/footer lines ───────────────────────────
+  // Count how many times each trimmed non-empty line appears.
+  // Lines that repeat more than once across every N lines are likely
+  // page headers or footers (show title, page number, etc.).
+  const lineFreq = new Map<string, number>()
+  for (const line of rawLines) {
+    const t = line.trim()
+    if (t.length === 0) continue
+    lineFreq.set(t, (lineFreq.get(t) ?? 0) + 1)
+  }
+
+  // Threshold: a line that appears on ≥10% of all non-empty lines is a header/footer.
+  const nonEmpty = Array.from(lineFreq.values()).reduce((s, v) => s + v, 0)
+  const repeatThreshold = Math.max(3, Math.floor(nonEmpty * 0.10))
+
+  const filteredLines = rawLines.filter((line) => {
+    const t = line.trim()
+    if (t.length === 0) return true // keep empty lines (they act as separators)
+    const freq = lineFreq.get(t) ?? 1
+    if (freq >= repeatThreshold) return false
+    // Also drop pure page-number lines: optional digits surrounded by whitespace
+    if (/^\d{1,4}\.?$/.test(t)) return false
+    return true
+  })
+
+  // ── Step 2: Normalize whitespace per line ─────────────────────────────────
+  // Collapse runs of spaces/tabs to a single space while keeping leading
+  // whitespace intact (leading spaces signal "centered" screenplay elements).
+  const wsNormalized = filteredLines.map((line) => {
+    const leadMatch = line.match(/^(\s*)/)
+    const leading = leadMatch ? leadMatch[1] : ""
+    const body = line.trimStart().replace(/[ \t]{2,}/g, " ")
+    return leading + body
+  })
+
+  // ── Step 3: Merge broken line-wraps ──────────────────────────────────────
+  // Dialogue lines in PDF-extracted text are sometimes broken mid-sentence.
+  // Heuristic: if a line is short (< 60 chars), ends without punctuation,
+  // and the NEXT line also starts with a lowercase letter, merge them.
+  const merged: string[] = []
+  for (let i = 0; i < wsNormalized.length; i++) {
+    const line = wsNormalized[i]
+    const next = wsNormalized[i + 1]
+
+    if (
+      next !== undefined &&
+      line.trim().length > 0 &&
+      line.trim().length < 60 &&
+      !/[.!?…:,\-—]$/.test(line.trim()) &&
+      /^[a-z\u05D0-\u05EA]/.test(next.trim()) // lowercase Latin or Hebrew letter
+    ) {
+      merged.push(line.trimEnd() + " " + next.trimStart())
+      i++ // skip next line
+    } else {
+      merged.push(line)
+    }
+  }
+
+  // ── Step 4: Normalize speaker-colon format ────────────────────────────────
+  // Some scripts use "CHARACTER: dialogue text" on a single line.
+  // Expand these to two lines so the regex parser sees them separately.
+  const speakerExpanded = merged.map((line) => {
+    const trimmed = line.trim()
+    // Match lines starting with an all-caps name followed by a colon and text
+    const colonMatch = trimmed.match(/^([A-Z][A-Z0-9 \-'.]{1,40}):\s+(.+)$/)
+    if (colonMatch) {
+      const leading = line.length - line.trimStart().length
+      const indent = " ".repeat(leading)
+      return `${indent}${colonMatch[1]}\n${indent}    ${colonMatch[2]}`
+    }
+    return line
+  })
+
+  return speakerExpanded.join("\n")
 }
 
 /**
@@ -447,7 +553,8 @@ export function getFileInfo(file: File): {
   supported: boolean
 } {
   const extension = file.name.split(".").pop()?.toLowerCase() || ""
-  const supported = ["txt", "pdf", "docx", "doc", "xlsx", "xls", "csv"].includes(extension)
+  // .doc (old binary Word) is explicitly blocked — users must convert to .docx
+  const supported = ["txt", "pdf", "docx", "xlsx", "xls", "csv"].includes(extension)
   
   let size: string
   if (file.size < 1024) {

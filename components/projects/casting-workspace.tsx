@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -35,7 +34,6 @@ import {
   Plus,
   UserPlus,
   X,
-  RefreshCw,
   Trash2,
   AlertTriangle,
   Users,
@@ -140,7 +138,7 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
   const { toast } = useToast()
   const [showSearch, setShowSearch] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
-  const [isUpdating, setIsUpdating] = useState(false)
+  const [updatingCastingId, setUpdatingCastingId] = useState<string | null>(null)
 
   const handleAssignActor = async (actor: { id: string; name: string; image_url?: string }) => {
     setIsAssigning(true)
@@ -164,35 +162,35 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
     }
   }
 
-  const handleUnassign = async () => {
-    setIsUpdating(true)
+  const handleUnassign = async (actorId: string) => {
+    setUpdatingCastingId(actorId)
     try {
-      const result = await unassignActorFromRole(role.id)
+      const result = await unassignActorFromRole(role.id, actorId)
       if (result.success) {
         toast({ title: `${role.role_name} - שיוך בוטל` })
         onUpdate()
       }
     } finally {
-      setIsUpdating(false)
+      setUpdatingCastingId(null)
     }
   }
 
-  const handleStatusChange = async (newStatus: CastingStatus) => {
-    setIsUpdating(true)
+  const handleStatusChange = async (castingId: string, newStatus: CastingStatus) => {
+    setUpdatingCastingId(castingId)
     try {
-      const result = await updateCastingStatus(role.id, newStatus)
+      const result = await updateCastingStatus(castingId, newStatus)
       if (result.success) onUpdate()
     } finally {
-      setIsUpdating(false)
+      setUpdatingCastingId(null)
     }
   }
 
-  const isCasted = !!role.casting
+  const isCasted = role.castings.length > 0
 
   return (
     <div
       className={`
-        group flex items-center gap-3 px-4 py-2.5 
+        group flex items-center gap-3 px-4 py-2.5
         border-b border-border/50 last:border-b-0
         transition-colors
         ${isSelected ? "bg-primary/8 ring-1 ring-inset ring-primary/20" : "hover:bg-muted/40"}
@@ -214,11 +212,6 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
         >
           {role.role_name}
         </button>
-        {role.source === "script" && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 flex-shrink-0">
-            תסריט
-          </Badge>
-        )}
       </div>
 
       {/* Replicas count */}
@@ -230,48 +223,8 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
       <ConflictTooltip roleId={role.id} roleConflicts={roleConflicts} roleLookup={roleLookup} />
 
       {/* Casting section */}
-      <div className="flex-1 flex items-center justify-end gap-2">
-        {role.casting ? (
-          <>
-            <div className="flex items-center gap-2 px-2 py-1 bg-muted/60 rounded-md">
-              <Avatar className="h-6 w-6">
-                <AvatarImage src={role.casting.actor?.image_url} alt={role.casting.actor?.full_name} />
-                <AvatarFallback className="text-[10px]">
-                  {(role.casting.actor?.full_name || "?").charAt(0)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium max-w-[140px] truncate">
-                {role.casting.actor?.full_name || "שחקן"}
-              </span>
-            </div>
-
-            <Select
-              value={role.casting.status}
-              onValueChange={(v) => handleStatusChange(v as CastingStatus)}
-              disabled={isUpdating}
-            >
-              <SelectTrigger className={`w-[100px] h-7 text-xs ${CASTING_STATUS_COLORS[role.casting.status] || ""}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CASTING_STATUS_LIST.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSearch(true)} disabled={isUpdating} title="החלף שחקן">
-                <RefreshCw className="h-3.5 w-3.5" />
-              </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={handleUnassign} disabled={isUpdating} title="בטל שיבוץ">
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </>
-        ) : showSearch ? (
+      <div className="flex-1 flex items-center justify-end gap-2 flex-wrap">
+        {showSearch ? (
           <div className="flex items-center gap-2 w-[280px]">
             <ActorSearchAutocomplete
               onSelect={handleAssignActor}
@@ -284,7 +237,68 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
             </Button>
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground/60">לא משובץ</span>
+          <>
+            {/* Actor chips — one per assigned actor */}
+            {role.castings.map((casting) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const actor = (casting as any).actor
+              const isThisUpdating = updatingCastingId === casting.id || updatingCastingId === casting.actor_id
+              return (
+                <div key={casting.id} className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/60 rounded-md">
+                    <Avatar className="h-5 w-5">
+                      <AvatarImage src={actor?.image_url} alt={actor?.full_name} />
+                      <AvatarFallback className="text-[10px]">
+                        {(actor?.full_name || "?").charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-medium max-w-[120px] truncate">
+                      {actor?.full_name || "שחקן"}
+                    </span>
+                  </div>
+
+                  <Select
+                    value={casting.status}
+                    onValueChange={(v) => handleStatusChange(casting.id, v as CastingStatus)}
+                    disabled={isThisUpdating}
+                  >
+                    <SelectTrigger className={`w-[90px] h-7 text-xs ${CASTING_STATUS_COLORS[casting.status] || ""}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CASTING_STATUS_LIST.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleUnassign(casting.actor_id)}
+                    disabled={isThisUpdating}
+                    title="בטל שיבוץ"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )
+            })}
+
+            {/* "+" button to add another actor */}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowSearch(true)}
+              title={isCasted ? "הוסף שחקן נוסף" : "שבץ שחקן"}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </>
         )}
       </div>
     </div>
@@ -295,9 +309,11 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
 
 interface CastingWorkspaceProps {
   projectId: string
+  /** Called after any assign/unassign/status change so the parent can refresh header counts */
+  onCastingChange?: () => void
 }
 
-export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
+export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspaceProps) {
   const { toast } = useToast()
   const BULK_CONCURRENCY = 8
   const [roles, setRoles] = useState<ProjectRoleWithCasting[]>([])
@@ -331,13 +347,15 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
+      // Notify parent to refresh header actor count
+      onCastingChange?.()
     } catch (err) {
       setError("שגיאה בטעינת תפקידים")
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, onCastingChange])
 
   useEffect(() => {
     loadRoles()
@@ -393,13 +411,14 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
       const q = search.toLowerCase()
       result = result.filter((r) => {
         const matchesName = r.role_name.toLowerCase().includes(q)
-        const matchesActor = r.casting?.actor?.full_name?.toLowerCase().includes(q)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const matchesActor = r.castings.some((c) => (c as any).actor?.full_name?.toLowerCase().includes(q))
         return matchesName || matchesActor
       })
     }
 
     if (showOnlyUnassigned) {
-      result = result.filter((r) => !r.casting)
+      result = result.filter((r) => r.castings.length === 0)
     }
 
     if (sortByReplicas) {
@@ -559,7 +578,7 @@ export function CastingWorkspace({ projectId }: CastingWorkspaceProps) {
     for (const role of flatRoles) {
       totalRoles++
       totalReplicas += role.replicas_count
-      if (role.casting) assignedRoles++
+      if (role.castings.length > 0) assignedRoles++
     }
 
     const pct = totalRoles > 0 ? Math.round((assignedRoles / totalRoles) * 100) : 0

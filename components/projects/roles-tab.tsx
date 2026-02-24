@@ -10,9 +10,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2, Plus } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2, Plus, Trash2 } from "lucide-react"
 import { RoleCastingCard } from "./role-casting-card"
 import { getProjectRolesWithCasting, createManualRole } from "@/lib/actions/casting-actions"
+import { deleteRoles } from "@/lib/actions/script-actions"
 import type { ProjectRoleWithCasting, RoleConflict } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
@@ -43,6 +54,9 @@ export function RolesTab({ projectId }: RolesTabProps) {
     showOnlyUnassigned: false,
     sortByReplicas: null,
   })
+  const [selectedRoleIds, setSelectedRoleIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
   const loadRoles = async () => {
     try {
@@ -51,7 +65,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
-      
+
       // Expand all parent roles by default
       const parentIds = response.roles
         .filter((r) => r.children && r.children.length > 0)
@@ -71,7 +85,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
     try {
       setIsCreatingRole(true)
       const result = await createManualRole(projectId, newRoleName.trim(), undefined, newRoleReplicas)
-      
+
       if (result.success) {
         toast({
           title: "התפקיד נוצר בהצלחה",
@@ -90,6 +104,47 @@ export function RolesTab({ projectId }: RolesTabProps) {
       }
     } finally {
       setIsCreatingRole(false)
+    }
+  }
+
+  const handleToggleSelectRole = (id: string) => {
+    setSelectedRoleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedRoleIds(new Set())
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedRoleIds.size === 0) return
+    setIsBulkDeleting(true)
+    try {
+      const result = await deleteRoles(projectId, [...selectedRoleIds])
+      if (result.success) {
+        toast({
+          title: "התפקידים נמחקו",
+          description: `${selectedRoleIds.size} תפקידים נמחקו בהצלחה`,
+        })
+        setSelectedRoleIds(new Set())
+        loadRoles()
+      } else {
+        toast({
+          title: "שגיאה",
+          description: result.error || "שגיאה במחיקת התפקידים",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsBulkDeleting(false)
+      setShowBulkDeleteDialog(false)
     }
   }
 
@@ -128,8 +183,8 @@ export function RolesTab({ projectId }: RolesTabProps) {
     // Unassigned filter
     if (filters.showOnlyUnassigned) {
       result = result.filter((role) => {
-        const parentUnassigned = !role.casting
-        const hasUnassignedChild = role.children?.some((child) => !child.casting)
+        const parentUnassigned = role.castings.length === 0
+        const hasUnassignedChild = role.children?.some((child) => child.castings.length === 0)
         return parentUnassigned || hasUnassignedChild
       })
     }
@@ -145,6 +200,17 @@ export function RolesTab({ projectId }: RolesTabProps) {
     return result
   }, [roles, filters])
 
+  const handleSelectAll = () => {
+    const allVisibleIds = filteredRoles.flatMap((role) => {
+      const ids = [role.id]
+      if (role.children) {
+        ids.push(...role.children.map((child) => child.id))
+      }
+      return ids
+    })
+    setSelectedRoleIds(new Set(allVisibleIds))
+  }
+
   // Stats
   const stats = useMemo(() => {
     let totalRoles = 0
@@ -155,7 +221,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
     const countRole = (role: ProjectRoleWithCasting) => {
       totalRoles++
       totalReplicas += role.replicas_count
-      if (role.casting) {
+      if (role.castings.length > 0) {
         assignedRoles++
         assignedReplicas += role.replicas_count
       }
@@ -308,6 +374,88 @@ export function RolesTab({ projectId }: RolesTabProps) {
         </Dialog>
       </div>
 
+      {/* Select All row + Bulk action toolbar */}
+      {filteredRoles.length > 0 && (
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="select-all-roles"
+              checked={
+                selectedRoleIds.size > 0 &&
+                filteredRoles.every((role) => {
+                  const parentSelected = selectedRoleIds.has(role.id)
+                  const childrenSelected =
+                    !role.children ||
+                    role.children.every((child) => selectedRoleIds.has(child.id))
+                  return parentSelected && childrenSelected
+                })
+              }
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  handleSelectAll()
+                } else {
+                  handleDeselectAll()
+                }
+              }}
+            />
+            <Label htmlFor="select-all-roles" className="text-sm cursor-pointer">
+              בחר הכל
+              {selectedRoleIds.size > 0 && (
+                <span className="mr-1 text-muted-foreground">({selectedRoleIds.size} נבחרו)</span>
+              )}
+            </Label>
+          </div>
+
+          {selectedRoleIds.size > 0 && (
+            <>
+              <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                >
+                  <Trash2 className="h-4 w-4 ml-2" />
+                  מחק נבחרים ({selectedRoleIds.size})
+                </Button>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>מחיקת תפקידים נבחרים</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      האם למחוק {selectedRoleIds.size} תפקידים? פעולה זו אינה הפיכה.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isBulkDeleting}>ביטול</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleBulkDelete}
+                      disabled={isBulkDeleting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isBulkDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                          מוחק...
+                        </>
+                      ) : (
+                        "מחק"
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeselectAll}
+              >
+                בטל בחירה
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Roles List */}
       {filteredRoles.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
@@ -342,11 +490,17 @@ export function RolesTab({ projectId }: RolesTabProps) {
                     </CollapsibleTrigger>
 
                     <CollapsibleContent className="space-y-2">
-                      {/* Parent role card if it has its own casting */}
-                      {role.casting && (
-                        <RoleCastingCard role={role} conflicts={conflicts} onUpdate={loadRoles} />
+                      {/* Parent role card if it has its own castings */}
+                      {role.castings.length > 0 && (
+                        <RoleCastingCard
+                          role={role}
+                          conflicts={conflicts}
+                          onUpdate={loadRoles}
+                          isSelected={selectedRoleIds.has(role.id)}
+                          onToggleSelect={handleToggleSelectRole}
+                        />
                       )}
-                      
+
                       {/* Child roles */}
                       {role.children?.map((child) => (
                         <RoleCastingCard
@@ -355,6 +509,8 @@ export function RolesTab({ projectId }: RolesTabProps) {
                           conflicts={conflicts}
                           isChild
                           onUpdate={loadRoles}
+                          isSelected={selectedRoleIds.has(child.id)}
+                          onToggleSelect={handleToggleSelectRole}
                         />
                       ))}
                     </CollapsibleContent>
@@ -365,7 +521,14 @@ export function RolesTab({ projectId }: RolesTabProps) {
 
             // Regular role without children
             return (
-              <RoleCastingCard key={role.id} role={role} conflicts={conflicts} onUpdate={loadRoles} />
+              <RoleCastingCard
+                key={role.id}
+                role={role}
+                conflicts={conflicts}
+                onUpdate={loadRoles}
+                isSelected={selectedRoleIds.has(role.id)}
+                onToggleSelect={handleToggleSelectRole}
+              />
             )
           })}
         </div>

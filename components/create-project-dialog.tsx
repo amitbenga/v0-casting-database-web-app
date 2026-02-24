@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { DateInput } from "@/components/date-input"
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -111,15 +112,12 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
             <div className="space-y-2 col-span-2">
               <Label htmlFor="project_date">תאריך הפרויקט</Label>
-              <Input
+              <DateInput
                 id="project_date"
-                type="date"
                 value={formData.project_date}
-                onChange={(e) => setFormData({ ...formData, project_date: e.target.value })}
+                onChange={(val) => setFormData({ ...formData, project_date: val })}
                 min={new Date().toLocaleDateString("en-CA")}
                 max="2030-12-31"
-                className="text-right"
-                dir="rtl"
               />
             </div>
           </div>
