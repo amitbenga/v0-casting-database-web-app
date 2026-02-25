@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
   TableBody,
@@ -15,9 +14,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Search, Loader2, Users, LayoutGrid, List, ArrowUpDown, X } from "lucide-react"
-import { getProjectActorsFromCastings, unassignActorFromRole } from "@/lib/actions/casting-actions"
-import { useToast } from "@/hooks/use-toast"
+import { Search, Loader2, Users, LayoutGrid, List, ArrowUpDown } from "lucide-react"
+import { getProjectActorsFromCastings } from "@/lib/actions/casting-actions"
+import type { CastingStatus, CASTING_STATUS_COLORS } from "@/lib/types"
 
 type ActorWithRoles = Awaited<ReturnType<typeof getProjectActorsFromCastings>>[number]
 
@@ -32,30 +31,27 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function ActorsTab({ projectId }: ActorsTabProps) {
-  const { toast } = useToast()
   const [castings, setCastings] = useState<ActorWithRoles[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
   const [sortByReplicas, setSortByReplicas] = useState<"asc" | "desc" | null>(null)
-  const [selectedActorIds, setSelectedActorIds] = useState<Set<string>>(new Set())
-  const [unassigningKey, setUnassigningKey] = useState<string | null>(null)
-
-  const loadCastings = useCallback(async () => {
-    try {
-      setLoading(true)
-      const data = await getProjectActorsFromCastings(projectId)
-      setCastings(data)
-    } catch (error) {
-      console.error("Error loading castings:", error)
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId])
 
   useEffect(() => {
+    async function loadCastings() {
+      try {
+        setLoading(true)
+        const data = await getProjectActorsFromCastings(projectId)
+        setCastings(data)
+      } catch (error) {
+        console.error("Error loading castings:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     loadCastings()
-  }, [loadCastings])
+  }, [projectId])
 
   const filteredCastings = castings
     .filter((c) => {
@@ -80,68 +76,6 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
     (sum: number, c) => sum + c.roles.reduce((s: number, r: any) => s + (r.replicas_planned || 0), 0),
     0
   )
-
-  // Selection handlers
-  const handleToggleSelect = (actorId: string) => {
-    setSelectedActorIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(actorId)) {
-        next.delete(actorId)
-      } else {
-        next.add(actorId)
-      }
-      return next
-    })
-  }
-
-  const isAllSelected =
-    filteredCastings.length > 0 &&
-    filteredCastings.every((c) => selectedActorIds.has(c.actor.id))
-
-  const handleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedActorIds(new Set())
-    } else {
-      setSelectedActorIds(new Set(filteredCastings.map((c) => c.actor.id)))
-    }
-  }
-
-  const handleUnassignRole = async (roleId: string, actorId: string) => {
-    const key = `${roleId}:${actorId}`
-    setUnassigningKey(key)
-    try {
-      const result = await unassignActorFromRole(roleId, actorId)
-      if (result.success) {
-        toast({ title: "השיבוץ בוטל" })
-        // Remove the role from local state optimistically
-        setCastings((prev) =>
-          prev
-            .map((c) => {
-              if (c.actor.id !== actorId) return c
-              const newRoles = c.roles.filter((r: any) => r.role_id !== roleId)
-              return { ...c, roles: newRoles }
-            })
-            .filter((c) => c.roles.length > 0)
-        )
-        // Remove from selection if actor has no more roles
-        setCastings((prev) => {
-          const actor = prev.find((c) => c.actor.id === actorId)
-          if (!actor || actor.roles.length === 0) {
-            setSelectedActorIds((s) => {
-              const next = new Set(s)
-              next.delete(actorId)
-              return next
-            })
-          }
-          return prev
-        })
-      } else {
-        toast({ title: "שגיאה", description: result.error, variant: "destructive" })
-      }
-    } finally {
-      setUnassigningKey(null)
-    }
-  }
 
   if (loading) {
     return (
@@ -234,32 +168,12 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
         </div>
       </div>
 
-      {/* Select All bar */}
-      {filteredCastings.length > 0 && (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="select-all-actors"
-              checked={isAllSelected}
-              onCheckedChange={handleSelectAll}
-            />
-            <label htmlFor="select-all-actors" className="text-sm cursor-pointer select-none">
-              בחר הכל
-              {selectedActorIds.size > 0 && (
-                <span className="mr-1 text-muted-foreground">({selectedActorIds.size} נבחרו)</span>
-              )}
-            </label>
-          </div>
-        </div>
-      )}
-
       {/* Content */}
       {viewMode === "table" ? (
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10" />
                 <TableHead className="text-right">שחקן</TableHead>
                 <TableHead className="text-right">תפקיד</TableHead>
                 <TableHead className="text-right">רפליקות לתפקיד</TableHead>
@@ -272,16 +186,8 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                   (sum: number, r: any) => sum + (r.replicas_planned || 0),
                   0
                 )
-                const isSelected = selectedActorIds.has(casting.actor.id)
                 return (
-                  <TableRow key={casting.actor.id} className={isSelected ? "bg-primary/5" : ""}>
-                    <TableCell>
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => handleToggleSelect(casting.actor.id)}
-                        aria-label={`בחר ${casting.actor.name}`}
-                      />
-                    </TableCell>
+                  <TableRow key={casting.actor.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
@@ -293,30 +199,15 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
-                        {casting.roles.map((role: any) => {
-                          const key = `${role.role_id}:${casting.actor.id}`
-                          return (
-                            <Badge
-                              key={role.role_id}
-                              variant="outline"
-                              className={`${STATUS_COLORS[role.status]} flex items-center gap-1 pr-1`}
-                            >
-                              {role.role_name}
-                              <button
-                                onClick={() => handleUnassignRole(role.role_id, casting.actor.id)}
-                                disabled={unassigningKey === key}
-                                className="hover:text-destructive transition-colors ml-0.5"
-                                title="הסר מתפקיד זה"
-                              >
-                                {unassigningKey === key ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <X className="h-3 w-3" />
-                                )}
-                              </button>
-                            </Badge>
-                          )
-                        })}
+                        {casting.roles.map((role: any) => (
+                          <Badge
+                            key={role.role_id}
+                            variant="outline"
+                            className={STATUS_COLORS[role.status]}
+                          >
+                            {role.role_name}
+                          </Badge>
+                        ))}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -339,65 +230,41 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCastings.map((casting) => {
-            const isSelected = selectedActorIds.has(casting.actor.id)
-            return (
-              <Card key={casting.actor.id} className={`p-4 ${isSelected ? "ring-2 ring-primary" : ""}`}>
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => handleToggleSelect(casting.actor.id)}
-                    aria-label={`בחר ${casting.actor.name}`}
-                    className="mt-1"
-                  />
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={casting.actor.image_url} alt={casting.actor.name} />
-                    <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{casting.actor.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {casting.roles.length} תפקידים |{" "}
-                      {casting.roles
-                        .reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
-                        .toLocaleString()}{" "}
-                      רפליקות
-                    </p>
+          {filteredCastings.map((casting) => (
+            <Card key={casting.actor.id} className="p-4">
+              <div className="flex items-start gap-3">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={casting.actor.image_url} alt={casting.actor.name} />
+                  <AvatarFallback>{casting.actor.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{casting.actor.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {casting.roles.length} תפקידים |{" "}
+                    {casting.roles
+                      .reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
+                      .toLocaleString()}{" "}
+                    רפליקות
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {casting.roles.map((role: any) => (
+                  <div key={role.role_id} className="flex items-center justify-between">
+                    <Badge
+                      variant="outline"
+                      className={STATUS_COLORS[role.status]}
+                    >
+                      {role.role_name}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {(role.replicas_planned || 0).toLocaleString()} רפליקות
+                    </span>
                   </div>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {casting.roles.map((role: any) => {
-                    const key = `${role.role_id}:${casting.actor.id}`
-                    return (
-                      <div key={role.role_id} className="flex items-center justify-between">
-                        <Badge
-                          variant="outline"
-                          className={`${STATUS_COLORS[role.status]} flex items-center gap-1 pr-1`}
-                        >
-                          {role.role_name}
-                          <button
-                            onClick={() => handleUnassignRole(role.role_id, casting.actor.id)}
-                            disabled={unassigningKey === key}
-                            className="hover:text-destructive transition-colors ml-0.5"
-                            title="הסר מתפקיד זה"
-                          >
-                            {unassigningKey === key ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <X className="h-3 w-3" />
-                            )}
-                          </button>
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {(role.replicas_planned || 0).toLocaleString()} רפליקות
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </Card>
-            )
-          })}
+                ))}
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
