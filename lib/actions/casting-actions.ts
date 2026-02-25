@@ -213,7 +213,7 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
         status: "מלוהק",
         updated_at: new Date().toISOString()
       }, {
-        onConflict: "role_id,actor_id"
+        onConflict: "role_id"
       })
 
     if (error) throw error
@@ -227,10 +227,10 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
 }
 
 /**
- * Unassigns a specific actor from a role.
+ * Unassigns the actor from a role.
  * If the casting was "מלוהק", also clears script_lines assignments for that role.
  */
-export async function unassignActorFromRole(roleId: string, actorId: string): Promise<CastingActionResult> {
+export async function unassignActorFromRole(roleId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
@@ -240,30 +240,28 @@ export async function unassignActorFromRole(roleId: string, actorId: string): Pr
       .eq("id", roleId)
       .single()
 
-    // Check if this casting was "מלוהק" before deleting
+    // Fetch casting to check if it was "מלוהק" and get actor_id before deleting
     const { data: casting } = await supabase
       .from("role_castings")
-      .select("status")
+      .select("status, actor_id")
       .eq("role_id", roleId)
-      .eq("actor_id", actorId)
       .maybeSingle()
 
     const { error } = await supabase
       .from("role_castings")
       .delete()
       .eq("role_id", roleId)
-      .eq("actor_id", actorId)
 
     if (error) throw error
 
     // If actor was "מלוהק", clear their script_lines assignments
-    if (role && casting?.status === "מלוהק") {
+    if (role && casting?.status === "מלוהק" && casting.actor_id) {
       await supabase
         .from("script_lines")
         .update({ actor_id: null })
         .eq("project_id", role.project_id)
         .eq("role_name", role.role_name)
-        .eq("actor_id", actorId)
+        .eq("actor_id", casting.actor_id)
     }
 
     if (role) revalidatePath(`/projects/${role.project_id}`)
@@ -275,28 +273,29 @@ export async function unassignActorFromRole(roleId: string, actorId: string): Pr
 }
 
 /**
- * Updates casting status by casting id.
+ * Updates casting status for a role.
  * Side-effect: when status becomes "מלוהק", auto-assigns all script_lines for
  * that role to this actor. When status moves away from "מלוהק", clears those
  * assignments. Enforces max one "מלוהק" actor per role.
  */
-export async function updateCastingStatus(castingId: string, status: CastingStatus): Promise<CastingActionResult> {
+export async function updateCastingStatus(roleId: string, status: CastingStatus): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    // Fetch full casting context
+    // Fetch current casting for this role
     const { data: casting, error: castingFetchErr } = await supabase
       .from("role_castings")
-      .select("role_id, actor_id, status")
-      .eq("id", castingId)
-      .single()
+      .select("id, actor_id, status")
+      .eq("role_id", roleId)
+      .maybeSingle()
 
-    if (castingFetchErr || !casting) throw new Error("לא נמצא שיבוץ")
+    if (castingFetchErr) throw castingFetchErr
+    if (!casting) throw new Error("לא נמצא שיבוץ")
 
     const { data: role, error: roleFetchErr } = await supabase
       .from("project_roles")
       .select("project_id, role_name")
-      .eq("id", casting.role_id)
+      .eq("id", roleId)
       .single()
 
     if (roleFetchErr || !role) throw new Error("לא נמצא תפקיד")
@@ -306,9 +305,9 @@ export async function updateCastingStatus(castingId: string, status: CastingStat
       const { data: existingCasted } = await supabase
         .from("role_castings")
         .select("id, actor_id")
-        .eq("role_id", casting.role_id)
+        .eq("role_id", roleId)
         .eq("status", "מלוהק")
-        .neq("id", castingId)
+        .neq("id", casting.id)
 
       if (existingCasted && existingCasted.length > 0) {
         return {
@@ -322,19 +321,19 @@ export async function updateCastingStatus(castingId: string, status: CastingStat
     const { error } = await supabase
       .from("role_castings")
       .update({ status, updated_at: new Date().toISOString() })
-      .eq("id", castingId)
+      .eq("role_id", roleId)
 
     if (error) throw error
 
     // Sync script_lines assignments
-    if (status === "מלוהק") {
+    if (status === "מלוהק" && casting.actor_id) {
       // Assign all script_lines for this role to this actor
       await supabase
         .from("script_lines")
         .update({ actor_id: casting.actor_id })
         .eq("project_id", role.project_id)
         .eq("role_name", role.role_name)
-    } else if (casting.status === "מלוהק") {
+    } else if (casting.status === "מלוהק" && casting.actor_id) {
       // Moving away from "מלוהק" — clear this actor's assignments for the role
       await supabase
         .from("script_lines")
@@ -353,39 +352,28 @@ export async function updateCastingStatus(castingId: string, status: CastingStat
 }
 
 /**
- * Updates casting details by casting id.
+ * Updates casting details.
  */
 export async function updateCastingDetails(
-  castingId: string,
+  roleId: string, 
   details: { notes?: string, replicas_planned?: number, replicas_final?: number }
 ): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    const { data: casting } = await supabase
-      .from("role_castings")
-      .select("role_id")
-      .eq("id", castingId)
-      .single()
-
+    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    
     const { error } = await supabase
       .from("role_castings")
-      .update({
+      .update({ 
         ...details,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString() 
       })
-      .eq("id", castingId)
+      .eq("role_id", roleId)
 
     if (error) throw error
 
-    if (casting?.role_id) {
-      const { data: role } = await supabase
-        .from("project_roles")
-        .select("project_id")
-        .eq("id", casting.role_id)
-        .single()
-      if (role) revalidatePath(`/projects/${role.project_id}`)
-    }
+    if (role) revalidatePath(`/projects/${role.project_id}`)
     return { success: true }
   } catch (error: any) {
     console.error("Error updating details:", error)
@@ -470,22 +458,18 @@ export async function getProjectRolesWithCasting(
   const supabase = await createClient()
 
   try {
-    // Get roles with all castings
+    // Get roles with casting
     const { data: roles, error: rolesError } = await supabase
       .from("project_roles")
       .select(`
         id, project_id, role_name, role_name_normalized, parent_role_id, description, replicas_count, replicas_needed, source, created_at,
         role_castings (
           id,
-          project_id,
-          role_id,
           actor_id,
           status,
           notes,
           replicas_planned,
           replicas_final,
-          created_at,
-          updated_at,
           actors (
             id,
             full_name,
@@ -511,17 +495,19 @@ export async function getProjectRolesWithCasting(
     // Map role names for conflict visualization
     const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]));
 
-    // Transform roles: return all castings per role
+    // Transform roles to handle children and legacy casting naming
     const transformedRoles = roles.map(role => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const castings = (role.role_castings || []).map((rc: any) => ({
-        ...rc,
-        actor: rc.actors,
-      }))
-
+      const casting = role.role_castings && role.role_castings.length > 0 ? {
+        ...role.role_castings[0],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        actor: role.role_castings[0].actors as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        name: (role.role_castings[0].actors as any)?.full_name // for v0 UI
+      } : null;
+      
       return {
         ...role,
-        castings,
+        casting,
         // Source of truth: replicas_count is primary, fall back to replicas_needed for legacy data
         replicas_count: role.replicas_count ?? role.replicas_needed ?? 0
       }

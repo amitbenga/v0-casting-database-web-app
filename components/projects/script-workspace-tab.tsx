@@ -558,8 +558,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       XLSX.utils.book_append_sheet(wb, ws, "סביבת עבודה")
       wb.Workbook = wb.Workbook ?? { Views: [], Sheets: [] }
       wb.Workbook.Sheets = wb.Workbook.Sheets ?? []
-      wb.Workbook.Sheets[0] = wb.Workbook.Sheets[0] ?? {}
-      wb.Workbook.Sheets[0].RTL = true
+      wb.Workbook.Sheets[0] = wb.Workbook.Sheets[0] ?? {};
+      (wb.Workbook.Sheets[0] as Record<string, unknown>).RTL = true
 
       XLSX.writeFile(wb, `workspace-${projectId}.xlsx`)
       toast({ title: "ייצוא הצליח", description: `${lines.length.toLocaleString()} שורות יוצאו` })

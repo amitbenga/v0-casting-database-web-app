@@ -27,7 +27,7 @@ export async function extractTextFromPDF(file: File): Promise<string> {
   }
 
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({
+  const pdf = await pdfjsLib.getDocument({ 
     data: arrayBuffer,
     useWorkerFetch: false,
     isEvalSupported: false,
@@ -99,15 +99,18 @@ export async function extractTextFromPDF(file: File): Promise<string> {
  */
 export async function extractTextFromDOCX(file: File): Promise<string> {
   // DOCX is a ZIP file containing XML
-  let JSZip: typeof import("jszip").default
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let JSZip: any
   try {
-    JSZip = (await import("jszip")).default
+    const mod = await import("jszip")
+    JSZip = mod.default ?? mod
   } catch {
     throw new Error("JSZip library not available for DOCX extraction")
   }
 
   const arrayBuffer = await file.arrayBuffer()
-  let zip: import("jszip")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let zip: any
   try {
     zip = await JSZip.loadAsync(arrayBuffer)
   } catch {
@@ -406,7 +409,7 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         break
         
       case "doc":
-        // Block old .doc format with a clear Hebrew error message (3B)
+        // Block old .doc format with a clear Hebrew error message
         throw new Error("פורמט DOC ישן אינו נתמך. אנא המר את הקובץ לפורמט DOCX ונסה שוב.")
 
       case "xlsx":
@@ -431,7 +434,7 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
         break
         
       default:
-        throw new Error(`פורמט קובץ לא נתמך: .${extension ?? "unknown"}`)
+        throw new Error(`Unsupported file format: .${extension}`)
     }
     
     // Basic validation
@@ -478,19 +481,33 @@ export function normalizeText(text: string): string {
     lineFreq.set(t, (lineFreq.get(t) ?? 0) + 1)
   }
 
-  // Threshold: a line that appears on ≥10% of all non-empty lines is a header/footer.
-  const nonEmpty = Array.from(lineFreq.values()).reduce((s, v) => s + v, 0)
-  const repeatThreshold = Math.max(3, Math.floor(nonEmpty * 0.10))
+  const nonEmptyLineCount = Array.from(lineFreq.values()).reduce((s, v) => s + v, 0)
 
-  const filteredLines = rawLines.filter((line) => {
-    const t = line.trim()
-    if (t.length === 0) return true // keep empty lines (they act as separators)
-    const freq = lineFreq.get(t) ?? 1
-    if (freq >= repeatThreshold) return false
-    // Also drop pure page-number lines: optional digits surrounded by whitespace
-    if (/^\d{1,4}\.?$/.test(t)) return false
-    return true
-  })
+  // Short-script guard: skip frequency-based header/footer removal for scripts
+  // with fewer than 30 non-empty lines — risk of deleting real dialogue is too high.
+  let filteredLines: string[]
+  if (nonEmptyLineCount < 30) {
+    // Only drop pure page-number lines, keep everything else
+    filteredLines = rawLines.filter((line) => {
+      const t = line.trim()
+      if (t.length === 0) return true
+      if (/^\d{1,4}\.?$/.test(t)) return false
+      return true
+    })
+  } else {
+    // Threshold: a line that appears on ≥15% of all non-empty lines is a header/footer.
+    const repeatThreshold = Math.max(5, Math.floor(nonEmptyLineCount * 0.15))
+
+    filteredLines = rawLines.filter((line) => {
+      const t = line.trim()
+      if (t.length === 0) return true // keep empty lines (they act as separators)
+      const freq = lineFreq.get(t) ?? 1
+      if (freq >= repeatThreshold) return false
+      // Also drop pure page-number lines: optional digits surrounded by whitespace
+      if (/^\d{1,4}\.?$/.test(t)) return false
+      return true
+    })
+  }
 
   // ── Step 2: Normalize whitespace per line ─────────────────────────────────
   // Collapse runs of spaces/tabs to a single space while keeping leading
