@@ -35,7 +35,15 @@ import { ScriptPreviewDialog } from "./script-preview-dialog"
 import { parseExcelFile, isExcelFile, autoDetectScriptLineColumns, parseScriptLinesFromExcel, type ExcelParseResult, type ExcelMappedRole, type ScriptLineColumnMapping } from "@/lib/parser/excel-parser"
 import { ExcelPreviewDialog } from "./excel-preview-dialog"
 import { FileSpreadsheet } from "lucide-react"
-import { saveScriptLines } from "@/lib/actions/script-line-actions"
+import { saveScriptLines, getScriptLines } from "@/lib/actions/script-line-actions"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface ProjectScript {
   id: string
@@ -75,6 +83,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
   const [showExcelPreview, setShowExcelPreview] = useState(false)
   const [isApplyingExcel, setIsApplyingExcel] = useState(false)
+  const [confirmReplace, setConfirmReplace] = useState<{ action: () => Promise<void> } | null>(null)
 
   const loadScripts = useCallback(async () => {
     try {
@@ -250,6 +259,24 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           </Badge>
         )
     }
+  }
+
+  /**
+   * Guard: check for existing lines before replaceAll.
+   * If existing lines found, show confirmation dialog; otherwise execute immediately.
+   */
+  const replaceAllWithConfirm = async (doReplace: () => Promise<void>) => {
+    try {
+      const existing = await getScriptLines(projectId)
+      if (existing.lines && existing.lines.length > 0) {
+        // Existing lines → ask user to confirm
+        setConfirmReplace({ action: doReplace })
+        return
+      }
+    } catch {
+      // If check fails, proceed without dialog (safe fallback)
+    }
+    await doReplace()
   }
 
   if (loading) {
@@ -568,7 +595,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               if (excelResult) {
                 try {
                   const sheet = excelResult.sheets[0]
-                  const lineMapping = autoDetectScriptLineColumns(sheet)
+                  const lineMapping = autoDetectScriptLineColumns(sheet.headers)
                   // Only auto-import if this looks like a line-by-line script (has timecode or source text)
                   const hasLineData = !!(lineMapping.timecodeColumn || lineMapping.sourceTextColumn)
                   if (lineMapping.roleNameColumn && hasLineData) {
@@ -583,12 +610,14 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                       notesColumn: lineMapping.notesColumn,
                       skipEmptyRole: lineMapping.skipEmptyRole ?? true,
                     }
-                    const scriptLines = parseScriptLinesFromExcel(sheet, fullMapping)
+                    const scriptLines = parseScriptLinesFromExcel(excelResult, fullMapping)
                     if (scriptLines.length > 0) {
-                      const syncResult = await saveScriptLines(projectId, scriptLines, { replaceAll: true })
-                      if (syncResult.success) {
-                        linesSynced = syncResult.linesCreated ?? 0
-                      }
+                      await replaceAllWithConfirm(async () => {
+                        const syncResult = await saveScriptLines(projectId, scriptLines, { replaceAll: true })
+                        if (syncResult.success) {
+                          linesSynced = syncResult.linesCreated ?? 0
+                        }
+                      })
                     }
                   }
                 } catch (lineErr) {
@@ -640,8 +669,12 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                     stubs.push({ line_number: lineNum++, role_name: char.name })
                   }
                 }
-                if (stubs.length > 0) {
-                  await saveScriptLines(projectId, stubs, { replaceAll: true, scriptId })
+                if (stubs.length === 0) {
+                  toast({ title: "לא נמצאו שורות לייבוא", variant: "destructive" })
+                } else {
+                  await replaceAllWithConfirm(async () => {
+                    await saveScriptLines(projectId, stubs, { replaceAll: true, scriptId })
+                  })
                 }
               } catch (e) {
                 // Non-critical: roles were applied, stub creation failed
@@ -656,6 +689,34 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           }}
         />
       )}
+
+      {/* Confirmation dialog for replacing existing workspace lines */}
+      <Dialog open={!!confirmReplace} onOpenChange={(open) => { if (!open) setConfirmReplace(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>החלפת שורות סביבת עבודה</DialogTitle>
+            <DialogDescription>
+              כבר קיימות שורות בסביבת העבודה של הפרויקט. ייבוא חדש יחליף את כל השורות הקיימות כולל תרגומים ועריכות.
+              האם להמשיך?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConfirmReplace(null)}>
+              ביטול
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                const action = confirmReplace?.action
+                setConfirmReplace(null)
+                if (action) await action()
+              }}
+            >
+              החלף שורות
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
