@@ -13,6 +13,7 @@ import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { CastingWorkspace } from "@/components/projects/casting-workspace"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
+import { ScriptWorkspaceTab } from "@/components/projects/script-workspace-tab"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
@@ -228,8 +229,9 @@ export default function ProjectDetailPage() {
       </header>
 
       <div className="container mx-auto px-4 md:px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
-          {/* Sidebar */}
+        <div className={`grid grid-cols-1 gap-6 md:gap-8 ${activeTab === "workspace" ? "" : "lg:grid-cols-4"}`}>
+          {/* Sidebar — hidden on workspace tab */}
+          {activeTab !== "workspace" && (
           <div className="space-y-6">
             <Card className="p-6 space-y-4">
               <h3 className="font-semibold text-lg">פרטי הפרויקט</h3>
@@ -304,11 +306,12 @@ export default function ProjectDetailPage() {
               </Card>
             )}
           </div>
+          )}
 
           {/* Main Content */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className={activeTab === "workspace" ? "space-y-6" : "lg:col-span-3 space-y-6"}>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="roles">
                   תפקידים ({stats.rolesCount})
                 </TabsTrigger>
@@ -318,10 +321,13 @@ export default function ProjectDetailPage() {
                 <TabsTrigger value="actors">
                   שחקנים ({stats.actorsCount})
                 </TabsTrigger>
+                <TabsTrigger value="workspace">
+                  סביבת עבודה
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <CastingWorkspace projectId={project.id} />
+                <CastingWorkspace projectId={project.id} onCastingChange={loadData} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">
@@ -336,6 +342,10 @@ export default function ProjectDetailPage() {
 
               <TabsContent value="actors" className="mt-6">
                 <ActorsTab projectId={project.id} />
+              </TabsContent>
+
+              <TabsContent value="workspace" className="mt-6">
+                <ScriptWorkspaceTab projectId={project.id} />
               </TabsContent>
             </Tabs>
           </div>

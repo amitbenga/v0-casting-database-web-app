@@ -15,10 +15,12 @@ import { Badge } from "@/components/ui/badge"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { normalizeEmail, normalizePhone } from "@/lib/normalizers"
 import { useToast } from "@/hooks/use-toast"
+import { SKILLS_LIST, LANGUAGES_LIST } from "@/lib/types"
 
-const SKILLS_OPTIONS = ["משחק", "שירה", "ריקוד", "אומנויות לחימה", "אקרובטיקה", "מוזיקה", "קומדיה", "דרמה", "אחר"]
-
-const LANGUAGES_OPTIONS = ["עברית", "אנגלית", "ערבית", "רוסית", "צרפתית", "ספרדית", "גרמנית", "איטלקית", "אחר"]
+// Derived from the canonical SKILLS_LIST — single source of truth (task 4A/4B)
+const SKILLS_OPTIONS = SKILLS_LIST.map((s) => s.label)
+// Languages list with an "אחר" option at end
+const LANGUAGES_OPTIONS = [...LANGUAGES_LIST.map((l) => l.label), "אחר"]
 
 export default function ActorIntakePage() {
   const router = useRouter()

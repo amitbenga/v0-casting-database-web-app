@@ -267,7 +267,7 @@ export function ProjectScriptsSection({ projectId }: ProjectScriptsSectionProps)
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.doc,.docx,.txt"
+            accept=".pdf,.docx,.txt"
             onChange={handleFileUpload}
             className="hidden"
             id="script-upload"
