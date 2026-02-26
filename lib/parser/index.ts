@@ -5,10 +5,13 @@
  * Combines text extraction, character parsing, and fuzzy matching.
  *
  * Pipeline architecture:
- * 1. Text extraction (from file format to plain text)
- * 2. Regex-based character parsing (primary, always runs)
- * 3. Fuzzy matching & grouping (deduplication)
- * 4. [Optional] Verification step via webhook (AI-based, pluggable)
+ *   file → extractText → normalizeText (NFKC + bidi strip + line merge)
+ *        → detectContentType
+ *        ├─ tabular:    extractTables → autoDetectColumns → parseStructuredData
+ *        ├─ screenplay: tokenize → parseScript (regex) → fuzzy match
+ *        └─ hybrid:     both paths
+ *        → zod validation (schemas.ts)
+ *        → DiagnosticCollector → ParsedScriptBundle
  *
  * The verification step is designed as a hook point for a future webhook
  * that can send the parsed results to an AI service for validation.
@@ -18,10 +21,20 @@
 export * from "./script-parser"
 export * from "./fuzzy-matcher"
 export * from "./text-extractor"
+export * from "./structured-parser"
+export * from "./content-detector"
+export * from "./diagnostics"
+export * from "./schemas"
+export * from "./tokenizer"
 
-import { extractText, getFileInfo, normalizeText } from "./text-extractor"
+import { extractText, getFileInfo, normalizeText, extractTablesFromPDF, extractTablesFromDOCX } from "./text-extractor"
 import { parseScript, mergeParseResults, type ScriptParseResult, type ExtractedCharacter } from "./script-parser"
 import { findSimilarCharacters, generateSimilarityWarnings, groupSimilarCharacters, type CharacterGroup } from "./fuzzy-matcher"
+import { detectContentType, type ContentType } from "./content-detector"
+import { autoDetectColumns, parseScriptLinesFromStructuredData, type StructuredParseResult } from "./structured-parser"
+import { DiagnosticCollector, type ParseDiagnostic } from "./diagnostics"
+import { validateScriptLines } from "./schemas"
+import type { ScriptLineInput } from "@/lib/types"
 
 // ─── Pipeline Types ─────────────────────────────────────────────────────────
 
@@ -46,6 +59,36 @@ export interface ParsedScriptBundle {
 
   /** Verification metadata (populated when webhook verifier is used) */
   verification?: VerificationResult
+
+  /**
+   * Structured script lines ready for workspace import.
+   * Populated when the file is detected as tabular (PDF table, DOCX table).
+   * When present, the UI can skip the manual column-mapping dialog and
+   * import directly — or show the dialog for fine-tuning.
+   */
+  scriptLines?: ScriptLineInput[]
+
+  /**
+   * Content type detected for the primary uploaded file.
+   * "tabular"   — structured table (timecodes, dialogue, roles in columns)
+   * "screenplay" — standard screenplay format
+   * "hybrid"    — both patterns detected
+   */
+  contentType: ContentType
+
+  /**
+   * Raw structured data extracted from PDF/DOCX tables.
+   * Present only when contentType is "tabular" or "hybrid".
+   * The UI can use this to show the column-mapping dialog (same as Excel import).
+   */
+  structuredData?: StructuredParseResult[]
+
+  /**
+   * Structured diagnostics from all pipeline stages.
+   * Includes extraction warnings, validation errors, and normalization notes.
+   * Each diagnostic has severity, source, message, and optional line number.
+   */
+  diagnostics: ParseDiagnostic[]
 }
 
 // ─── Verification Hook Interface ────────────────────────────────────────────
@@ -161,6 +204,11 @@ export async function parseScriptFiles(
   const extractionWarnings: string[] = []
   const fileStatuses: ParsedScriptBundle["files"] = []
   const rawTexts: string[] = []
+  const collector = new DiagnosticCollector()
+
+  // Accumulate structured data (tables) across all files
+  const allStructuredData: StructuredParseResult[] = []
+  let detectedContentType: ContentType = "screenplay"
 
   // Step 1 & 2: Extract text and parse each file
   for (const file of files) {
@@ -179,11 +227,62 @@ export async function parseScriptFiles(
     try {
       const { text: rawText, warnings } = await extractText(file)
       extractionWarnings.push(...warnings.map(w => `${file.name}: ${w}`))
+      for (const w of warnings) {
+        collector.warn("extraction", `${file.name}: ${w}`)
+      }
       rawTexts.push(rawText)
+
+      const textLines = rawText.split(/\r?\n/)
+      const ext = fileInfo.extension
+
+      // ── Table extraction for PDF and DOCX ──────────────────────────────────
+      if (ext === "pdf") {
+        try {
+          const tables = await extractTablesFromPDF(file)
+          if (tables.length > 0) {
+            allStructuredData.push(...tables)
+            detectedContentType = detectContentType({
+              textLines,
+              pdfAlignedColumns: tables[0].headers.length,
+              pdfRowCount: tables[0].totalRows,
+            })
+          } else {
+            detectedContentType = detectContentType({ textLines })
+          }
+        } catch {
+          detectedContentType = detectContentType({ textLines })
+        }
+      } else if (ext === "docx") {
+        try {
+          const tables = await extractTablesFromDOCX(file)
+          if (tables.length > 0) {
+            allStructuredData.push(...tables)
+            const totalDocxRows = tables.reduce((s, t) => s + t.totalRows, 0)
+            detectedContentType = detectContentType({
+              textLines,
+              docxHasTables: true,
+              docxTableRowCount: totalDocxRows,
+            })
+          } else {
+            detectedContentType = detectContentType({ textLines })
+          }
+        } catch {
+          detectedContentType = detectContentType({ textLines })
+        }
+      } else {
+        detectedContentType = detectContentType({ textLines })
+      }
+      // ──────────────────────────────────────────────────────────────────────
 
       const text = normalizeText(rawText)
       const parseResult = parseScript(text)
       results.push(parseResult)
+
+      collector.info("content-detection", `${file.name}: זוהה כ-${detectedContentType}`)
+      if (allStructuredData.length > 0) {
+        collector.info("structured-parser",
+          `${file.name}: נמצאו ${allStructuredData.length} טבלאות עם ${allStructuredData.reduce((s, t) => s + t.totalRows, 0)} שורות`)
+      }
 
       fileStatuses.push({
         name: file.name,
@@ -197,6 +296,29 @@ export async function parseScriptFiles(
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error"
       })
+    }
+  }
+
+  // Auto-extract script lines from structured data when tabular content is found
+  let autoScriptLines: ScriptLineInput[] | undefined
+  if (allStructuredData.length > 0) {
+    const primary = allStructuredData[0]
+    const detectedMapping = autoDetectColumns(primary.headers)
+    if (detectedMapping.roleNameColumn) {
+      const rawLines = parseScriptLinesFromStructuredData(primary, {
+        ...detectedMapping,
+        roleNameColumn: detectedMapping.roleNameColumn,
+      })
+      // Validate extracted lines with zod
+      const validated = validateScriptLines(rawLines)
+      autoScriptLines = validated.data
+      collector.addAll(validated.diagnostics)
+      if (validated.rejected.length > 0) {
+        collector.warn(
+          "validation",
+          `${validated.rejected.length} שורות לא עברו אימות ונדחו`
+        )
+      }
     }
   }
 
@@ -249,7 +371,11 @@ export async function parseScriptFiles(
     extractionWarnings,
     files: fileStatuses,
     verified,
-    verification
+    verification,
+    contentType: detectedContentType,
+    scriptLines: autoScriptLines,
+    structuredData: allStructuredData.length > 0 ? allStructuredData : undefined,
+    diagnostics: collector.all(),
   }
 }
 

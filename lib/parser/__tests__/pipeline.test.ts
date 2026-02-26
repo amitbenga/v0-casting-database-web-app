@@ -24,6 +24,8 @@ function makeBundle(text: string): ParsedScriptBundle {
     extractionWarnings: [],
     files: [{ name: "test.txt", size: "1 KB", status: "success" }],
     verified: false,
+    contentType: "screenplay",
+    diagnostics: [],
   }
 }
 
