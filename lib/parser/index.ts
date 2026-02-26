@@ -18,10 +18,15 @@
 export * from "./script-parser"
 export * from "./fuzzy-matcher"
 export * from "./text-extractor"
+export * from "./structured-parser"
+export * from "./content-detector"
 
-import { extractText, getFileInfo, normalizeText } from "./text-extractor"
+import { extractText, getFileInfo, normalizeText, extractTablesFromPDF, extractTablesFromDOCX } from "./text-extractor"
 import { parseScript, mergeParseResults, type ScriptParseResult, type ExtractedCharacter } from "./script-parser"
 import { findSimilarCharacters, generateSimilarityWarnings, groupSimilarCharacters, type CharacterGroup } from "./fuzzy-matcher"
+import { detectContentType, type ContentType } from "./content-detector"
+import { autoDetectColumns, parseScriptLinesFromStructuredData, type StructuredParseResult } from "./structured-parser"
+import type { ScriptLineInput } from "@/lib/types"
 
 // ─── Pipeline Types ─────────────────────────────────────────────────────────
 
@@ -46,6 +51,29 @@ export interface ParsedScriptBundle {
 
   /** Verification metadata (populated when webhook verifier is used) */
   verification?: VerificationResult
+
+  /**
+   * Structured script lines ready for workspace import.
+   * Populated when the file is detected as tabular (PDF table, DOCX table).
+   * When present, the UI can skip the manual column-mapping dialog and
+   * import directly — or show the dialog for fine-tuning.
+   */
+  scriptLines?: ScriptLineInput[]
+
+  /**
+   * Content type detected for the primary uploaded file.
+   * "tabular"   — structured table (timecodes, dialogue, roles in columns)
+   * "screenplay" — standard screenplay format
+   * "hybrid"    — both patterns detected
+   */
+  contentType: ContentType
+
+  /**
+   * Raw structured data extracted from PDF/DOCX tables.
+   * Present only when contentType is "tabular" or "hybrid".
+   * The UI can use this to show the column-mapping dialog (same as Excel import).
+   */
+  structuredData?: StructuredParseResult[]
 }
 
 // ─── Verification Hook Interface ────────────────────────────────────────────
@@ -162,6 +190,10 @@ export async function parseScriptFiles(
   const fileStatuses: ParsedScriptBundle["files"] = []
   const rawTexts: string[] = []
 
+  // Accumulate structured data (tables) across all files
+  const allStructuredData: StructuredParseResult[] = []
+  let detectedContentType: ContentType = "screenplay"
+
   // Step 1 & 2: Extract text and parse each file
   for (const file of files) {
     const fileInfo = getFileInfo(file)
@@ -181,6 +213,48 @@ export async function parseScriptFiles(
       extractionWarnings.push(...warnings.map(w => `${file.name}: ${w}`))
       rawTexts.push(rawText)
 
+      const textLines = rawText.split(/\r?\n/)
+      const ext = fileInfo.extension
+
+      // ── Table extraction for PDF and DOCX ──────────────────────────────────
+      if (ext === "pdf") {
+        try {
+          const tables = await extractTablesFromPDF(file)
+          if (tables.length > 0) {
+            allStructuredData.push(...tables)
+            detectedContentType = detectContentType({
+              textLines,
+              pdfAlignedColumns: tables[0].headers.length,
+              pdfRowCount: tables[0].totalRows,
+            })
+          } else {
+            detectedContentType = detectContentType({ textLines })
+          }
+        } catch {
+          detectedContentType = detectContentType({ textLines })
+        }
+      } else if (ext === "docx") {
+        try {
+          const tables = await extractTablesFromDOCX(file)
+          if (tables.length > 0) {
+            allStructuredData.push(...tables)
+            const totalDocxRows = tables.reduce((s, t) => s + t.totalRows, 0)
+            detectedContentType = detectContentType({
+              textLines,
+              docxHasTables: true,
+              docxTableRowCount: totalDocxRows,
+            })
+          } else {
+            detectedContentType = detectContentType({ textLines })
+          }
+        } catch {
+          detectedContentType = detectContentType({ textLines })
+        }
+      } else {
+        detectedContentType = detectContentType({ textLines })
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       const text = normalizeText(rawText)
       const parseResult = parseScript(text)
       results.push(parseResult)
@@ -196,6 +270,19 @@ export async function parseScriptFiles(
         size: fileInfo.size,
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error"
+      })
+    }
+  }
+
+  // Auto-extract script lines from structured data when tabular content is found
+  let autoScriptLines: ScriptLineInput[] | undefined
+  if (allStructuredData.length > 0) {
+    const primary = allStructuredData[0]
+    const detectedMapping = autoDetectColumns(primary.headers)
+    if (detectedMapping.roleNameColumn) {
+      autoScriptLines = parseScriptLinesFromStructuredData(primary, {
+        ...detectedMapping,
+        roleNameColumn: detectedMapping.roleNameColumn,
       })
     }
   }
@@ -249,7 +336,10 @@ export async function parseScriptFiles(
     extractionWarnings,
     files: fileStatuses,
     verified,
-    verification
+    verification,
+    contentType: detectedContentType,
+    scriptLines: autoScriptLines,
+    structuredData: allStructuredData.length > 0 ? allStructuredData : undefined,
   }
 }
 

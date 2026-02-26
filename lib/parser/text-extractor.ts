@@ -1,11 +1,17 @@
 /**
  * Text Extraction from various file formats
- * 
+ *
  * Extracts plain text from:
  * - .txt files (direct)
  * - .pdf files (using pdf.js)
  * - .docx files (using mammoth-style parsing)
+ *
+ * Also exports structured table extractors:
+ * - extractTablesFromPDF  — column-detection via x-coordinate clustering
+ * - extractTablesFromDOCX — explicit <w:tbl> XML parsing
  */
+
+import type { StructuredParseResult } from "./structured-parser"
 
 /**
  * Extract text from a PDF file using PDF.js
@@ -166,6 +172,280 @@ export async function extractTextFromDOCX(file: File): Promise<string> {
   }
   
   return textParts.join("\n")
+}
+
+// ─── Structured table extractors ─────────────────────────────────────────────
+
+/**
+ * Extract table data from a PDF file by analysing x/y coordinates.
+ *
+ * Algorithm:
+ *  1. For each page, collect all text items with their (x, y) positions.
+ *  2. Cluster x-positions → columns (positions that repeat across ≥30 % of rows).
+ *  3. Group items into rows by y-position (same rounding as extractTextFromPDF).
+ *  4. Assign each item to its nearest column bucket.
+ *  5. The first row becomes the headers; subsequent rows become data rows.
+ *
+ * Returns an empty array if no consistent table structure is found.
+ * Caps analysis at MAX_PAGES pages and MAX_ROWS rows for performance.
+ */
+export async function extractTablesFromPDF(
+  file: File
+): Promise<StructuredParseResult[]> {
+  const MAX_PAGES = 50
+  const MAX_ROWS = 1000
+  const MIN_COLUMNS = 3
+  const MIN_DATA_ROWS = 5
+
+  const pdfjsLib = await import("pdfjs-dist")
+
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+    } catch {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
+    }
+  }
+
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    disableAutoFetch: true,
+    disableStream: true,
+  }).promise
+
+  const pagesToProcess = Math.min(pdf.numPages, MAX_PAGES)
+
+  // Collect all items across pages
+  type Item = { x: number; y: number; text: string; page: number }
+  const allItems: Item[] = []
+
+  for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
+    const page = await pdf.getPage(pageNum)
+    const textContent = await page.getTextContent()
+    const viewport = page.getViewport({ scale: 1 })
+    const pageHeight = viewport.height
+
+    for (const item of textContent.items) {
+      if ("str" in item && item.str.trim()) {
+        // Normalise y so that top-of-page = 0 increasing downwards
+        const yRaw = pageHeight - item.transform[5]
+        allItems.push({
+          x: Math.round(item.transform[4]),
+          y: Math.round(yRaw),
+          text: item.str,
+          page: pageNum,
+        })
+      }
+    }
+
+    if (allItems.length >= MAX_ROWS * 5) break
+  }
+
+  if (allItems.length === 0) return []
+
+  // Cluster x-positions into column buckets (tolerance: 15 px)
+  const COLUMN_TOLERANCE = 15
+  const xValues = allItems.map((i) => i.x).sort((a, b) => a - b)
+  const columnBuckets: number[] = []
+
+  for (const x of xValues) {
+    const existing = columnBuckets.find((b) => Math.abs(b - x) <= COLUMN_TOLERANCE)
+    if (existing === undefined) {
+      columnBuckets.push(x)
+    }
+  }
+  columnBuckets.sort((a, b) => a - b)
+
+  if (columnBuckets.length < MIN_COLUMNS) return []
+
+  // Group items into rows by y-position (tolerance: 5 px)
+  const ROW_Y_TOLERANCE = 5
+  const rowMap = new Map<number, Item[]>()
+
+  for (const item of allItems) {
+    const rowKey =
+      Array.from(rowMap.keys()).find((k) => Math.abs(k - item.y) <= ROW_Y_TOLERANCE) ??
+      item.y
+    if (!rowMap.has(rowKey)) rowMap.set(rowKey, [])
+    rowMap.get(rowKey)!.push(item)
+  }
+
+  const sortedRows = Array.from(rowMap.entries()).sort(([a], [b]) => a - b)
+  if (sortedRows.length < MIN_DATA_ROWS + 1) return []
+
+  // For each row, assign items to the nearest column bucket
+  function nearestBucket(x: number): number {
+    let best = columnBuckets[0]
+    let bestDist = Math.abs(x - best)
+    for (const b of columnBuckets) {
+      const d = Math.abs(x - b)
+      if (d < bestDist) {
+        bestDist = d
+        best = b
+      }
+    }
+    return best
+  }
+
+  // Build a 2-D grid: rows × columns
+  const grid: string[][] = sortedRows.slice(0, MAX_ROWS).map(([, items]) => {
+    const cells = new Map<number, string[]>()
+    for (const item of items) {
+      const bucket = nearestBucket(item.x)
+      if (!cells.has(bucket)) cells.set(bucket, [])
+      cells.get(bucket)!.push(item.text)
+    }
+    return columnBuckets.map((b) => (cells.get(b) ?? []).join(" ").trim())
+  })
+
+  if (grid.length < MIN_DATA_ROWS + 1) return []
+
+  // Filter out sparse rows (fewer than half of columns filled)
+  const filledGrid = grid.filter(
+    (row) => row.filter((cell) => cell.length > 0).length >= columnBuckets.length / 2
+  )
+
+  if (filledGrid.length < MIN_DATA_ROWS + 1) return []
+
+  // First row = headers
+  const rawHeaders = filledGrid[0]
+  const headers = rawHeaders.map((h, i) => h || `Col${i + 1}`)
+  const dataRows = filledGrid.slice(1)
+
+  const rows: Record<string, string | number | null>[] = dataRows.map((row) => {
+    const record: Record<string, string | number | null> = {}
+    headers.forEach((h, i) => {
+      record[h] = row[i] || null
+    })
+    return record
+  })
+
+  return [
+    {
+      headers,
+      rows,
+      source: "pdf-table",
+      sheetName: file.name,
+      totalRows: rows.length,
+    },
+  ]
+}
+
+/**
+ * Extract table data from a DOCX file by parsing <w:tbl> XML elements.
+ *
+ * DOCX tables have an explicit structure:
+ *   <w:tbl>           → table
+ *     <w:tr>          → row
+ *       <w:tc>        → cell
+ *         <w:p><w:r><w:t>text</w:t>…
+ *
+ * The first row of each table becomes the headers.
+ * Returns one StructuredParseResult per table with ≥2 columns and ≥MIN_DATA_ROWS rows.
+ */
+export async function extractTablesFromDOCX(
+  file: File
+): Promise<StructuredParseResult[]> {
+  const MIN_DATA_ROWS = 3
+  const MIN_COLUMNS = 2
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let JSZip: any
+  try {
+    const mod = await import("jszip")
+    JSZip = mod.default ?? mod
+  } catch {
+    return []
+  }
+
+  const arrayBuffer = await file.arrayBuffer()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let zip: any
+  try {
+    zip = await JSZip.loadAsync(arrayBuffer)
+  } catch {
+    return []
+  }
+
+  const docXml = await zip.file("word/document.xml")?.async("text")
+  if (!docXml) return []
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(docXml, "application/xml")
+
+  const NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+  // Helper: extract all text from a cell element
+  function cellText(tc: Element): string {
+    const runs = tc.getElementsByTagNameNS(NS, "t")
+    let text = ""
+    for (const run of runs) {
+      text += run.textContent ?? ""
+    }
+    return text.trim()
+  }
+
+  const tables = doc.getElementsByTagNameNS(NS, "tbl")
+  const results: StructuredParseResult[] = []
+
+  for (let t = 0; t < tables.length; t++) {
+    const table = tables[t]
+    const trs = table.getElementsByTagNameNS(NS, "tr")
+    if (trs.length < MIN_DATA_ROWS + 1) continue
+
+    // Extract all rows as string arrays
+    const grid: string[][] = []
+    for (let r = 0; r < trs.length; r++) {
+      const tcs = trs[r].getElementsByTagNameNS(NS, "tc")
+      const rowCells: string[] = []
+      for (let c = 0; c < tcs.length; c++) {
+        rowCells.push(cellText(tcs[c]))
+      }
+      grid.push(rowCells)
+    }
+
+    if (grid.length === 0) continue
+
+    // Determine column count from widest row
+    const maxCols = Math.max(...grid.map((r) => r.length))
+    if (maxCols < MIN_COLUMNS) continue
+
+    // Pad rows to equal width
+    const normalized = grid.map((row) => {
+      const padded = [...row]
+      while (padded.length < maxCols) padded.push("")
+      return padded
+    })
+
+    // First row = headers
+    const rawHeaders = normalized[0]
+    const headers = rawHeaders.map((h, i) => h || `Col${i + 1}`)
+    const dataRows = normalized.slice(1)
+
+    if (dataRows.length < MIN_DATA_ROWS) continue
+
+    const rows: Record<string, string | number | null>[] = dataRows.map((row) => {
+      const record: Record<string, string | number | null> = {}
+      headers.forEach((h, i) => {
+        record[h] = row[i] || null
+      })
+      return record
+    })
+
+    results.push({
+      headers,
+      rows,
+      source: "docx-table",
+      sheetName: `Table ${t + 1}`,
+      totalRows: rows.length,
+    })
+  }
+
+  return results
 }
 
 /**

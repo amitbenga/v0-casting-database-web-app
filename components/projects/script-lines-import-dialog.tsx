@@ -32,22 +32,74 @@ import {
   parseScriptLinesFromExcel,
   type ScriptLineColumnMapping,
 } from "@/lib/parser/excel-parser"
+import {
+  autoDetectColumns,
+  parseScriptLinesFromStructuredData,
+  type StructuredParseResult,
+} from "@/lib/parser/structured-parser"
 import type { ScriptLineInput } from "@/lib/types"
 
+/**
+ * The dialog accepts either:
+ *   - excelResult (legacy Excel flow) — multiple sheets
+ *   - structuredData (PDF/DOCX table flow) — array of StructuredParseResult
+ * Exactly one must be provided.
+ */
 interface ScriptLinesImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  excelResult: ExcelParseResult
+  /** Legacy: Excel file with multiple sheets */
+  excelResult?: ExcelParseResult
+  /** New: pre-extracted tabular data from PDF/DOCX */
+  structuredData?: StructuredParseResult[]
+  /** Source label shown in the dialog header (e.g. filename) */
+  sourceLabel?: string
   onImport: (lines: ScriptLineInput[]) => void
   isImporting?: boolean
 }
 
 const NONE = "__none__"
 
+// ─── Normalise input to a common sheet list ───────────────────────────────────
+
+interface NormalisedSheet {
+  name: string
+  headers: string[]
+  rows: Record<string, string | number | null>[]
+  totalRows: number
+}
+
+function normaliseSheets(
+  excelResult?: ExcelParseResult,
+  structuredData?: StructuredParseResult[]
+): NormalisedSheet[] {
+  if (excelResult) {
+    return excelResult.sheets.map((s) => ({
+      name: s.name,
+      headers: s.headers,
+      rows: s.rows,
+      totalRows: s.rows.length,
+    }))
+  }
+  if (structuredData && structuredData.length > 0) {
+    return structuredData.map((sd, i) => ({
+      name: sd.sheetName ?? `Table ${i + 1}`,
+      headers: sd.headers,
+      rows: sd.rows,
+      totalRows: sd.totalRows,
+    }))
+  }
+  return []
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function ScriptLinesImportDialog({
   open,
   onOpenChange,
   excelResult,
+  structuredData,
+  sourceLabel,
   onImport,
   isImporting = false,
 }: ScriptLinesImportDialogProps) {
@@ -59,13 +111,29 @@ export function ScriptLinesImportDialog({
   const [recStatusCol, setRecStatusCol] = useState<string>(NONE)
   const [notesCol, setNotesCol] = useState<string>(NONE)
 
-  const sheet = excelResult.sheets[selectedSheet]
+  const sheets = useMemo(
+    () => normaliseSheets(excelResult, structuredData),
+    [excelResult, structuredData]
+  )
+
+  const sheet = sheets[selectedSheet]
   const headers = sheet?.headers ?? []
+
+  // Label shown in the dialog header
+  const label =
+    sourceLabel ??
+    (excelResult ? excelResult.fileName : structuredData?.[0]?.sheetName ?? "")
+  const totalRowsLabel =
+    excelResult?.totalRows ??
+    structuredData?.reduce((s, sd) => s + sd.totalRows, 0) ??
+    0
 
   // Auto-detect columns when sheet changes
   useEffect(() => {
     if (headers.length === 0) return
-    const detected = autoDetectScriptLineColumns(headers)
+    const detected = excelResult
+      ? autoDetectScriptLineColumns(headers)
+      : autoDetectColumns(headers)
     setTimecodeCol(detected.timecodeColumn ?? NONE)
     setRoleCol(detected.roleNameColumn ?? "")
     setSourceCol(detected.sourceTextColumn ?? NONE)
@@ -73,33 +141,52 @@ export function ScriptLinesImportDialog({
     setRecStatusCol(detected.recStatusColumn ?? NONE)
     setNotesCol(detected.notesColumn ?? NONE)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSheet, excelResult])
+  }, [selectedSheet, excelResult, structuredData])
 
-  const mapping = useMemo<ScriptLineColumnMapping>(() => ({
-    sheetIndex: selectedSheet,
-    timecodeColumn: timecodeCol !== NONE ? timecodeCol : undefined,
-    roleNameColumn: roleCol,
-    sourceTextColumn: sourceCol !== NONE ? sourceCol : undefined,
-    translationColumn: translationCol !== NONE ? translationCol : undefined,
-    recStatusColumn: recStatusCol !== NONE ? recStatusCol : undefined,
-    notesColumn: notesCol !== NONE ? notesCol : undefined,
-  }), [selectedSheet, timecodeCol, roleCol, sourceCol, translationCol, recStatusCol, notesCol])
+  const mapping = useMemo<ScriptLineColumnMapping>(
+    () => ({
+      sheetIndex: selectedSheet,
+      timecodeColumn: timecodeCol !== NONE ? timecodeCol : undefined,
+      roleNameColumn: roleCol,
+      sourceTextColumn: sourceCol !== NONE ? sourceCol : undefined,
+      translationColumn: translationCol !== NONE ? translationCol : undefined,
+      recStatusColumn: recStatusCol !== NONE ? recStatusCol : undefined,
+      notesColumn: notesCol !== NONE ? notesCol : undefined,
+    }),
+    [selectedSheet, timecodeCol, roleCol, sourceCol, translationCol, recStatusCol, notesCol]
+  )
+
+  // Common parsing function — works for both Excel and structured sources
+  function parseLines(): ScriptLineInput[] {
+    if (!roleCol || !sheet) return []
+    if (excelResult) {
+      return parseScriptLinesFromExcel(excelResult, mapping)
+    }
+    return parseScriptLinesFromStructuredData(
+      {
+        headers: sheet.headers,
+        rows: sheet.rows,
+        source: structuredData?.[selectedSheet]?.source ?? "pdf-table",
+        sheetName: sheet.name,
+        totalRows: sheet.totalRows,
+      },
+      mapping
+    )
+  }
 
   const previewLines = useMemo(() => {
-    if (!roleCol) return []
-    const allLines = parseScriptLinesFromExcel(excelResult, mapping)
-    return allLines.slice(0, 8)
-  }, [excelResult, mapping, roleCol])
+    return parseLines().slice(0, 8)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapping, roleCol])
 
   const totalLines = useMemo(() => {
-    if (!roleCol) return 0
-    return parseScriptLinesFromExcel(excelResult, mapping).length
-  }, [excelResult, mapping, roleCol])
+    return parseLines().length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapping, roleCol])
 
   function handleImport() {
     if (!roleCol || totalLines === 0) return
-    const lines = parseScriptLinesFromExcel(excelResult, mapping)
-    onImport(lines)
+    onImport(parseLines())
   }
 
   function ColSelect({
@@ -139,12 +226,12 @@ export function ScriptLinesImportDialog({
             </DialogTitle>
           </div>
           <p className="text-sm text-muted-foreground">
-            {excelResult.fileName} {"\u00B7"} {excelResult.totalRows} {"שורות"}
+            {label} {"\u00B7"} {totalRowsLabel} {"שורות"}
           </p>
         </DialogHeader>
 
-        {/* Sheet selector */}
-        {excelResult.sheets.length > 1 && (
+        {/* Sheet / table selector */}
+        {sheets.length > 1 && (
           <div className="flex items-center gap-2">
             <Label className="text-sm">{"גיליון"}</Label>
             <Select value={String(selectedSheet)} onValueChange={(v) => setSelectedSheet(Number(v))}>
@@ -152,9 +239,9 @@ export function ScriptLinesImportDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {excelResult.sheets.map((s, i) => (
+                {sheets.map((s, i) => (
                   <SelectItem key={i} value={String(i)}>
-                    {s.name} ({s.rows.length} {"שורות"})
+                    {s.name} ({s.totalRows} {"שורות"})
                   </SelectItem>
                 ))}
               </SelectContent>

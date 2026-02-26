@@ -34,8 +34,10 @@ import { parseScriptFiles, type ParsedScriptBundle } from "@/lib/parser"
 import { ScriptPreviewDialog } from "./script-preview-dialog"
 import { parseExcelFile, isExcelFile, autoDetectScriptLineColumns, parseScriptLinesFromExcel, type ExcelParseResult, type ExcelMappedRole, type ScriptLineColumnMapping } from "@/lib/parser/excel-parser"
 import { ExcelPreviewDialog } from "./excel-preview-dialog"
+import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import { FileSpreadsheet } from "lucide-react"
 import { saveScriptLines, getScriptLines } from "@/lib/actions/script-line-actions"
+import type { ScriptLineInput } from "@/lib/types"
 import {
   Dialog,
   DialogContent,
@@ -84,6 +86,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [showExcelPreview, setShowExcelPreview] = useState(false)
   const [isApplyingExcel, setIsApplyingExcel] = useState(false)
   const [confirmReplace, setConfirmReplace] = useState<{ action: () => Promise<void> } | null>(null)
+  // Structured (PDF/DOCX table) import flow
+  const [showStructuredImport, setShowStructuredImport] = useState(false)
+  const [isImportingStructured, setIsImportingStructured] = useState(false)
 
   const loadScripts = useCallback(async () => {
     try {
@@ -163,13 +168,24 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
 
       setParseResult(result)
 
-      if (result.parseResult.characters.length > 0) {
+      // Tabular content (PDF/DOCX table): show column-mapping import dialog
+      if (result.structuredData && result.structuredData.length > 0) {
         toast({
-          title: "הפרסור הושלם",
-          description: `זוהו ${result.parseResult.characters.length} תפקידים מתוך ${result.files.filter(f => f.status === "success").length} קבצים`,
+          title: "זוהה תוכן טבלאי",
+          description: `נמצאה טבלה עם ${result.structuredData[0].totalRows} שורות — מפה עמודות לייבוא לסביבת העבודה`,
         })
+        setShowStructuredImport(true)
+      }
+
+      if (result.parseResult.characters.length > 0) {
+        if (!result.structuredData?.length) {
+          toast({
+            title: "הפרסור הושלם",
+            description: `זוהו ${result.parseResult.characters.length} תפקידים מתוך ${result.files.filter(f => f.status === "success").length} קבצים`,
+          })
+        }
         setShowPreview(true)
-      } else {
+      } else if (!result.structuredData?.length) {
         toast({
           title: "לא נמצאו תפקידים",
           description: "נסה להעלות קובץ בפורמט תסריט סטנדרטי",
@@ -686,6 +702,40 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             setParseResult(null)
             loadScripts()
             onScriptApplied?.()
+          }}
+        />
+      )}
+
+      {/* Structured (PDF/DOCX table) import dialog */}
+      {parseResult?.structuredData && parseResult.structuredData.length > 0 && (
+        <ScriptLinesImportDialog
+          open={showStructuredImport}
+          onOpenChange={setShowStructuredImport}
+          structuredData={parseResult.structuredData}
+          sourceLabel={pendingFiles[0]?.file.name}
+          isImporting={isImportingStructured}
+          onImport={async (lines: ScriptLineInput[]) => {
+            setIsImportingStructured(true)
+            try {
+              await replaceAllWithConfirm(async () => {
+                const result = await saveScriptLines(projectId, lines, { replaceAll: true })
+                if (!result.success) throw new Error(result.error)
+                toast({
+                  title: "ייבוא הצליח",
+                  description: `${result.linesCreated ?? lines.length} שורות יובאו לסביבת העבודה`,
+                })
+              })
+              setShowStructuredImport(false)
+              onScriptApplied?.()
+            } catch (err) {
+              toast({
+                title: "שגיאה בייבוא שורות",
+                description: err instanceof Error ? err.message : "שגיאה לא ידועה",
+                variant: "destructive",
+              })
+            } finally {
+              setIsImportingStructured(false)
+            }
           }}
         />
       )}
