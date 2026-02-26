@@ -47,7 +47,8 @@ git worktree add "..\claude\fix-known-bugs" -b claude/fix-known-bugs
 | UI | shadcn/ui + Tailwind CSS |
 | Data fetching | SWR + useSWRInfinite (cursor pagination) |
 | Package manager | pnpm |
-| Tests | Vitest — `pnpm test` (77 tests) |
+| Tests | Vitest — `pnpm test` (300+ tests) |
+| Validation | Zod — runtime schema validation in parser pipeline |
 
 ---
 
@@ -103,8 +104,16 @@ lib/
                            #   (1) parseExcelFile / applyExcelMapping → תפקידים מ-Excel
                            #   (2) parseScriptLinesFromExcel / autoDetectScriptLineColumns → שורות לסביבת עבודה
     fuzzy-matcher.ts
-    index.ts               # Pipeline
-    __tests__/             # 77 unit tests
+    index.ts               # Pipeline ראשי — parseScriptFiles(), applyUserEdits(), convertToDbFormat()
+    text-extractor.ts      # חילוץ טקסט מ-PDF/DOCX/TXT + טבלות מ-PDF (x-coordinate clustering)
+    structured-parser.ts   # פרסר טבלאי גנרי — StructuredParseResult → ScriptLineInput[]
+                           #   autoDetectColumns(), parseScriptLinesFromStructuredData()
+                           #   extractDialogueLines() — screenplay חופשי
+    content-detector.ts    # זיהוי סוג תוכן: "tabular" | "screenplay" | "hybrid"
+    diagnostics.ts         # מודול diagnostics מובנה — DiagnosticSeverity, DiagnosticCollector
+    schemas.ts             # Zod schemas לvalidation בכל ה-pipeline
+    tokenizer.ts           # Tokenizer קל לסקרינפליי — CHARACTER/DIALOGUE/ACTION/etc.
+    __tests__/             # 300+ unit tests (10 קבצי בדיקה)
   projects/api.ts          # Projects data (USE_MOCKS = false)
 
 components/
@@ -113,14 +122,29 @@ components/
   date-input.tsx           # קומפוננטת תאריך dd/mm/yyyy
   projects/
     roles-tab.tsx                  # ניהול תפקידים
-    scripts-tab.tsx                # תסריטים + parsing
+    role-casting-card.tsx          # כרטיס תפקיד + שיבוץ שחקן (ActorSearchAutocomplete)
+    actor-search-autocomplete.tsx  # חיפוש שחקן autocomplete לשיבוץ
+    actors-tab.tsx                 # טאב שחקנים בפרויקט — רשימה + ספירת רפליקות
+    casting-workspace.tsx          # סביבת עבודה ליהוק — תצוגה משולבת
+    scripts-tab.tsx                # תסריטים + parsing + preview dialogs
+    excel-preview-dialog.tsx       # תצוגה מקדימה לקובץ Excel לפני parsing
+    script-preview-dialog.tsx      # תצוגה מקדימה לתסריט מעובד
     script-workspace-tab.tsx       # מודול 4 — טבלת שורות + עריכה inline + צבעי תפקידים + סינון
+                                   #   + ייצוא Excel RTL + בחירה מרובה + מחיקה bulk + pagination
     script-lines-import-dialog.tsx # דיאלוג מיפוי עמודות Excel לפני ייבוא שורות
 
 migrations/
   002_fix_schema_gaps.sql        # רץ בהצלחה — skills/languages TEXT[]→JSONB
   003_multi_actor_per_role.sql   # רץ בהצלחה — UNIQUE(role_id)→UNIQUE(role_id,actor_id)
   004_script_lines.sql           # רץ בהצלחה — טבלת script_lines (ראה §6)
+
+lib/actions/
+  submission-actions.ts  # Admin approve/reject + merge
+  casting-actions.ts     # Role casting + searchActors() + getProjectActorsFromCastings()
+  script-actions.ts      # Script upload + processing
+  script-line-actions.ts # Script Workspace CRUD (saveScriptLines, getScriptLines, ...)
+  script-processing.ts   # עיבוד תסריטים — parseAndSaveScript()
+  folder-actions.ts      # Server Actions לתיקיות — createFolder() (תוקן: FOLDERS-1)
 ```
 
 ---
@@ -187,24 +211,19 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 | --- | --- | --- |
 | ADMIN-1 | כפתור "אשר" לא עבד | RLS חסם — נוספו user_profiles (018) + policies פתוחות (019) |
 | PROJECTS-1 | אי אפשר ליצור פרויקט | חסרו שדות director/casting_director/project_date ב-DB (017) + RLS |
-| PROJECTS-2 | עריכת פרויקט לא שמרה | תוקן יחד עם RLS fix |
+| PROJECTS-2 | עריכת פרויקט לא שמרה | תוקן יחד עם RLS fix + explicit columns (no select('*')) |
 | PROJECTS-4 | פורמט תאריך | נוצרה קומפוננטת `date-input.tsx` עם פורמט dd/mm/yyyy (חלקי — חסר calendar picker) |
-
-### עדיין פתוחים — קריטי
-
-| ID | מיקום | תיאור |
-| --- | --- | --- |
-| FOLDERS-1 | `app/folders/page.tsx` | אי אפשר ליצור תיקייה (UI קיים, פונקציה שבורה) |
+| FOLDERS-1 | אי אפשר ליצור תיקייה | נוצר `lib/actions/folder-actions.ts` — Server Action במקום client call |
+| ACTORS-1 | שאפל לא כולל שחקנים חדשים | `revalidateFirstPage: true` ב-SWR |
+| ACTORS-2 | כפתור "מועדפים" לא עבד | כפתור מחובר ל-`handleAddToFolder` |
+| PROJECTS-3 | שם שחקן לא הופיע | תוקן `getProjectRolesWithCasting` select לכלול שמות שחקנים |
+| SCRIPTS-1 | טעינת קבצים מחזירה שגיאות | תוקן `project_scripts` → `casting_project_scripts` (3 מיקומים) |
 
 ### עדיין פתוחים — גבוה
 
 | ID | מיקום | תיאור |
 | --- | --- | --- |
-| ACTORS-1 | `app/page.tsx` | שאפל לא כולל שחקנים שנוספו דרך הטופס |
-| ACTORS-2 | `components/actor-card.tsx` | כפתורי "שיוך לתיקייה" ו"מועדפים" לא עובדים |
 | ADMIN-2 | `lib/actions/submission-actions.ts` | מיזוג שחקן קיים — לא מוגדר, צריך החלטת עיצוב |
-| PROJECTS-3 | `projects/[id]/page.tsx` | שם שחקן לא מופיע ליד תפקיד (כתוב "לא משובץ") |
-| SCRIPTS-1 | `components/projects/scripts-tab.tsx` | טעינת קבצים מחזירה שגיאות — לבדוק end-to-end עם parser |
 
 ### עדיין פתוחים — בינוני (UX + ניקויים)
 
@@ -238,10 +257,10 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 
 | # | מודול | סטטוס |
 | --- | --- | --- |
-| 1 | **Actors** — מאגר שחקנים גלובלי | ✅ פועל (עם באגים פתוחים) |
+| 1 | **Actors** — מאגר שחקנים גלובלי | ✅ פועל (רוב הבאגים תוקנו) |
 | 2 | **Casting Projects** — פרויקטים, תפקידים, שיבוץ | ✅ פועל (RLS תוקן, multi-actor תוקן) |
-| 3 | **Script Intelligence** — העלאה, חילוץ תפקידים, parser | 🟡 חלקי |
-| 4 | **Script Workspace** — מחליף את האקסל | ✅ הושלם בבראנצ' claude (מוזג חלקית ל-v0) |
+| 3 | **Script Intelligence** — העלאה, חילוץ תפקידים, parser | 🟡 מתקדם (PDF/DOCX tabular תמיכה חלקית) |
+| 4 | **Script Workspace** — מחליף את האקסל | ✅ הושלם ומוזג ל-main |
 
 ### מודול 4 — Script Workspace
 
@@ -249,31 +268,60 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 **UI:** טאב "סביבת עבודה" בדף פרויקט (`script-workspace-tab.tsx`).
 **טיפוסים:** `ScriptLine`, `ScriptLineInput`, `RecStatus` — מוגדרים ב-`lib/types.ts`.
 
-**מה הושלם (בבראנצ' claude/add-script-handling-IH2JC):**
+**מה הושלם (מוזג ל-main):**
 - ייבוא Excel עם auto-detect עמודות + מיפוי ידני
 - טבלת שורות עם עריכה inline (תרגום, rec_status, הערות)
 - צבעי תפקידים אוטומטיים
 - סינון לפי תפקיד ו-rec_status
 - שמירה ב-DB (batch של 500 בכל פעם)
-- actor_id בכל שורה — מוכן לשיוך מה-casting
+- actor_id בכל שורה + שיוך אוטומטי מה-casting
+- **ייצוא Excel RTL** — כותרות מודגשות, freeze pane, auto-filter, 8 עמודות כולל שם שחקן
+- בחירה מרובה של שורות + מחיקה bulk
+- Pagination
+- ספירת רפליקות לפי שחקן
 
 **חסר עדיין (לפיתוח עתידי):**
-- ייצוא Excel
-- שיוך שחקן אוטומטי מה-casting (actor_id נשמר אבל UI לא מציג את שם השחקן מה-casting)
 - עריכת timecode inline
+- תמיכה מלאה ב-PDF/DOCX לייבוא שורות (tabular extraction קיים, UI עדיין מבוסס Excel)
+
+### מודול 3 — Script Intelligence (Parser)
+
+**ארכיטקטורה (פב 2026):**
+```
+קובץ נכנס (Excel/PDF/DOCX/TXT)
+    ↓
+detectContentType() → "tabular" | "screenplay" | "hybrid"
+    ↓
+┌─ tabular ──→ extractStructuredData() → StructuredParseResult
+│                  ↓ autoDetectColumns() + parseScriptLinesFromStructuredData()
+└─ screenplay ─→ tokenizer → extractDialogueLines() → ScriptLineInput[]
+    ↓
+diagnostics + Zod validation → ScriptLineInput[] לDB
+```
+
+**מודולים שנוספו (claude/enhance-file-parser-C8JeT):**
+- `content-detector.ts` — זיהוי tabular/screenplay/hybrid
+- `structured-parser.ts` — פרסר גנרי לכל מקור טבלאי
+- `tokenizer.ts` — tokenizer מובנה לסקרינפליי
+- `diagnostics.ts` — structured diagnostics לכל שלב ב-pipeline
+- `schemas.ts` — Zod validation לכל הטיפוסים
+- `text-extractor.ts` — שודרג לתמיכה ב-PDF column clustering + DOCX tables
+
+**סטטוס תמיכה בפורמטים:**
+| פעולה | Excel | PDF | DOCX | TXT |
+| --- | --- | --- | --- | --- |
+| חילוץ תפקידים | ✅ | ✅ | ✅ | ✅ |
+| שורות לסביבת עבודה | ✅ מלא | 🟡 טבלאי חלקי | 🟡 טבלאי חלקי | 🟡 NAME: format |
 
 ### שלבי עבודה
 
 | שלב | ברנץ' | סטטוס |
 | --- | --- | --- |
-| א | `claude/fix-known-bugs` | 🟡 חלק תוקן, חלק פתוח (ראה §7) |
+| א | `claude/fix-known-bugs` | ✅ הושלם — רוב הבאגים תוקנו ומוזגו ל-main |
 | ב | `claude/fix-ux-consistency` | 🔴 טרם התחיל |
-| ג | `claude/add-script-handling-IH2JC` | ✅ הושלם — מוזג ל-v0 branch (קונפליקטים נפתרו) |
-
-### מיזוג claude → v0
-**קונפליקטים שנפתרו:**
-- `lib/types.ts` — נשמרו `castings: RoleCasting[]` מ-v0 + `ScriptLine`/`RecStatus`/`ScriptLineInput` מ-claude
-- `app/projects/[id]/page.tsx` — נשמר `grid-cols-4` מ-v0 + טאב "סביבת עבודה" + `ScriptWorkspaceTab` import מ-claude
+| ג | `claude/add-script-handling-IH2JC` | ✅ הושלם — מוזג ל-main |
+| ד | `claude/improve-model-4-workspace-C8vDl` | ✅ הושלם — ייצוא Excel, auto-assign, bulk delete, pagination |
+| ה | `claude/enhance-file-parser-C8JeT` | ✅ הושלם — PDF/DOCX tabular support, Zod validation, diagnostics |
 
 ---
 
@@ -305,6 +353,7 @@ pnpm test                # חייב: כל הטסטים עוברים
 
 ### תלויות חשובות
 - `xlsx` (SheetJS) — לקריאת קבצי Excel client-side (דינמי import בתוך `parseExcelFile`)
+- `zod` — runtime validation ב-parser pipeline (`lib/parser/schemas.ts`)
 
 ### כלי פיתוח
 - **Claude Code** — לוגיקה, TypeScript, DB, bug fixes
@@ -314,4 +363,4 @@ pnpm test                # חייב: כל הטסטים עוברים
 - שם: `[agent]/[תיאור]`
 - merge רק דרך PR
 - לא לדחוף ישירות ל-`main`
-- v0 branch נוכחי: `v0/amit-2370-1641a336`
+- v0 branch נוכחי: `v0/amit-2370-8b365cde`
