@@ -742,13 +742,34 @@ export async function extractText(file: File): Promise<{ text: string; warnings:
  *
  * Runs after extraction and before the regex parser to improve character
  * detection across common formatting variations:
- *  1. Remove repeated header/footer lines (page numbers, show title, etc.)
- *  2. Merge broken line-wraps (short lines that continue on the next line)
- *  3. Normalize whitespace: collapse multiple spaces/tabs to single space
- *  4. Normalize speaker-colon format: "NAME: dialogue" → "NAME\n    dialogue"
+ *  0. Unicode NFKC normalization (compatibility decomposition + canonical composition)
+ *     — merges visually-identical but differently-encoded chars (e.g. "ﬁ"→"fi", fullwidth→ASCII)
+ *  1. Strip Unicode bidi control characters (LRM, RLM, LRE, RLE, PDF, etc.)
+ *     — PDF and DOCX extractors often inject these; they break regex matching
+ *  2. Remove repeated header/footer lines (page numbers, show title, etc.)
+ *  3. Merge broken line-wraps (short lines that continue on the next line)
+ *  4. Normalize whitespace: collapse multiple spaces/tabs to single space
+ *  5. Normalize speaker-colon format: "NAME: dialogue" → "NAME\n    dialogue"
  */
 export function normalizeText(text: string): string {
-  const rawLines = text.split(/\r?\n/)
+  // ── Step 0: Unicode NFKC ──────────────────────────────────────────────────
+  // Converts compatibility characters to their canonical forms.
+  // "ﬁ" → "fi", "Ⅷ" → "VIII", fullwidth latin → ASCII, etc.
+  let normalized = text.normalize("NFKC")
+
+  // ── Step 1: Strip bidi controls ───────────────────────────────────────────
+  // These invisible characters are injected by PDF/DOCX extractors and break
+  // regex-based character-name matching.
+  // U+200B ZERO WIDTH SPACE, U+200C ZWNJ, U+200D ZWJ, U+200E LRM, U+200F RLM
+  // U+202A LRE, U+202B RLE, U+202C PDF, U+202D LRO, U+202E RLO
+  // U+2066 LRI, U+2067 RLI, U+2068 FSI, U+2069 PDI
+  // U+FEFF BOM
+  normalized = normalized.replace(
+    /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g,
+    ""
+  )
+
+  const rawLines = normalized.split(/\r?\n/)
 
   // ── Step 1: Remove repeated header/footer lines ───────────────────────────
   // Count how many times each trimmed non-empty line appears.

@@ -5,10 +5,13 @@
  * Combines text extraction, character parsing, and fuzzy matching.
  *
  * Pipeline architecture:
- * 1. Text extraction (from file format to plain text)
- * 2. Regex-based character parsing (primary, always runs)
- * 3. Fuzzy matching & grouping (deduplication)
- * 4. [Optional] Verification step via webhook (AI-based, pluggable)
+ *   file → extractText → normalizeText (NFKC + bidi strip + line merge)
+ *        → detectContentType
+ *        ├─ tabular:    extractTables → autoDetectColumns → parseStructuredData
+ *        ├─ screenplay: tokenize → parseScript (regex) → fuzzy match
+ *        └─ hybrid:     both paths
+ *        → zod validation (schemas.ts)
+ *        → DiagnosticCollector → ParsedScriptBundle
  *
  * The verification step is designed as a hook point for a future webhook
  * that can send the parsed results to an AI service for validation.
@@ -20,12 +23,17 @@ export * from "./fuzzy-matcher"
 export * from "./text-extractor"
 export * from "./structured-parser"
 export * from "./content-detector"
+export * from "./diagnostics"
+export * from "./schemas"
+export * from "./tokenizer"
 
 import { extractText, getFileInfo, normalizeText, extractTablesFromPDF, extractTablesFromDOCX } from "./text-extractor"
 import { parseScript, mergeParseResults, type ScriptParseResult, type ExtractedCharacter } from "./script-parser"
 import { findSimilarCharacters, generateSimilarityWarnings, groupSimilarCharacters, type CharacterGroup } from "./fuzzy-matcher"
 import { detectContentType, type ContentType } from "./content-detector"
 import { autoDetectColumns, parseScriptLinesFromStructuredData, type StructuredParseResult } from "./structured-parser"
+import { DiagnosticCollector, type ParseDiagnostic } from "./diagnostics"
+import { validateScriptLines } from "./schemas"
 import type { ScriptLineInput } from "@/lib/types"
 
 // ─── Pipeline Types ─────────────────────────────────────────────────────────
@@ -74,6 +82,13 @@ export interface ParsedScriptBundle {
    * The UI can use this to show the column-mapping dialog (same as Excel import).
    */
   structuredData?: StructuredParseResult[]
+
+  /**
+   * Structured diagnostics from all pipeline stages.
+   * Includes extraction warnings, validation errors, and normalization notes.
+   * Each diagnostic has severity, source, message, and optional line number.
+   */
+  diagnostics: ParseDiagnostic[]
 }
 
 // ─── Verification Hook Interface ────────────────────────────────────────────
@@ -189,6 +204,7 @@ export async function parseScriptFiles(
   const extractionWarnings: string[] = []
   const fileStatuses: ParsedScriptBundle["files"] = []
   const rawTexts: string[] = []
+  const collector = new DiagnosticCollector()
 
   // Accumulate structured data (tables) across all files
   const allStructuredData: StructuredParseResult[] = []
@@ -211,6 +227,9 @@ export async function parseScriptFiles(
     try {
       const { text: rawText, warnings } = await extractText(file)
       extractionWarnings.push(...warnings.map(w => `${file.name}: ${w}`))
+      for (const w of warnings) {
+        collector.warn("extraction", `${file.name}: ${w}`)
+      }
       rawTexts.push(rawText)
 
       const textLines = rawText.split(/\r?\n/)
@@ -259,6 +278,12 @@ export async function parseScriptFiles(
       const parseResult = parseScript(text)
       results.push(parseResult)
 
+      collector.info("content-detection", `${file.name}: זוהה כ-${detectedContentType}`)
+      if (allStructuredData.length > 0) {
+        collector.info("structured-parser",
+          `${file.name}: נמצאו ${allStructuredData.length} טבלאות עם ${allStructuredData.reduce((s, t) => s + t.totalRows, 0)} שורות`)
+      }
+
       fileStatuses.push({
         name: file.name,
         size: fileInfo.size,
@@ -280,10 +305,20 @@ export async function parseScriptFiles(
     const primary = allStructuredData[0]
     const detectedMapping = autoDetectColumns(primary.headers)
     if (detectedMapping.roleNameColumn) {
-      autoScriptLines = parseScriptLinesFromStructuredData(primary, {
+      const rawLines = parseScriptLinesFromStructuredData(primary, {
         ...detectedMapping,
         roleNameColumn: detectedMapping.roleNameColumn,
       })
+      // Validate extracted lines with zod
+      const validated = validateScriptLines(rawLines)
+      autoScriptLines = validated.data
+      collector.addAll(validated.diagnostics)
+      if (validated.rejected.length > 0) {
+        collector.warn(
+          "validation",
+          `${validated.rejected.length} שורות לא עברו אימות ונדחו`
+        )
+      }
     }
   }
 
@@ -340,6 +375,7 @@ export async function parseScriptFiles(
     contentType: detectedContentType,
     scriptLines: autoScriptLines,
     structuredData: allStructuredData.length > 0 ? allStructuredData : undefined,
+    diagnostics: collector.all(),
   }
 }
 

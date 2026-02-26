@@ -14,6 +14,8 @@
  */
 
 import type { ScriptLineInput, RecStatus } from "@/lib/types"
+import { validateScriptLines, validateColumnMapping } from "./schemas"
+import type { ParseDiagnostic } from "./diagnostics"
 
 // ─── Shared type ─────────────────────────────────────────────────────────────
 
@@ -236,4 +238,34 @@ export function extractDialogueLines(text: string): ScriptLineInput[] {
   }
 
   return lines
+}
+
+// ─── Validated versions ──────────────────────────────────────────────────────
+
+export interface ValidatedParseOutput {
+  lines: ScriptLineInput[]
+  diagnostics: ParseDiagnostic[]
+}
+
+/**
+ * Same as `parseScriptLinesFromStructuredData` but with zod validation.
+ * Invalid lines are reported in diagnostics instead of silently passed through.
+ */
+export function parseAndValidateStructuredData(
+  result: StructuredParseResult,
+  mapping: StructuredColumnMapping
+): ValidatedParseOutput {
+  // Validate the mapping against available headers
+  const mappingDiags = validateColumnMapping(mapping, result.headers)
+  if (mappingDiags.some((d) => d.severity === "error")) {
+    return { lines: [], diagnostics: mappingDiags }
+  }
+
+  const rawLines = parseScriptLinesFromStructuredData(result, mapping)
+  const validated = validateScriptLines(rawLines)
+
+  return {
+    lines: validated.data,
+    diagnostics: [...mappingDiags, ...validated.diagnostics],
+  }
 }
