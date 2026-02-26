@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Plus, Search, Calendar, Users, MoreVertical, FolderOpen, UserCircle, Film } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,7 @@ import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { useDebounce } from "@/hooks/use-debounce"
 
 export default function ProjectsPage() {
   const { toast } = useToast()
@@ -23,6 +24,7 @@ export default function ProjectsPage() {
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedProject, setSelectedProject] = useState<any | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const debouncedSearch = useDebounce(searchQuery, 300)
 
   useEffect(() => {
     loadProjects()
@@ -33,7 +35,7 @@ export default function ProjectsPage() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("casting_projects")
-        .select("*")
+        .select("id,name,status,notes,director,casting_director,project_date,created_at")
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -51,46 +53,38 @@ export default function ProjectsPage() {
     }
   }
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch =
-      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (project.notes && project.notes.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredProjects = useMemo(() => {
+    const query = debouncedSearch.toLowerCase()
+    return projects.filter((project) => {
+      const matchesSearch =
+        !query ||
+        project.name.toLowerCase().includes(query) ||
+        (project.notes && project.notes.toLowerCase().includes(query))
+      const matchesStatus = statusFilter === "all" || project.status === statusFilter
+      return matchesSearch && matchesStatus
+    })
+  }, [projects, debouncedSearch, statusFilter])
 
-    const matchesStatus = statusFilter === "all" || project.status === statusFilter
-
-    return matchesSearch && matchesStatus
-  })
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "not_started":
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20"
-      case "casting":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20"
-      case "voice_testing":
-        return "bg-cyan-500/10 text-cyan-500 border-cyan-500/20"
-      case "casted":
-        return "bg-purple-500/10 text-purple-500 border-purple-500/20"
-      case "recording":
-        return "bg-orange-500/10 text-orange-500 border-orange-500/20"
-      case "completed":
-        return "bg-green-500/10 text-green-500 border-green-500/20"
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20"
-    }
+  const STATUS_COLORS: Record<string, string> = {
+    not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+    casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    voice_testing: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+    casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+    recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+    completed: "bg-green-500/10 text-green-500 border-green-500/20",
   }
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "not_started": return "לא התחיל"
-      case "casting": return "בליהוק"
-      case "voice_testing": return "בדיקת קולות"
-      case "casted": return "ליהוק הושלם"
-      case "recording": return "בהקלטה"
-      case "completed": return "הושלם"
-      default: return status
-    }
+  const STATUS_LABELS: Record<string, string> = {
+    not_started: "לא התחיל",
+    casting: "בליהוק",
+    voice_testing: "בדיקת קולות",
+    casted: "ליהוק הושלם",
+    recording: "בהקלטה",
+    completed: "הושלם",
   }
+
+  const getStatusColor = (status: string) => STATUS_COLORS[status] ?? "bg-gray-500/10 text-gray-500 border-gray-500/20"
+  const getStatusLabel = (status: string) => STATUS_LABELS[status] ?? status
 
   const handleEditProject = (project: any) => {
     setSelectedProject(project)
@@ -100,14 +94,18 @@ export default function ProjectsPage() {
   const handleDuplicateProject = async (project: any) => {
     try {
       const supabase = createClient()
-      const { error } = await supabase.from("casting_projects").insert({
-        name: `${project.name} (עותק)`,
-        director: project.director,
-        casting_director: project.casting_director,
-        project_date: project.project_date,
-        status: "not_started",
-        notes: project.notes,
-      })
+      const { data: newProject, error } = await supabase
+        .from("casting_projects")
+        .insert({
+          name: `${project.name} (עותק)`,
+          director: project.director,
+          casting_director: project.casting_director,
+          project_date: project.project_date,
+          status: "not_started",
+          notes: project.notes,
+        })
+        .select("id,name,status,notes,director,casting_director,project_date,created_at")
+        .single()
 
       if (error) {
         console.error("[v0] Error duplicating project:", error)
@@ -116,7 +114,9 @@ export default function ProjectsPage() {
       }
 
       toast({ title: "הצלחה", description: "הפרויקט שוכפל בהצלחה" })
-      await loadProjects()
+      if (newProject) {
+        setProjects((prev) => [newProject, ...prev])
+      }
     } catch (error) {
       console.error("[v0] Error:", error)
       toast({ title: "שגיאה", description: "שגיאה בשכפול פרויקט", variant: "destructive" })
@@ -129,18 +129,20 @@ export default function ProjectsPage() {
 
   const handleDeleteProject = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק פרויקט זה?")) {
+      // Optimistic update
+      setProjects((prev) => prev.filter((p) => p.id !== id))
       try {
         const supabase = createClient()
         const { error } = await supabase.from("casting_projects").delete().eq("id", id)
 
         if (error) {
           console.error("[v0] Error deleting project:", error)
-          return
+          // Revert on failure
+          await loadProjects()
         }
-
-        await loadProjects()
       } catch (error) {
         console.error("[v0] Error:", error)
+        await loadProjects()
       }
     }
   }

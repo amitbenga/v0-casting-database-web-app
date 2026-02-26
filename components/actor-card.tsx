@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect, memo } from "react"
 import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
@@ -24,7 +24,7 @@ interface ActorCardProps {
   onEdit?: (actor: Actor) => void
 }
 
-export function ActorCard({
+export const ActorCard = memo(function ActorCard({
   actor,
   isSelected,
   isFavorited,
@@ -39,6 +39,16 @@ export function ActorCard({
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const router = useRouter()
+
+  // Cleanup audio on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
 
   const currentYear = new Date().getFullYear()
   const age = currentYear - (actor.birth_year ?? 0)
@@ -349,4 +359,4 @@ export function ActorCard({
       </div>
     </Card>
   )
-}
+})
