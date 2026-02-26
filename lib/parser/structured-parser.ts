@@ -83,6 +83,58 @@ export function autoDetectColumns(
   }
 }
 
+// ─── Confidence-scored auto-detect ────────────────────────────────────────────
+
+export interface ColumnDetectionResult {
+  /** The detected mapping (same as autoDetectColumns output) */
+  mapping: Partial<StructuredColumnMapping>
+  /** Confidence score 0–100 */
+  confidence: number
+  /** How many fields were matched */
+  matchedCount: number
+  /** Which fields were detected */
+  detectedFields: string[]
+}
+
+/**
+ * Same as autoDetectColumns but also returns a confidence score (0–100).
+ *
+ * Scoring weights:
+ *   roleName     = 40  (required — without it the import is useless)
+ *   sourceText   = 20  (dialogue column)
+ *   timecode     = 15
+ *   translation  = 10
+ *   recStatus    = 10
+ *   notes        = 5
+ *
+ * Example: roleNameColumn + sourceTextColumn + timecodeColumn → 40+20+15 = 75
+ */
+export function autoDetectColumnsWithConfidence(
+  headers: string[]
+): ColumnDetectionResult {
+  if (headers.length === 0) {
+    return { mapping: { roleNameColumn: "" }, confidence: 0, matchedCount: 0, detectedFields: [] }
+  }
+
+  const mapping = autoDetectColumns(headers)
+  const detectedFields: string[] = []
+  let score = 0
+
+  if (mapping.roleNameColumn)   { score += 40; detectedFields.push("roleName") }
+  if (mapping.sourceTextColumn) { score += 20; detectedFields.push("sourceText") }
+  if (mapping.timecodeColumn)   { score += 15; detectedFields.push("timecode") }
+  if (mapping.translationColumn){ score += 10; detectedFields.push("translation") }
+  if (mapping.recStatusColumn)  { score += 10; detectedFields.push("recStatus") }
+  if (mapping.notesColumn)      { score += 5;  detectedFields.push("notes") }
+
+  return {
+    mapping,
+    confidence: score,
+    matchedCount: detectedFields.length,
+    detectedFields,
+  }
+}
+
 // ─── Core conversion ──────────────────────────────────────────────────────────
 
 /**
