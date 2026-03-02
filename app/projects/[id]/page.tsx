@@ -212,9 +212,8 @@ export default function ProjectDetailPage() {
                   <DropdownMenuItem className="md:hidden" onClick={() => setShowEditProjectDialog(true)}>
                     ערוך פרויקט
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportProject}>
-                    ייצא פרויקט
-                  </DropdownMenuItem>
+                  {/* ייצא פרויקט — temporarily hidden until feature is complete */}
+                  {/* <DropdownMenuItem onClick={exportProject}>ייצא פרויקט</DropdownMenuItem> */}
                   <DropdownMenuItem onClick={duplicateProject}>
                     שכפל
                   </DropdownMenuItem>

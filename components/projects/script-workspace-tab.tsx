@@ -787,7 +787,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Badge variant="secondary" className={`text-xs max-w-full truncate block ${getRoleColor(line.role_name, roleIndex)}`}>
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs max-w-full truncate block cursor-pointer hover:opacity-75 transition-opacity ${getRoleColor(line.role_name, roleIndex)}`}
+                              onClick={() => setFilterRole(filterRole === line.role_name ? "__all__" : line.role_name)}
+                              title={filterRole === line.role_name ? "בטל סינון" : `סנן לפי ${line.role_name}`}
+                            >
                               {line.role_name}
                             </Badge>
                           </TooltipTrigger>

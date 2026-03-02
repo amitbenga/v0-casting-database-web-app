@@ -22,7 +22,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus, X, RefreshCw, FileText, Play, Loader2, Trash2, AlertTriangle } from "lucide-react"
+import { UserPlus, X, RefreshCw, FileText, Play, Loader2, AlertTriangle } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
 import {
   assignActorToRole,
@@ -52,6 +52,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   const [isAssigning, setIsAssigning] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [inlineExpanded, setInlineExpanded] = useState(false)
   const [notesSheetOpen, setNotesSheetOpen] = useState(false)
   const [localNotes, setLocalNotes] = useState(role.casting?.notes || "")
   const [localReplicasPlanned, setLocalReplicasPlanned] = useState(
@@ -190,17 +191,78 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
     <Card className={`p-4 ${isChild ? "mr-6 border-r-4 border-r-muted" : ""}`}>
       <div className="flex items-center justify-between gap-4">
         {/* Role Info */}
-        <div className="flex items-center gap-4 min-w-0 flex-1">
+        <div className="flex items-start gap-4 min-w-0 flex-1">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            {/* Clickable role name */}
+            <button
+              type="button"
+              onClick={() => setInlineExpanded((prev) => !prev)}
+              className="flex items-center gap-2 text-right cursor-pointer hover:opacity-70 transition-opacity"
+            >
               <h4 className="font-medium truncate">{role.role_name}</h4>
               {role.source === "script" && (
                 <Badge variant="outline" className="text-xs">מתסריט</Badge>
               )}
-            </div>
-            <p className="text-sm text-muted-foreground">
+            </button>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {role.replicas_count} רפליקות
             </p>
+
+            {/* Inline expand area — shows when role name is clicked */}
+            {inlineExpanded && (
+              <div className="mt-2">
+                {role.casting ? (
+                  /* Has casting: show actor names + action buttons */
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-foreground">
+                      {role.casting.actor?.full_name || "שחקן"}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => { setShowSearch(true); setInlineExpanded(false) }}
+                        disabled={isUpdating}
+                      >
+                        שבץ
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => { handleDeleteRole(); setInlineExpanded(false) }}
+                        disabled={isUpdating || role.source !== "manual"}
+                      >
+                        מחק
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  /* No casting: show action buttons */
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => { setShowSearch(true); setInlineExpanded(false) }}
+                      disabled={isAssigning}
+                    >
+                      שבץ
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-destructive hover:text-destructive"
+                      onClick={() => { handleDeleteRole(); setInlineExpanded(false) }}
+                      disabled={isUpdating || role.source !== "manual"}
+                    >
+                      מחק
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -341,32 +403,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
                 <X className="h-4 w-4" />
               </Button>
             </div>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSearch(true)}
-              >
-                <UserPlus className="h-4 w-4 ml-2" />
-                שיבוץ שחקן
-              </Button>
-              
-              {/* Delete role button (only for manual roles without casting) */}
-              {role.source === "manual" && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={handleDeleteRole}
-                  disabled={isUpdating}
-                  className="text-destructive hover:text-destructive"
-                  title="מחק תפקיד"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </>
-          )}
+          ) : null}
         </div>
       </div>
 
