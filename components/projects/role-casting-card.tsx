@@ -208,6 +208,13 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
               {role.replicas_count} רפליקות
             </p>
 
+            {/* Actor names shown by default when assigned and not expanded */}
+            {!inlineExpanded && role.casting && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {role.casting.actor?.full_name || "שחקן"}
+              </p>
+            )}
+
             {/* Inline expand area — shows when role name is clicked */}
             {inlineExpanded && (
               <div className="mt-2">
