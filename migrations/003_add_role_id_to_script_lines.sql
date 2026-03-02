@@ -12,10 +12,10 @@
 -- STEP 1: Add role_id (nullable FK → project_roles.id)
 -- -------------------------------------------------------
 -- Safe to run on existing data: NULL default means no rows are broken.
--- project_roles.id is TEXT PRIMARY KEY (see scripts/001_create_tables.sql).
+-- project_roles.id is UUID PRIMARY KEY.
 
 ALTER TABLE script_lines
-  ADD COLUMN IF NOT EXISTS role_id TEXT NULL
+  ADD COLUMN IF NOT EXISTS role_id UUID NULL
     REFERENCES project_roles(id) ON DELETE SET NULL;
 
 -- -------------------------------------------------------
