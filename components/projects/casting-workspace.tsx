@@ -166,7 +166,7 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
   const handleUnassign = async () => {
     setIsUpdating(true)
     try {
-      const result = await unassignActorFromRole(role.id)
+      const result = await unassignActorFromRole(role.id, role.casting?.actor_id)
       if (result.success) {
         toast({ title: `${role.role_name} - שיוך בוטל` })
         onUpdate()

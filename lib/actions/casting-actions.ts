@@ -213,7 +213,7 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
         status: "מלוהק",
         updated_at: new Date().toISOString()
       }, {
-        onConflict: "role_id"
+        onConflict: "role_id,actor_id"
       })
 
     if (error) throw error
@@ -228,9 +228,10 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
 
 /**
  * Unassigns the actor from a role.
+ * Provide actorId to unassign a specific actor (required when multiple actors share a role).
  * If the casting was "מלוהק", also clears script_lines assignments for that role.
  */
-export async function unassignActorFromRole(roleId: string): Promise<CastingActionResult> {
+export async function unassignActorFromRole(roleId: string, actorId?: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
@@ -241,27 +242,31 @@ export async function unassignActorFromRole(roleId: string): Promise<CastingActi
       .single()
 
     // Fetch casting to check if it was "מלוהק" and get actor_id before deleting
-    const { data: casting } = await supabase
+    const castingQuery = supabase
       .from("role_castings")
       .select("status, actor_id")
       .eq("role_id", roleId)
-      .maybeSingle()
+    if (actorId) castingQuery.eq("actor_id", actorId)
+    const { data: casting } = await castingQuery.maybeSingle()
 
-    const { error } = await supabase
+    const deleteQuery = supabase
       .from("role_castings")
       .delete()
       .eq("role_id", roleId)
+    if (actorId) deleteQuery.eq("actor_id", actorId)
+    const { error } = await deleteQuery
 
     if (error) throw error
 
     // If actor was "מלוהק", clear their script_lines assignments
-    if (role && casting?.status === "מלוהק" && casting.actor_id) {
+    const targetActorId = actorId || casting?.actor_id
+    if (role && casting?.status === "מלוהק" && targetActorId) {
       await supabase
         .from("script_lines")
         .update({ actor_id: null })
         .eq("project_id", role.project_id)
         .eq("role_name", role.role_name)
-        .eq("actor_id", casting.actor_id)
+        .eq("actor_id", targetActorId)
     }
 
     if (role) revalidatePath(`/projects/${role.project_id}`)
@@ -317,11 +322,11 @@ export async function updateCastingStatus(roleId: string, status: CastingStatus)
       }
     }
 
-    // Update the casting status
+    // Update the casting status (use casting.id to target this specific casting record)
     const { error } = await supabase
       .from("role_castings")
       .update({ status, updated_at: new Date().toISOString() })
-      .eq("role_id", roleId)
+      .eq("id", casting.id)
 
     if (error) throw error
 

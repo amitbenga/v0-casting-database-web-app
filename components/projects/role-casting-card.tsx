@@ -96,7 +96,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   const handleUnassign = async () => {
     setIsUpdating(true)
     try {
-      const result = await unassignActorFromRole(role.id)
+      const result = await unassignActorFromRole(role.id, role.casting?.actor_id)
       if (result.success) {
         toast({
           title: "השיבוץ בוטל",
