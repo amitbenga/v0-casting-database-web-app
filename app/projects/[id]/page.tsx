@@ -57,15 +57,51 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState("roles")
   const [showEditProjectDialog, setShowEditProjectDialog] = useState(false)
 
-  // Load project and stats
+  // Refresh stats only — no loading spinner, safe to call from child components
+  // without causing CastingWorkspace to unmount and re-trigger a fetch loop.
+  const refreshStats = useCallback(async () => {
+    if (!projectId) return
+    try {
+      const supabase = createBrowserClient()
+
+      const [rolesResult, scriptsResult] = await Promise.all([
+        supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
+        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
+      ])
+
+      // Count distinct actors via role IDs (avoids relying on role_castings.project_id)
+      const { data: roles } = await supabase
+        .from("project_roles")
+        .select("id")
+        .eq("project_id", projectId)
+      const roleIds = (roles || []).map((r: { id: string }) => r.id)
+      let actorsCount = 0
+      if (roleIds.length > 0) {
+        const { data: castings } = await supabase
+          .from("role_castings")
+          .select("actor_id")
+          .in("role_id", roleIds)
+        actorsCount = castings ? new Set(castings.map((c: { actor_id: string }) => c.actor_id)).size : 0
+      }
+
+      setStats({
+        rolesCount: rolesResult.count || 0,
+        actorsCount,
+        scriptsCount: scriptsResult.count || 0,
+      })
+    } catch (error) {
+      console.error("Error refreshing stats:", error)
+    }
+  }, [projectId])
+
+  // Full data load — shows loading spinner, used only on initial mount
   const loadData = useCallback(async () => {
     if (!projectId) return
-    
+
     setLoading(true)
     try {
       const supabase = createBrowserClient()
-      
-      // Load project
+
       const { data: projectData, error: projectError } = await supabase
         .from("casting_projects")
         .select("id, name, status, notes, director, casting_director, project_date, created_at, updated_at")
@@ -75,26 +111,13 @@ export default function ProjectDetailPage() {
       if (projectError) throw projectError
       setProject(projectData)
 
-      // Load stats
-      const [rolesResult, scriptsResult, castingsResult] = await Promise.all([
-        supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("role_castings").select("actor_id").eq("project_id", projectId),
-      ])
-
-      const actorsCount = castingsResult.data ? new Set(castingsResult.data.map(c => c.actor_id)).size : 0
-
-      setStats({
-        rolesCount: rolesResult.count || 0,
-        actorsCount: actorsCount,
-        scriptsCount: scriptsResult.count || 0,
-      })
+      await refreshStats()
     } catch (error) {
       console.error("Error loading project data:", error)
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, refreshStats])
 
   useEffect(() => {
     loadData()
@@ -327,7 +350,7 @@ export default function ProjectDetailPage() {
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <CastingWorkspace projectId={project.id} onCastingChange={loadData} />
+                <CastingWorkspace projectId={project.id} onCastingChange={refreshStats} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">
