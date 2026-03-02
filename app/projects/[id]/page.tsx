@@ -98,7 +98,8 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   // Export project
   async function exportProject() {
