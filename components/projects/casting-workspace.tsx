@@ -337,9 +337,10 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
     }
   }, [projectId, onCastingChange])
 
-  useEffect(() => {
-    loadRoles()
-  }, [loadRoles])
+useEffect(() => {
+  loadRoles()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   // Flatten all roles (parents + children) into a single flat list
   const flatRoles = useMemo(() => {

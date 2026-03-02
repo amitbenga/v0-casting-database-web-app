@@ -110,7 +110,8 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
 
   useEffect(() => {
     loadScripts()
-  }, [loadScripts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
