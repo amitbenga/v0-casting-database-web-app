@@ -35,7 +35,7 @@ BEGIN
   IF NOT fk_exists THEN
     RAISE NOTICE 'No FK found on script_lines(role_id) — adding constraint now.';
     ALTER TABLE script_lines
-      ADD CONSTRAINT fk_script_lines_role_id
+      ADD CONSTRAINT script_lines_role_id_fkey
       FOREIGN KEY (role_id)
       REFERENCES project_roles(id)
       ON DELETE SET NULL;

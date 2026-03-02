@@ -17,9 +17,6 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Allow self-signed certs (Supabase / sandbox environment)
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const { Client } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
