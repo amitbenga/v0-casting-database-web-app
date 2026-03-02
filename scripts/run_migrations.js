@@ -22,7 +22,12 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const { Client } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = path.resolve(__dirname, "../migrations");
+
+// When the sandbox copies the script to /home, __dirname becomes /home/scripts.
+// Fall back to the known absolute project path in that case.
+const MIGRATIONS_DIR = fs.existsSync(path.resolve(__dirname, "../migrations"))
+  ? path.resolve(__dirname, "../migrations")
+  : "/vercel/share/v0-project/migrations";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
