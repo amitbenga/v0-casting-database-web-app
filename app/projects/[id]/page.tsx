@@ -50,6 +50,8 @@ export default function ProjectDetailPage() {
   const params = useParams()
   const { toast } = useToast()
   const projectId = typeof params?.id === "string" ? params.id : null
+  
+  console.log("[v0] Page render - params:", params, "projectId:", projectId)
 
   const [project, setProject] = useState<Project | null>(null)
   const [stats, setStats] = useState<ProjectStats>({ rolesCount: 0, actorsCount: 0, scriptsCount: 0 })
@@ -59,11 +61,16 @@ export default function ProjectDetailPage() {
 
   // Load project and stats
   const loadData = useCallback(async () => {
-    if (!projectId) return
+    console.log("[v0] loadData called, projectId:", projectId)
+    if (!projectId) {
+      console.log("[v0] No projectId, returning early")
+      return
+    }
     
     setLoading(true)
     try {
       const supabase = createBrowserClient()
+      console.log("[v0] Fetching project from casting_projects...")
       
       // Load project
       const { data: projectData, error: projectError } = await supabase
@@ -72,6 +79,7 @@ export default function ProjectDetailPage() {
         .eq("id", projectId)
         .single()
 
+      console.log("[v0] Project query result:", { projectData, projectError })
       if (projectError) throw projectError
       setProject(projectData)
 
@@ -90,8 +98,9 @@ export default function ProjectDetailPage() {
         scriptsCount: scriptsResult.count || 0,
       })
     } catch (error) {
-      console.error("Error loading project data:", error)
+      console.error("[v0] Error loading project data:", error)
     } finally {
+      console.log("[v0] loadData finished, setting loading to false")
       setLoading(false)
     }
   }, [projectId])
