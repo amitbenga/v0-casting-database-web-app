@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,8 @@ import {
   Info,
   Link,
   Unlink,
+  Pencil,
+  X,
 } from "lucide-react"
 import type { ParsedScriptBundle, ExtractedCharacter } from "@/lib/parser"
 import { applyUserEdits, convertToDbFormat, type UserEdit } from "@/lib/parser"
@@ -78,6 +80,18 @@ export function ScriptPreviewDialog({
   const [showWarnings, setShowWarnings] = useState(true)
   const [isApplying, setIsApplying] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  // Inline rename state: maps normalizedName → current edit value (undefined = not editing)
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editingValue, setEditingValue] = useState("")
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingName !== null && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [editingName])
 
   // Filter characters
   const filteredCharacters = useMemo(() => {
@@ -176,6 +190,66 @@ export function ScriptPreviewDialog({
   const handleDeleteCharacter = (name: string) => {
     const edit: UserEdit = { type: "delete", character: name }
     setEditedResult(applyUserEdits(editedResult, [edit]))
+  }
+
+  const startRename = (char: { normalizedName: string; name: string }) => {
+    setEditingName(char.normalizedName)
+    setEditingValue(char.name)
+  }
+
+  const cancelRename = () => {
+    setEditingName(null)
+    setEditingValue("")
+  }
+
+  const confirmRename = () => {
+    if (!editingName) return
+    const trimmed = editingValue.trim()
+    if (!trimmed) {
+      cancelRename()
+      return
+    }
+
+    const original = editedResult.parseResult.characters.find(
+      c => c.normalizedName === editingName
+    )
+    if (original && trimmed !== original.name) {
+      const edit: UserEdit = {
+        type: "rename",
+        character: editingName,
+        newName: trimmed,
+      }
+      const updated = applyUserEdits(editedResult, [edit])
+      setEditedResult(updated)
+
+      // If this character was selected, update the selection key to the new normalized name
+      if (selectedCharacters.has(editingName)) {
+        setSelectedCharacters(prev => {
+          const next = new Set(prev)
+          next.delete(editingName)
+          next.add(trimmed.toUpperCase())
+          return next
+        })
+      }
+
+      toast({
+        title: "שם התפקיד עודכן",
+        description: `"${original.name}" שונה ל-"${trimmed}"`,
+      })
+    }
+
+    setEditingName(null)
+    setEditingValue("")
+  }
+
+  const handleRenameKeyDown = (e: { key: string; preventDefault: () => void }) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      confirmRename()
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      cancelRename()
+    }
   }
 
   const toggleGroup = (name: string) => {
@@ -405,7 +479,7 @@ export function ScriptPreviewDialog({
                   <TableHead className="text-right">רפליקות</TableHead>
                   <TableHead className="text-right">וריאנטים</TableHead>
                   <TableHead className="text-right">סוג</TableHead>
-                  <TableHead className="text-right w-[80px]">פעולות</TableHead>
+                  <TableHead className="text-right w-[100px]">פעולות</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -427,33 +501,69 @@ export function ScriptPreviewDialog({
                         />
                       </TableCell>
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <span>{char.name}</span>
-                          {hasConflict && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  תפקיד זה מופיע עם תפקידים אחרים - לא ניתן לשבץ אותם לאותו שחקן
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          {char.parentName && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Info className="h-4 w-4 text-blue-500" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  וריאנט של: {char.parentName}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
+                        {editingName === char.normalizedName ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              ref={renameInputRef}
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onKeyDown={handleRenameKeyDown}
+                              onBlur={confirmRename}
+                              className="h-7 text-sm px-2 min-w-[120px]"
+                              dir="auto"
+                            />
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-green-600 hover:text-green-700 flex-shrink-0"
+                              onMouseDown={(e) => { e.preventDefault(); confirmRename() }}
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                              onMouseDown={(e) => { e.preventDefault(); cancelRename() }}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="cursor-pointer hover:text-primary transition-colors"
+                              onDoubleClick={() => startRename(char)}
+                              title="לחץ פעמיים לעריכת שם"
+                            >
+                              {char.name}
+                            </span>
+                            {hasConflict && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    תפקיד זה מופיע עם תפקידים אחרים - לא ניתן לשבץ אותם לאותו שחקן
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {char.parentName && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Info className="h-4 w-4 text-blue-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    וריאנט של: {char.parentName}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>{char.replicaCount.toLocaleString()}</TableCell>
                       <TableCell>
@@ -483,14 +593,28 @@ export function ScriptPreviewDialog({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteCharacter(char.normalizedName)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            onClick={() => startRename(char)}
+                            disabled={editingName !== null}
+                            title="שנה שם"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteCharacter(char.normalizedName)}
+                            disabled={editingName !== null}
+                            title="מחק"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
