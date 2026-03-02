@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -320,6 +320,9 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
   const [isCreatingRole, setIsCreatingRole] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
+  const onCastingChangeRef = useRef(onCastingChange)
+  useEffect(() => { onCastingChangeRef.current = onCastingChange }, [onCastingChange])
+
   const loadRoles = useCallback(async () => {
     try {
       setLoading(true)
@@ -327,15 +330,15 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
-      // Notify parent to refresh header actor count
-      onCastingChange?.()
+      // Notify parent to refresh header actor count (via stable ref — avoids render loop)
+      onCastingChangeRef.current?.()
     } catch (err) {
       setError("שגיאה בטעינת תפקידים")
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }, [projectId, onCastingChange])
+  }, [projectId])
 
 useEffect(() => {
   loadRoles()
