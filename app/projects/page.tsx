@@ -15,6 +15,32 @@ import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
 
+const STATUS_COLORS: Record<string, string> = {
+  not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  voice_testing: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+  casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  completed: "bg-green-500/10 text-green-500 border-green-500/20",
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  not_started: "לא התחיל",
+  casting: "בליהוק",
+  voice_testing: "בדיקת קולות",
+  casted: "ליהוק הושלם",
+  recording: "בהקלטה",
+  completed: "הושלם",
+}
+
+function getStatusColor(status: string) {
+  return STATUS_COLORS[status] ?? "bg-gray-500/10 text-gray-500 border-gray-500/20"
+}
+
+function getStatusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status
+}
+
 export default function ProjectsPage() {
   const { toast } = useToast()
   const [projects, setProjects] = useState<any[]>([])
@@ -64,27 +90,6 @@ export default function ProjectsPage() {
       return matchesSearch && matchesStatus
     })
   }, [projects, debouncedSearch, statusFilter])
-
-  const STATUS_COLORS: Record<string, string> = {
-    not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-    casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    voice_testing: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
-    casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-    completed: "bg-green-500/10 text-green-500 border-green-500/20",
-  }
-
-  const STATUS_LABELS: Record<string, string> = {
-    not_started: "לא התחיל",
-    casting: "בליהוק",
-    voice_testing: "בדיקת קולות",
-    casted: "ליהוק הושלם",
-    recording: "בהקלטה",
-    completed: "הושלם",
-  }
-
-  const getStatusColor = (status: string) => STATUS_COLORS[status] ?? "bg-gray-500/10 text-gray-500 border-gray-500/20"
-  const getStatusLabel = (status: string) => STATUS_LABELS[status] ?? status
 
   const handleEditProject = (project: any) => {
     setSelectedProject(project)

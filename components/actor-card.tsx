@@ -150,6 +150,8 @@ export const ActorCard = memo(function ActorCard({
           <img
             src={actor.image_url || "/placeholder.svg"}
             alt={actor.full_name}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
