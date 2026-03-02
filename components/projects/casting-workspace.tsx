@@ -327,7 +327,22 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
-      // Notify parent to refresh header actor count
+    } catch (err) {
+      setError("שגיאה בטעינת תפקידים")
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
+
+  // Refresh after mutations — also notifies parent to update header stats
+  const refreshRoles = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await getProjectRolesWithCasting(projectId)
+      setRoles(response.roles)
+      setConflicts(response.conflicts)
       onCastingChange?.()
     } catch (err) {
       setError("שגיאה בטעינת תפקידים")
@@ -476,7 +491,7 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
 
       setShowAssignSearch(false)
       clearSelection()
-      loadRoles()
+      refreshRoles()
     } finally {
       setIsBulkAssigning(false)
     }
@@ -501,7 +516,7 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
 
       toast({ title: `${deleted} תפקידים נמחקו` })
       clearSelection()
-      loadRoles()
+      refreshRoles()
     } finally {
       setIsBulkDeleting(false)
     }
@@ -517,7 +532,7 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
         setNewRoleName("")
         setNewRoleReplicas(0)
         setShowAddRole(false)
-        loadRoles()
+        refreshRoles()
       } else {
         toast({ title: "שגיאה", description: result.error, variant: "destructive" })
       }
@@ -797,7 +812,7 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
                 roleLookup={roleLookup}
                 isSelected={selectedRoleIds.has(role.id)}
                 onRoleNameClick={handleRoleNameClick}
-                onUpdate={loadRoles}
+                onUpdate={refreshRoles}
               />
             ))}
           </div>
