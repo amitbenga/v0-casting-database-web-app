@@ -138,7 +138,7 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
 
     // 4. Mark script as applied
     await supabase
-      .from("casting_project_scripts")
+      .from("project_scripts")
       .update({
         applied_at: new Date().toISOString()
       })

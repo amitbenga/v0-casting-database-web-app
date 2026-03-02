@@ -225,8 +225,8 @@ The application uses **Supabase** (PostgreSQL) as its backend database. Understa
 | `favorites`                 | Tracks user's favorite actors                            | References `actors`, `user_profiles`       |
 | `folders`                   | Custom actor folders                                     | Referenced by `folder_actors`              |
 | `folder_actors`             | Many-to-many relationship between folders and actors     | References `folders`, `actors`             |
-| `casting_project_scripts`   | Stores uploaded script files and parsing status          | References `casting_projects`              |
-| `script_extracted_roles`    | Roles extracted from scripts (before applying)           | References `casting_project_scripts`       |
+| `project_scripts`           | Stores uploaded script files and parsing status          | References `casting_projects`              |
+| `script_extracted_roles`    | Roles extracted from scripts (before applying)           | References `project_scripts`               |
 | `script_casting_warnings`   | Detected conflicts between role assignments              | References `project_roles`                 |
 
 ### Important Schema Notes

@@ -211,7 +211,7 @@ export async function saveScriptRecord(
 
   try {
     const { data, error } = await supabase
-      .from("casting_project_scripts")
+      .from("project_scripts")
       .insert({
         project_id: projectId,
         file_name: fileName,

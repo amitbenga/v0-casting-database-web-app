@@ -30,7 +30,7 @@ and assigning actors to lines based on role casting.
 - **Added from claude:** `RecStatus`, `ScriptLine`, `ScriptLineInput` types
 
 ### `app/projects/[id]/page.tsx`
-- **Kept from v0:** `grid-cols-4` tab layout (was `grid-cols-3` in claude), `casting_project_scripts` query
+- **Kept from v0:** `grid-cols-4` tab layout (was `grid-cols-3` in claude), `project_scripts` query
 - **Added from claude:** New "workspace" tab trigger and `<ScriptWorkspaceTab>` content panel
 
 ---

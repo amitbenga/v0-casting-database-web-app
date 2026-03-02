@@ -159,7 +159,7 @@ lib/actions/
 | `casting_projects` | כולל director, casting_director, project_date (נוספו ב-017) |
 | `project_roles` | תפקידים בפרויקט |
 | `role_castings` | UNIQUE(role_id, actor_id) — מרובי שחקנים לתפקיד (003) |
-| `casting_project_scripts` | תסריטים מעובדים |
+| `project_scripts` | תסריטים מעובדים |
 | `script_lines` | שורות סקריפט לסביבת עבודה (025) — ראה פרטים מלאים למטה |
 | `folders` / `folder_actors` | תיקיות שחקנים |
 | `user_profiles` | פרופילי admin (018) |
@@ -186,7 +186,7 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 
 ### שמות שדות חשובים (לא להתבלבל)
 - `folder_actors` (לא `actor_folders`)
-- `casting_project_scripts` (לא `project_scripts`)
+- `project_scripts` (לא `project_scripts`)
 - `script_casting_warnings` → `role_1_name`/`role_2_name` (לא `role_id_a`/`role_id_b`)
 - `actors.vat_status` → `"ptor"` | `"murshe"` | `"artist_salary"`
 
@@ -217,7 +217,7 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 | ACTORS-1 | שאפל לא כולל שחקנים חדשים | `revalidateFirstPage: true` ב-SWR |
 | ACTORS-2 | כפתור "מועדפים" לא עבד | כפתור מחובר ל-`handleAddToFolder` |
 | PROJECTS-3 | שם שחקן לא הופיע | תוקן `getProjectRolesWithCasting` select לכלול שמות שחקנים |
-| SCRIPTS-1 | טעינת קבצים מחזירה שגיאות | תוקן `project_scripts` → `casting_project_scripts` (3 מיקומים) |
+| SCRIPTS-1 | טעינת קבצים מחזירה שגיאות | תוקן `project_scripts` → `project_scripts` (3 מיקומים) |
 
 ### עדיין פתוחים — גבוה
 
@@ -311,7 +311,7 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 | פעולה | Excel | PDF | DOCX | TXT |
 | --- | --- | --- | --- | --- |
 | חילוץ תפקידים | ✅ | ✅ | ✅ | ✅ |
-| שורות לסביבת עבודה | ✅ מלא | 🟡 טבלאי חלקי | 🟡 טבלאי חלקי | 🟡 NAME: format |
+| שורות לסביבת ��בודה | ✅ מלא | 🟡 טבלאי חלקי | 🟡 טבלאי חלקי | 🟡 NAME: format |
 
 ### שלבי עבודה
 

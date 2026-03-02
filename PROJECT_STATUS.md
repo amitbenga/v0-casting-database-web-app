@@ -142,7 +142,7 @@
 | `casting_projects` | פרויקטים | כולל `director`, `casting_director`, `project_date` |
 | `project_roles` | תפקידים בפרויקט | Source of Truth לרפליקות |
 | `role_castings` | שיבוץ שחקן לתפקיד | `UNIQUE(role_id, actor_id)` — מרובי שחקנים |
-| `casting_project_scripts` | תסריטים מעובדים | |
+| `project_scripts` | תסריטים מעובדים | |
 | `script_lines` | שורות סקריפט לסביבת עבודה | migration 025 |
 | `folders` / `folder_actors` | תיקיות שחקנים | |
 | `user_profiles` | פרופילי admin | |
@@ -169,7 +169,7 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 
 ### שמות שדות חשובים (לא להתבלבל!)
 - `folder_actors` (לא `actor_folders`)
-- `casting_project_scripts` (לא `project_scripts`)
+- `project_scripts` (לא `project_scripts`)
 - `actors.vat_status` → `"ptor"` | `"murshe"` | `"artist_salary"`
 - `actors.id` הוא `text`, לא UUID
 
@@ -188,14 +188,14 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 | יצירת תיקייה נכשלה (FOLDERS-1) | נוצר `lib/actions/folder-actions.ts` — Server Action |
 | שאפל לא כלל שחקנים חדשים (ACTORS-1) | `revalidateFirstPage: true` ב-SWR |
 | שם שחקן לא הופיע בתפקיד (PROJECTS-3) | תוקן select ב-`getProjectRolesWithCasting` |
-| `project_scripts` שגיאות (SCRIPTS-1) | תוקן ל-`casting_project_scripts` ב-3 מיקומים |
+| `project_scripts` שגיאות (SCRIPTS-1) | תוקן ל-`project_scripts` ב-3 מיקומים |
 
 ### שלב ג — Script Handling (`claude/add-script-handling-IH2JC`)
 **מוזג ל-main — פב 2026**
 
 - העלאת תסריטים + parsing
 - חילוץ תפקידים אוטומטי
-- אחסון ב-`casting_project_scripts`
+- אחסון ב-`project_scripts`
 
 ### שלב ד — Script Workspace (`claude/improve-model-4-workspace-C8vDl`)
 **מוזג ל-main — פב 2026**
