@@ -179,7 +179,7 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
   const handleStatusChange = async (newStatus: CastingStatus) => {
     setIsUpdating(true)
     try {
-      const result = await updateCastingStatus(role.id, newStatus)
+      const result = await updateCastingStatus(role.id, role.casting?.actor_id ?? "", newStatus)
       if (result.success) onUpdate()
     } finally {
       setIsUpdating(false)
