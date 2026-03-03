@@ -14,6 +14,7 @@ import { CastingWorkspace } from "@/components/projects/casting-workspace"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
 import { ScriptWorkspaceTab } from "@/components/projects/script-workspace-tab"
+import { ProjectRecordingProgressSummary } from "@/components/projects/project-recording-progress-summary"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
@@ -310,6 +311,8 @@ export default function ProjectDetailPage() {
 
           {/* Main Content */}
           <div className={activeTab === "workspace" ? "space-y-6" : "lg:col-span-3 space-y-6"}>
+            <ProjectRecordingProgressSummary projectId={project.id} />
+
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="roles">
