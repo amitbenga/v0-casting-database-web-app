@@ -93,9 +93,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   }
 
   const handleUnassign = async () => {
+    const actorId = role.casting?.actor_id
+    if (!actorId) return
+
     setIsUpdating(true)
     try {
-      const result = await unassignActorFromRole(role.id)
+      const result = await unassignActorFromRole(role.id, actorId)
       if (result.success) {
         toast({
           title: "השיבוץ בוטל",
@@ -115,9 +118,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   }
 
   const handleStatusChange = async (newStatus: CastingStatus) => {
+    const actorId = role.casting?.actor_id
+    if (!actorId) return
+
     setIsUpdating(true)
     try {
-      const result = await updateCastingStatus(role.id, newStatus)
+      const result = await updateCastingStatus(role.id, actorId, newStatus)
       if (result.success) {
         onUpdate()
       } else {
@@ -133,9 +139,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   }
 
   const handleSaveNotes = async () => {
+    const actorId = role.casting?.actor_id
+    if (!actorId) return
+
     setIsUpdating(true)
     try {
-      const result = await updateCastingDetails(role.id, {
+      const result = await updateCastingDetails(role.id, actorId, {
         notes: localNotes,
         replicas_planned: localReplicasPlanned ? parseInt(localReplicasPlanned) : undefined,
         replicas_final: localReplicasFinal ? parseInt(localReplicasFinal) : undefined,

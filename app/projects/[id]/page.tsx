@@ -77,13 +77,22 @@ export default function ProjectDetailPage() {
       setProject(projectData)
 
       // Load stats
-      const [rolesResult, scriptsResult, castingsResult] = await Promise.all([
+      const [rolesResult, scriptsResult, projectRolesResult] = await Promise.all([
         supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("casting_project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("role_castings").select("actor_id").eq("project_id", projectId),
+        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
+        supabase.from("project_roles").select("id").eq("project_id", projectId),
       ])
 
-      const actorsCount = castingsResult.data ? new Set(castingsResult.data.map(c => c.actor_id)).size : 0
+      const projectRoleIds = (projectRolesResult.data || []).map((role) => role.id)
+      let actorsCount = 0
+      if (projectRoleIds.length > 0) {
+        const { data: castingsData } = await supabase
+          .from("role_castings")
+          .select("actor_id")
+          .in("role_id", projectRoleIds)
+
+        actorsCount = castingsData ? new Set(castingsData.map((casting) => casting.actor_id)).size : 0
+      }
 
       setStats({
         rolesCount: rolesResult.count || 0,
