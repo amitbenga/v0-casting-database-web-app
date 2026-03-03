@@ -675,7 +675,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           onApplied={async (scriptId?: string) => {
             // Create stub script_lines from parsed characters so the workspace
             // immediately shows rows after DOCX/PDF upload. script_id is now
-            // populated so rows are linked to the casting_project_scripts record.
+            // populated so rows are linked to the project_scripts record.
             if (parseResult && parseResult.parseResult.characters.length > 0) {
               try {
                 let lineNum = 1

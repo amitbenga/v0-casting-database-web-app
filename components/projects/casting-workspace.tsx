@@ -164,9 +164,12 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
   }
 
   const handleUnassign = async () => {
+    const actorId = role.casting?.actor_id
+    if (!actorId) return
+
     setIsUpdating(true)
     try {
-      const result = await unassignActorFromRole(role.id, role.casting?.actor_id)
+      const result = await unassignActorFromRole(role.id, actorId)
       if (result.success) {
         toast({ title: `${role.role_name} - שיוך בוטל` })
         onUpdate()
@@ -177,9 +180,12 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
   }
 
   const handleStatusChange = async (newStatus: CastingStatus) => {
+    const actorId = role.casting?.actor_id
+    if (!actorId) return
+
     setIsUpdating(true)
     try {
-      const result = await updateCastingStatus(role.id, role.casting?.actor_id ?? "", newStatus)
+      const result = await updateCastingStatus(role.id, actorId, newStatus)
       if (result.success) onUpdate()
     } finally {
       setIsUpdating(false)

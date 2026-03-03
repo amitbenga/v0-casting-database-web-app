@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { CastingActionResult } from "@/lib/types"
 import type { RoleForDatabase, ConflictForDatabase } from "@/lib/parser"
+import { backfillScriptLinesRoleIds } from "@/lib/actions/script-line-role-linking"
 
 /**
  * Apply parsed roles to a project
@@ -180,6 +181,9 @@ export async function applyParsedRoles(
         }
       }
     }
+
+    // Ensure script lines are linked to stable role IDs after apply flow
+    await backfillScriptLinesRoleIds(projectId)
 
     revalidatePath(`/projects/${projectId}`)
 
