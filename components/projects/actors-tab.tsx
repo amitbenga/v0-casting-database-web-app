@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { Search, Loader2, Users, LayoutGrid, List, ArrowUpDown } from "lucide-react"
 import { getProjectActorsFromCastings } from "@/lib/actions/casting-actions"
+import { useDebounce } from "@/hooks/use-debounce"
 import type { CastingStatus, CASTING_STATUS_COLORS } from "@/lib/types"
 
 type ActorWithRoles = Awaited<ReturnType<typeof getProjectActorsFromCastings>>[number]
@@ -34,6 +35,7 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
   const [castings, setCastings] = useState<ActorWithRoles[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearch = useDebounce(searchQuery, 300)
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
   const [sortByReplicas, setSortByReplicas] = useState<"asc" | "desc" | null>(null)
 
@@ -53,29 +55,33 @@ export function ActorsTab({ projectId }: ActorsTabProps) {
     loadCastings()
   }, [projectId])
 
-  const filteredCastings = castings
-    .filter((c) => {
-      if (!searchQuery) return true
-      const searchLower = searchQuery.toLowerCase()
-      return (
-        c.actor.name.toLowerCase().includes(searchLower) ||
-        c.roles.some((r: any) => r.role_name?.toLowerCase().includes(searchLower))
-      )
-    })
-    .sort((a, b) => {
-      if (!sortByReplicas) return 0
-      const totalA = a.roles.reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
-      const totalB = b.roles.reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
-      return sortByReplicas === "desc" ? totalB - totalA : totalA - totalB
-    })
+  const filteredCastings = useMemo(() => {
+    const searchLower = debouncedSearch.toLowerCase()
+    return castings
+      .filter((c) => {
+        if (!debouncedSearch) return true
+        return (
+          c.actor.name.toLowerCase().includes(searchLower) ||
+          c.roles.some((r: any) => r.role_name?.toLowerCase().includes(searchLower))
+        )
+      })
+      .sort((a, b) => {
+        if (!sortByReplicas) return 0
+        const totalA = a.roles.reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
+        const totalB = b.roles.reduce((sum: number, r: any) => sum + (r.replicas_planned || 0), 0)
+        return sortByReplicas === "desc" ? totalB - totalA : totalA - totalB
+      })
+  }, [castings, debouncedSearch, sortByReplicas])
 
-  // Stats
-  const totalActors = castings.length
-  const totalRoles = castings.reduce((sum: number, c) => sum + c.roles.length, 0)
-  const totalReplicas = castings.reduce(
-    (sum: number, c) => sum + c.roles.reduce((s: number, r: any) => s + (r.replicas_planned || 0), 0),
-    0
-  )
+  // Stats — computed once from source data, not re-derived on every render
+  const { totalActors, totalRoles, totalReplicas } = useMemo(() => ({
+    totalActors: castings.length,
+    totalRoles: castings.reduce((sum: number, c) => sum + c.roles.length, 0),
+    totalReplicas: castings.reduce(
+      (sum: number, c) => sum + c.roles.reduce((s: number, r: any) => s + (r.replicas_planned || 0), 0),
+      0
+    ),
+  }), [castings])
 
   if (loading) {
     return (

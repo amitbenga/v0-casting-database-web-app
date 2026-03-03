@@ -330,7 +330,22 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
-      // Notify parent to refresh header actor count (via stable ref — avoids render loop)
+    } catch (err) {
+      setError("שגיאה בטעינת תפקידים")
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
+
+  // Refresh after mutations — notifies parent via stable ref to avoid render loop
+  const refreshRoles = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await getProjectRolesWithCasting(projectId)
+      setRoles(response.roles)
+      setConflicts(response.conflicts)
       onCastingChangeRef.current?.()
     } catch (err) {
       setError("שגיאה בטעינת תפקידים")
@@ -480,7 +495,7 @@ useEffect(() => {
 
       setShowAssignSearch(false)
       clearSelection()
-      loadRoles()
+      refreshRoles()
     } finally {
       setIsBulkAssigning(false)
     }
@@ -505,7 +520,7 @@ useEffect(() => {
 
       toast({ title: `${deleted} תפקידים נמחקו` })
       clearSelection()
-      loadRoles()
+      refreshRoles()
     } finally {
       setIsBulkDeleting(false)
     }
@@ -521,7 +536,7 @@ useEffect(() => {
         setNewRoleName("")
         setNewRoleReplicas(0)
         setShowAddRole(false)
-        loadRoles()
+        refreshRoles()
       } else {
         toast({ title: "שגיאה", description: result.error, variant: "destructive" })
       }
@@ -801,7 +816,7 @@ useEffect(() => {
                 roleLookup={roleLookup}
                 isSelected={selectedRoleIds.has(role.id)}
                 onRoleNameClick={handleRoleNameClick}
-                onUpdate={loadRoles}
+                onUpdate={refreshRoles}
               />
             ))}
           </div>

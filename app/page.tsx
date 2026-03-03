@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo, useDeferredValue } from "react"
+import { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback } from "react"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
@@ -190,7 +190,7 @@ function ActorsDatabaseContent() {
   const favoriteIdsSet = useMemo(() => new Set(favorites), [favorites])
   const selectedActorIdsSet = useMemo(() => new Set(selectedActors), [selectedActors])
 
-  const handleToggleFavorite = async (actorId: string) => {
+  const handleToggleFavorite = useCallback(async (actorId: string) => {
     if (!user?.id) return
 
     const supabase = createClient()
@@ -223,28 +223,28 @@ function ActorsDatabaseContent() {
     } catch (error) {
       console.error("[v0] Error toggling favorite:", error)
     }
-  }
+  }, [user?.id, favoriteIdsSet])
 
-  const handleToggleSelect = (actorId: string) => {
+  const handleToggleSelect = useCallback((actorId: string) => {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))
-  }
+  }, [])
 
-  const handleAddToProject = (actor: Actor) => {
+  const handleAddToProject = useCallback((actor: Actor) => {
     // TODO: פתיחת דיאלוג לבחירת פרויקט
     toast({ title: "בקרוב", description: `הוספת ${actor.full_name} לפרויקט תהיה זמינה בקרוב.` })
-  }
+  }, [toast])
 
-  const handleAddToFolder = (actor: Actor) => {
+  const handleAddToFolder = useCallback((actor: Actor) => {
     setSelectedActorForFolder(actor)
     setFolderDialogOpen(true)
-  }
+  }, [])
 
-  const handleEdit = (actor: Actor) => {
+  const handleEdit = useCallback((actor: Actor) => {
     // Navigate to edit page
     window.location.href = `/actors/${actor.id}`
-  }
+  }, [])
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     try {
       const supabase = createClient()
       const { error } = await supabase.from("actors").delete().eq("id", id)
@@ -269,7 +269,7 @@ function ActorsDatabaseContent() {
       console.error("[v0] Error:", error)
       toast({ title: "שגיאה", description: "שגיאה במחיקת השחקן", variant: "destructive" })
     }
-  }
+  }, [toast, mutate])
 
   const handleBulkAddToFavorites = async () => {
     if (!user?.id || selectedActors.length === 0) return

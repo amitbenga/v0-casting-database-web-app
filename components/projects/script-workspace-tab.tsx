@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { useDebounce } from "@/hooks/use-debounce"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -240,7 +242,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [searchRole, setSearchRole] = useState("")
+  const [searchRoleInput, setSearchRoleInput] = useState("")
+  const searchRole = useDebounce(searchRoleInput, 300)
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -293,20 +296,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   function handleJumpToLine() {
     const num = parseInt(jumpToLine)
     if (isNaN(num)) return
-    // Find the row with this line number in filteredLines
     const idx = filteredLines.findIndex((l) => l.line_number === num)
     if (idx === -1) {
       toast({ title: "שורה לא נמצאה", description: `שורה מספר ${num} לא קיימת`, variant: "destructive" })
       return
     }
-    // Scroll to the row in the container
-    if (tableBodyRef.current && tableContainerRef.current) {
-      const rows = tableBodyRef.current.querySelectorAll("tr")
-      const targetRow = rows[idx] as HTMLTableRowElement | undefined
-      if (targetRow) {
-        tableContainerRef.current.scrollTo({ top: targetRow.offsetTop - 48, behavior: "smooth" })
-      }
-    }
+    rowVirtualizer.scrollToIndex(idx, { align: "start", behavior: "smooth" })
   }
 
   // Build a stable role color index map
@@ -350,6 +345,18 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       return true
     })
   }, [lines, filterRole, filterStatus, searchRole])
+
+  // Virtualizer for the lines table
+  const rowVirtualizer = useVirtualizer({
+    count: filteredLines.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 52,
+    measureElement:
+      typeof window !== "undefined"
+        ? (el) => el?.getBoundingClientRect().height ?? 52
+        : undefined,
+    overscan: 10,
+  })
 
   // Selection helpers
   const allFilteredSelected = filteredLines.length > 0 && filteredLines.every((l) => selectedIds.has(l.id))
@@ -629,13 +636,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
             <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="חיפוש..."
-              value={searchRole}
-              onChange={(e) => setSearchRole(e.target.value)}
+              value={searchRoleInput}
+              onChange={(e) => setSearchRoleInput(e.target.value)}
               className="pr-7 h-8 text-sm w-44"
               dir="rtl"
             />
-            {searchRole && (
-              <button onClick={() => setSearchRole("")} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            {searchRoleInput && (
+              <button onClick={() => setSearchRoleInput("")} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
@@ -666,14 +673,14 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           </Select>
 
           {/* Clear filters */}
-          {(filterRole !== "__all__" || filterStatus !== "__all__" || searchRole) && (
+          {(filterRole !== "__all__" || filterStatus !== "__all__" || searchRoleInput) && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setFilterRole("__all__")
                 setFilterStatus("__all__")
-                setSearchRole("")
+                setSearchRoleInput("")
               }}
               className="h-8 gap-1 text-muted-foreground"
             >
@@ -725,20 +732,32 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         </div>
       )}
 
-      {/* Lines table — Agent 4: RTL, Agent 6: full-width */}
+      {/* Lines table — virtualized with @tanstack/react-virtual */}
       {!loading && hasLines && (
         <div
           ref={tableContainerRef}
           className="border rounded-lg overflow-auto max-h-[calc(100vh-280px)] w-full"
           dir="rtl"
         >
-          <Table className="w-full" style={{ direction: "rtl" }}>
+          <Table
+            className="w-full"
+            style={{ direction: "rtl", tableLayout: "fixed", minWidth: 900 }}
+          >
+            {/* Fixed column widths — required for table-layout: fixed with virtual rows */}
+            <colgroup>
+              <col style={{ width: 48 }} />   {/* # */}
+              <col style={{ width: 40 }} />   {/* checkbox */}
+              <col style={{ width: 96 }} />   {/* TC */}
+              <col style={{ width: 132 }} />  {/* role */}
+              <col style={{ width: 112 }} />  {/* actor */}
+              <col style={{ width: 116 }} />  {/* status */}
+              <col />                          {/* translation — fill */}
+              <col />                          {/* source — fill */}
+            </colgroup>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                {/* # — sticky right (Agent 4) */}
-                <TableHead className="w-12 text-right sticky right-0 z-20 bg-background border-l">{"#"}</TableHead>
-                {/* Checkbox column */}
-                <TableHead className="w-10 text-center">
+                <TableHead className="text-right">{"#"}</TableHead>
+                <TableHead className="text-center">
                   <input
                     ref={selectAllCheckboxRef}
                     type="checkbox"
@@ -748,29 +767,41 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     aria-label="בחר הכל"
                   />
                 </TableHead>
-                <TableHead className="w-24 text-right">{"TC"}</TableHead>
-                <TableHead className="w-32 text-right">{"תפקיד"}</TableHead>
-                <TableHead className="w-28 text-right">{"שחקן"}</TableHead>
-                <TableHead className="w-24 text-right">{"סטטוס"}</TableHead>
-                <TableHead className="min-w-[200px] text-right">{"תרגום"}</TableHead>
-                <TableHead className="min-w-[200px] text-right" dir="ltr">{"טקסט מקור"}</TableHead>
+                <TableHead className="text-right">{"TC"}</TableHead>
+                <TableHead className="text-right">{"תפקיד"}</TableHead>
+                <TableHead className="text-right">{"שחקן"}</TableHead>
+                <TableHead className="text-right">{"סטטוס"}</TableHead>
+                <TableHead className="text-right">{"תרגום"}</TableHead>
+                <TableHead className="text-right" dir="ltr">{"טקסט מקור"}</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody ref={tableBodyRef}>
-              {filteredLines.map((line) => {
-                const recConfig = line.rec_status
-                  ? REC_STATUS_CONFIG[line.rec_status]
-                  : null
+            {/* Virtual body: position relative + explicit height so virtualizer can position rows */}
+            <TableBody
+              ref={tableBodyRef}
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const line = filteredLines[virtualRow.index]
                 return (
                   <TableRow
                     key={line.id}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
                     className={`hover:bg-muted/30 ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
-                    {/* # — sticky right (Agent 4) */}
-                    <TableCell className="text-right text-xs text-muted-foreground sticky right-0 z-10 bg-background border-l">
+                    <TableCell className="text-right text-xs text-muted-foreground">
                       {line.line_number ?? ""}
                     </TableCell>
-                    {/* Row checkbox */}
                     <TableCell className="text-center">
                       <input
                         type="checkbox"
@@ -783,7 +814,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     <TableCell className="text-xs font-mono text-muted-foreground text-right">
                       {line.timecode ?? "\u2014"}
                     </TableCell>
-                    <TableCell className="max-w-[130px]">
+                    <TableCell>
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -807,7 +838,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         <span className="text-muted-foreground text-xs italic">{"לא שובץ"}</span>
                       )}
                     </TableCell>
-                    {/* Editable rec_status (Agent 1) */}
                     <TableCell>
                       <Select
                         value={line.rec_status ?? "__pending__"}
