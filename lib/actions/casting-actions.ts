@@ -203,14 +203,22 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
       }
     }
 
-    // 2. Perform upsert
+    // 2. Determine default status — "מלוהק" only if no מלוהק actor exists yet for this role
+    const { data: existingCasted } = await supabase
+      .from("role_castings")
+      .select("id")
+      .eq("role_id", roleId)
+      .eq("status", "מלוהק")
+    const defaultStatus = existingCasted && existingCasted.length > 0 ? "באודישן" : "מלוהק"
+
+    // 3. Perform upsert
     const { error } = await supabase
       .from("role_castings")
       .upsert({
         project_id: projectId,
         role_id: roleId,
         actor_id: actorId,
-        status: "מלוהק",
+        status: defaultStatus,
         updated_at: new Date().toISOString()
       }, {
         onConflict: "role_id,actor_id"
@@ -283,16 +291,17 @@ export async function unassignActorFromRole(roleId: string, actorId?: string): P
  * that role to this actor. When status moves away from "מלוהק", clears those
  * assignments. Enforces max one "מלוהק" actor per role.
  */
-export async function updateCastingStatus(roleId: string, status: CastingStatus): Promise<CastingActionResult> {
+export async function updateCastingStatus(roleId: string, actorId: string, status: CastingStatus): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    // Fetch current casting for this role
+    // Fetch the specific casting for this role+actor
     const { data: casting, error: castingFetchErr } = await supabase
       .from("role_castings")
       .select("id, actor_id, status")
       .eq("role_id", roleId)
-      .maybeSingle()
+      .eq("actor_id", actorId)
+      .single()
 
     if (castingFetchErr) throw castingFetchErr
     if (!casting) throw new Error("לא נמצא שיבוץ")
@@ -360,21 +369,23 @@ export async function updateCastingStatus(roleId: string, status: CastingStatus)
  * Updates casting details.
  */
 export async function updateCastingDetails(
-  roleId: string, 
+  roleId: string,
+  actorId: string,
   details: { notes?: string, replicas_planned?: number, replicas_final?: number }
 ): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
     const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
-    
+
     const { error } = await supabase
       .from("role_castings")
-      .update({ 
+      .update({
         ...details,
-        updated_at: new Date().toISOString() 
+        updated_at: new Date().toISOString()
       })
       .eq("role_id", roleId)
+      .eq("actor_id", actorId)
 
     if (error) throw error
 
@@ -502,17 +513,18 @@ export async function getProjectRolesWithCasting(
 
     // Transform roles to handle children and legacy casting naming
     const transformedRoles = roles.map(role => {
-      const casting = role.role_castings && role.role_castings.length > 0 ? {
-        ...role.role_castings[0],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        actor: role.role_castings[0].actors as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        name: (role.role_castings[0].actors as any)?.full_name // for v0 UI
-      } : null;
-      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const castings = (role.role_castings || []).map((rc: any) => ({
+        ...rc,
+        actor: rc.actors as any,
+        name: rc.actors?.full_name,
+      }))
+      const casting = castings.length > 0 ? castings[0] : null
+
       return {
         ...role,
         casting,
+        castings,
         // Source of truth: replicas_count is primary, fall back to replicas_needed for legacy data
         replicas_count: role.replicas_count ?? role.replicas_needed ?? 0
       }

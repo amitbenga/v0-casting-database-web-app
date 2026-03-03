@@ -273,3 +273,81 @@ export async function softDeleteSubmissions(
     }
   }
 }
+
+/**
+ * Hard-delete submission records by IDs
+ * Used to clear processed (approved/rejected) submissions that are no longer needed
+ */
+export async function deleteSubmissions(
+  submissionIds: string[]
+): Promise<{ success: boolean; error?: string; deletedCount?: number }> {
+  if (submissionIds.length === 0) {
+    return { success: true, deletedCount: 0 }
+  }
+
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+      .from("actor_submissions")
+      .delete()
+      .in("id", submissionIds)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, deletedCount: submissionIds.length }
+  } catch (error) {
+    console.error("Delete submissions error:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "שגיאה לא ידועה",
+    }
+  }
+}
+
+/**
+ * Hard-delete all submission records with a given review_status
+ * Used for "Clear All" in approved/rejected sections
+ */
+export async function clearSubmissionsByStatus(
+  status: "approved" | "rejected"
+): Promise<{ success: boolean; error?: string; deletedCount?: number }> {
+  try {
+    const supabase = await createClient()
+
+    // First fetch the IDs so we know how many were deleted
+    const { data, error: fetchError } = await supabase
+      .from("actor_submissions")
+      .select("id")
+      .eq("review_status", status)
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    const ids = (data || []).map((row: { id: string }) => row.id)
+
+    if (ids.length === 0) {
+      return { success: true, deletedCount: 0 }
+    }
+
+    const { error: deleteError } = await supabase
+      .from("actor_submissions")
+      .delete()
+      .in("id", ids)
+
+    if (deleteError) {
+      return { success: false, error: deleteError.message }
+    }
+
+    return { success: true, deletedCount: ids.length }
+  } catch (error) {
+    console.error("Clear submissions by status error:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "שגיאה לא ידועה",
+    }
+  }
+}

@@ -17,12 +17,11 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus, X, RefreshCw, FileText, Play, Loader2, AlertTriangle } from "lucide-react"
+import { UserPlus, X, FileText, Play, Loader2, AlertTriangle } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
 import {
   assignActorToRole,
@@ -33,6 +32,7 @@ import {
 } from "@/lib/actions/casting-actions"
 import {
   type ProjectRoleWithCasting,
+  type RoleCasting,
   type RoleConflict,
   type CastingStatus,
   CASTING_STATUS_LIST,
@@ -53,20 +53,28 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   const [isUpdating, setIsUpdating] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [inlineExpanded, setInlineExpanded] = useState(false)
+
+  // Notes sheet — tracks which casting's notes are open
   const [notesSheetOpen, setNotesSheetOpen] = useState(false)
-  const [localNotes, setLocalNotes] = useState(role.casting?.notes || "")
-  const [localReplicasPlanned, setLocalReplicasPlanned] = useState(
-    role.casting?.replicas_planned?.toString() || ""
-  )
-  const [localReplicasFinal, setLocalReplicasFinal] = useState(
-    role.casting?.replicas_final?.toString() || ""
-  )
+  const [notesCastingActorId, setNotesCastingActorId] = useState<string | null>(null)
+  const [localNotes, setLocalNotes] = useState("")
+  const [localReplicasPlanned, setLocalReplicasPlanned] = useState("")
+  const [localReplicasFinal, setLocalReplicasFinal] = useState("")
+
+  // All castings for this role (backward-compat fallback to single casting)
+  const castings: RoleCasting[] = role.castings?.length
+    ? role.castings
+    : role.casting
+    ? [role.casting]
+    : []
+
+  const mainCasting = castings.find((c) => c.status === "מלוהק") ?? castings[0] ?? null
 
   const handleAssignActor = async (actor: { id: string; name: string; image_url?: string }) => {
     setIsAssigning(true)
     try {
       const result = await assignActorToRole(role.id, actor.id)
-      
+
       if (!result.success) {
         toast({
           title: "שגיאת שיבוץ",
@@ -82,7 +90,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
       })
       setShowSearch(false)
       onUpdate()
-    } catch (error) {
+    } catch {
       toast({
         title: "שגיאה",
         description: "אירעה שגיאה בעת שיבוץ השחקן",
@@ -93,15 +101,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
     }
   }
 
-  const handleUnassign = async () => {
+  const handleUnassignActor = async (actorId: string) => {
     setIsUpdating(true)
     try {
-      const result = await unassignActorFromRole(role.id, role.casting?.actor_id)
+      const result = await unassignActorFromRole(role.id, actorId)
       if (result.success) {
-        toast({
-          title: "השיבוץ בוטל",
-          description: `התפקיד ${role.role_name} כעת פנוי`,
-        })
+        toast({ title: "השיבוץ בוטל" })
         onUpdate()
       } else {
         toast({
@@ -115,10 +120,10 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
     }
   }
 
-  const handleStatusChange = async (newStatus: CastingStatus) => {
+  const handleStatusChange = async (actorId: string, newStatus: CastingStatus) => {
     setIsUpdating(true)
     try {
-      const result = await updateCastingStatus(role.id, newStatus)
+      const result = await updateCastingStatus(role.id, actorId, newStatus)
       if (result.success) {
         onUpdate()
       } else {
@@ -133,10 +138,19 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
     }
   }
 
+  const openNotesSheet = (casting: RoleCasting) => {
+    setNotesCastingActorId(casting.actor_id)
+    setLocalNotes(casting.notes || "")
+    setLocalReplicasPlanned(casting.replicas_planned?.toString() || "")
+    setLocalReplicasFinal(casting.replicas_final?.toString() || "")
+    setNotesSheetOpen(true)
+  }
+
   const handleSaveNotes = async () => {
+    if (!notesCastingActorId) return
     setIsUpdating(true)
     try {
-      const result = await updateCastingDetails(role.id, {
+      const result = await updateCastingDetails(role.id, notesCastingActorId, {
         notes: localNotes,
         replicas_planned: localReplicasPlanned ? parseInt(localReplicasPlanned) : undefined,
         replicas_final: localReplicasFinal ? parseInt(localReplicasFinal) : undefined,
@@ -144,9 +158,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
       if (result.success) {
         setNotesSheetOpen(false)
         onUpdate()
-        toast({
-          title: "נשמר בהצלחה",
-        })
+        toast({ title: "נשמר בהצלחה" })
       } else {
         toast({
           title: "שגיאה",
@@ -161,14 +173,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
 
   const handleDeleteRole = async () => {
     if (!confirm(`האם למחוק את התפקיד "${role.role_name}"?`)) return
-    
+
     setIsUpdating(true)
     try {
       const result = await deleteRole(role.id)
       if (result.success) {
-        toast({
-          title: "התפקיד נמחק",
-        })
+        toast({ title: "התפקיד נמחק" })
         onUpdate()
       } else {
         toast({
@@ -182,213 +192,149 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
     }
   }
 
-  // Get status badge color
-  const getStatusBadgeClass = (status: CastingStatus) => {
-    return CASTING_STATUS_COLORS[status] || ""
-  }
-
   return (
     <Card className={`p-4 ${isChild ? "mr-6 border-r-4 border-r-muted" : ""}`}>
-      <div className="flex items-center justify-between gap-4">
-        {/* Role Info */}
-        <div className="flex items-start gap-4 min-w-0 flex-1">
-          <div className="min-w-0 flex-1">
-            {/* Clickable role name */}
-            <button
-              type="button"
-              onClick={() => setInlineExpanded((prev) => !prev)}
-              className="flex items-center gap-2 text-right cursor-pointer hover:opacity-70 transition-opacity"
-            >
-              <h4 className="font-medium truncate">{role.role_name}</h4>
-              {role.source === "script" && (
-                <Badge variant="outline" className="text-xs">מתסריט</Badge>
-              )}
-            </button>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {role.replicas_count} רפליקות
-            </p>
-
-            {/* Inline expand area — shows when role name is clicked */}
-            {inlineExpanded && (
-              <div className="mt-2">
-                {role.casting ? (
-                  /* Has casting: show actor names + action buttons */
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground">
-                      {role.casting.actor?.full_name || "שחקן"}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={() => { setShowSearch(true); setInlineExpanded(false) }}
-                        disabled={isUpdating}
-                      >
-                        שבץ
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-destructive hover:text-destructive"
-                        onClick={() => { handleDeleteRole(); setInlineExpanded(false) }}
-                        disabled={isUpdating || role.source !== "manual"}
-                      >
-                        מחק
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  /* No casting: show action buttons */
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => { setShowSearch(true); setInlineExpanded(false) }}
-                      disabled={isAssigning}
-                    >
-                      שבץ
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs text-destructive hover:text-destructive"
-                      onClick={() => { handleDeleteRole(); setInlineExpanded(false) }}
-                      disabled={isUpdating || role.source !== "manual"}
-                    >
-                      מחק
-                    </Button>
-                  </div>
-                )}
-              </div>
+      <div className="flex items-start justify-between gap-4">
+        {/* Role Info — left */}
+        <div className="min-w-0 flex-1">
+          {/* Clickable role name */}
+          <button
+            type="button"
+            onClick={() => setInlineExpanded((prev) => !prev)}
+            className="flex items-center gap-2 text-right cursor-pointer hover:opacity-70 transition-opacity"
+          >
+            <h4 className="font-medium truncate">{role.role_name}</h4>
+            {role.source === "script" && (
+              <Badge variant="outline" className="text-xs">מתסריט</Badge>
             )}
-          </div>
+          </button>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {role.replicas_count} רפליקות
+          </p>
+
+          {/* Default: show all assigned actor names */}
+          {!inlineExpanded && castings.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {castings.map((c) => c.actor?.full_name || "שחקן").join(", ")}
+            </p>
+          )}
+
+          {/* Inline expand — שבץ / מחק */}
+          {inlineExpanded && (
+            <div className="flex items-center gap-2 mt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => { setShowSearch(true); setInlineExpanded(false) }}
+                disabled={isAssigning}
+              >
+                שבץ
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={() => { handleDeleteRole(); setInlineExpanded(false) }}
+                disabled={isUpdating || role.source !== "manual"}
+              >
+                מחק
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Casting Section */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {role.casting ? (
+        {/* Casting Section — right */}
+        <div className="flex flex-col gap-2 flex-shrink-0 items-end">
+          {castings.length > 0 && (
             <>
-              {/* Actor Card */}
-              <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={role.casting.actor?.image_url} alt={role.casting.actor?.full_name} />
-                  <AvatarFallback>{(role.casting.actor?.full_name || "ש").charAt(0)}</AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium">{role.casting.actor?.full_name || "שחקן"}</span>
-                
-                {role.casting.actor?.voice_sample_url && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6"
-                    onClick={() => {
-                      const audio = new Audio(role.casting!.actor.voice_sample_url)
-                      audio.play()
-                    }}
+              {castings.map((casting) => (
+                <div key={casting.id} className="flex items-center gap-2">
+                  {/* Actor chip */}
+                  <div className="flex items-center gap-2 p-1.5 bg-muted rounded-lg">
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={casting.actor?.image_url} alt={casting.actor?.full_name} />
+                      <AvatarFallback className="text-xs">
+                        {(casting.actor?.full_name || "ש").charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{casting.actor?.full_name || "שחקן"}</span>
+                    {casting.actor?.voice_sample_url && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          const audio = new Audio(casting.actor!.voice_sample_url!)
+                          audio.play()
+                        }}
+                      >
+                        <Play className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Status dropdown */}
+                  <Select
+                    value={casting.status}
+                    onValueChange={(v) => handleStatusChange(casting.actor_id, v as CastingStatus)}
+                    disabled={isUpdating}
                   >
-                    <Play className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
+                    <SelectTrigger className={`w-[110px] h-8 text-xs ${CASTING_STATUS_COLORS[casting.status] || ""}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CASTING_STATUS_LIST.map((status) => (
+                        <SelectItem key={status} value={status} className="text-xs">
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-              {/* Status Dropdown */}
-              <Select
-                value={role.casting.status}
-                onValueChange={(v) => handleStatusChange(v as CastingStatus)}
-                disabled={isUpdating}
-              >
-                <SelectTrigger className={`w-[120px] ${getStatusBadgeClass(role.casting.status)}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CASTING_STATUS_LIST.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Notes Button */}
-              <Sheet open={notesSheetOpen} onOpenChange={setNotesSheetOpen}>
-                <SheetTrigger asChild>
+                  {/* Notes */}
                   <Button
                     size="icon"
                     variant="ghost"
-                    className={role.casting.notes ? "text-primary" : "text-muted-foreground"}
+                    className={`h-8 w-8 ${casting.notes ? "text-primary" : "text-muted-foreground"}`}
+                    onClick={() => openNotesSheet(casting)}
+                    title="הערות"
                   >
                     <FileText className="h-4 w-4" />
                   </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[400px]">
-                  <SheetHeader>
-                    <SheetTitle>פרטי שיבוץ - {role.role_name}</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-6 space-y-6">
-                    <div className="space-y-2">
-                      <Label>הערות</Label>
-                      <Textarea
-                        value={localNotes}
-                        onChange={(e) => setLocalNotes(e.target.value)}
-                        placeholder="הערות לשיבוץ..."
-                        rows={4}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>רפליקות מתוכננות</Label>
-                        <Input
-                          type="number"
-                          value={localReplicasPlanned}
-                          onChange={(e) => setLocalReplicasPlanned(e.target.value)}
-                          placeholder={role.replicas_count.toString()}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>רפליקות סופי</Label>
-                        <Input
-                          type="number"
-                          value={localReplicasFinal}
-                          onChange={(e) => setLocalReplicasFinal(e.target.value)}
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                    <Button onClick={handleSaveNotes} disabled={isUpdating} className="w-full">
-                      {isUpdating && <Loader2 className="h-4 w-4 ml-2 animate-spin" />}
-                      שמירה
-                    </Button>
-                  </div>
-                </SheetContent>
-              </Sheet>
 
-              {/* Replace Button */}
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setShowSearch(true)}
-                disabled={isUpdating}
-                title="החלף שחקן"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
+                  {/* Unassign */}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    onClick={() => handleUnassignActor(casting.actor_id)}
+                    disabled={isUpdating}
+                    title="הסר שחקן"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
 
-              {/* Unassign Button */}
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={handleUnassign}
-                disabled={isUpdating}
-                className="text-destructive hover:text-destructive"
-                title="בטל שיבוץ"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              {/* Add another actor */}
+              {!showSearch && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs self-end text-muted-foreground"
+                  onClick={() => setShowSearch(true)}
+                >
+                  <UserPlus className="h-3 w-3 ml-1" />
+                  הוסף שחקן
+                </Button>
+              )}
             </>
-          ) : showSearch ? (
-            <div className="flex items-center gap-2 w-[300px]">
+          )}
+
+          {/* Actor search */}
+          {showSearch && (
+            <div className="flex items-center gap-2">
               <ActorSearchAutocomplete
                 onSelect={handleAssignActor}
                 disabled={isAssigning}
@@ -403,7 +349,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
                 <X className="h-4 w-4" />
               </Button>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
 
@@ -411,12 +357,12 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
       {conflicts.length > 0 && (
         <div className="mt-2 space-y-1">
           {conflicts
-            .filter(c => c.role_id_a === role.id || c.role_id_b === role.id)
+            .filter((c) => c.role_id_a === role.id || c.role_id_b === role.id)
             .map((conflict, idx) => (
               <div key={idx} className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-1 rounded border border-amber-100">
                 <AlertTriangle className="h-3 w-3" />
                 <span>
-                  קונפליקט עם {conflict.role_id_a === role.id ? conflict.role_b_name : conflict.role_a_name} 
+                  קונפליקט עם {conflict.role_id_a === role.id ? conflict.role_b_name : conflict.role_a_name}
                   {conflict.scene_reference && ` (סצנה: ${conflict.scene_reference})`}
                 </span>
               </div>
@@ -424,21 +370,68 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
         </div>
       )}
 
-      {/* Casting replicas badge */}
-      {role.casting && (role.casting.replicas_planned || role.casting.replicas_final) && (
+      {/* Replicas badge — shown for the מלוהק casting (or first) */}
+      {mainCasting && (mainCasting.replicas_planned || mainCasting.replicas_final) && (
         <div className="mt-2 flex gap-2">
-          {role.casting.replicas_planned && (
-            <Badge variant="outline">
-              מתוכנן: {role.casting.replicas_planned}
-            </Badge>
+          {mainCasting.replicas_planned && (
+            <Badge variant="outline">מתוכנן: {mainCasting.replicas_planned}</Badge>
           )}
-          {role.casting.replicas_final && (
-            <Badge variant="secondary">
-              סופי: {role.casting.replicas_final}
-            </Badge>
+          {mainCasting.replicas_final && (
+            <Badge variant="secondary">סופי: {mainCasting.replicas_final}</Badge>
           )}
         </div>
       )}
+
+      {/* Notes sheet */}
+      <Sheet open={notesSheetOpen} onOpenChange={setNotesSheetOpen}>
+        <SheetContent side="left" className="w-[400px]">
+          <SheetHeader>
+            <SheetTitle>
+              פרטי שיבוץ — {role.role_name}
+              {notesCastingActorId && castings.find((c) => c.actor_id === notesCastingActorId) && (
+                <span className="font-normal text-muted-foreground mr-1">
+                  ({castings.find((c) => c.actor_id === notesCastingActorId)?.actor?.full_name})
+                </span>
+              )}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-6">
+            <div className="space-y-2">
+              <Label>הערות</Label>
+              <Textarea
+                value={localNotes}
+                onChange={(e) => setLocalNotes(e.target.value)}
+                placeholder="הערות לשיבוץ..."
+                rows={4}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>רפליקות מתוכננות</Label>
+                <Input
+                  type="number"
+                  value={localReplicasPlanned}
+                  onChange={(e) => setLocalReplicasPlanned(e.target.value)}
+                  placeholder={role.replicas_count.toString()}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>רפליקות סופי</Label>
+                <Input
+                  type="number"
+                  value={localReplicasFinal}
+                  onChange={(e) => setLocalReplicasFinal(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <Button onClick={handleSaveNotes} disabled={isUpdating} className="w-full">
+              {isUpdating && <Loader2 className="h-4 w-4 ml-2 animate-spin" />}
+              שמירה
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </Card>
   )
 }
