@@ -8,6 +8,11 @@ import type {
   CastingStatus,
   RoleConflict 
 } from "@/lib/types"
+import { backfillScriptLinesRoleIds } from "@/lib/actions/script-line-role-linking"
+
+function normalizeRoleKey(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase()
+}
 
 /**
  * Applies a parsed script to the project.
@@ -20,53 +25,57 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
     // 1. Get raw extracted roles
     const { data: rawRoles, error: rolesError } = await supabase
       .from("script_extracted_roles")
-      .select("*")
+      .select("role_name, replicas_count")
       .eq("script_id", scriptId)
 
     if (rolesError) throw rolesError
 
-    const uniqueRawRoleNames = Array.from(new Set((rawRoles || []).map((rawRole) => rawRole.role_name)))
-    const existingRolesByName = new Map<string, string>()
+    const existingRolesByNormalizedName = new Map<string, string>()
 
     // 2. Load existing roles once and then upsert to project_roles
-    if (uniqueRawRoleNames.length > 0) {
+    if ((rawRoles || []).length > 0) {
       const { data: existingRoles, error: existingRolesError } = await supabase
         .from("project_roles")
-        .select("id, role_name")
+        .select("id, role_name, role_name_normalized")
         .eq("project_id", projectId)
-        .in("role_name", uniqueRawRoleNames)
 
       if (existingRolesError) throw existingRolesError
       for (const existingRole of existingRoles || []) {
-        existingRolesByName.set(existingRole.role_name, existingRole.id)
+        const normalizedExisting = normalizeRoleKey(existingRole.role_name_normalized || existingRole.role_name)
+        if (normalizedExisting) {
+          existingRolesByNormalizedName.set(normalizedExisting, existingRole.id)
+        }
       }
     }
 
     for (const rawRole of rawRoles || []) {
-      const normalizedName = rawRole.role_name.trim().toLowerCase()
+      const normalizedName = normalizeRoleKey(rawRole.role_name)
+      if (!normalizedName) continue
 
-      const existingRoleId = existingRolesByName.get(rawRole.role_name)
+      const existingRoleId = existingRolesByNormalizedName.get(normalizedName)
       if (existingRoleId) {
         // Update existing role - replicas_count is primary, keep replicas_needed in sync
-        await supabase
+        const { error: updateRoleError } = await supabase
           .from("project_roles")
           .update({
             role_name_normalized: normalizedName,
-            replicas_count: rawRole.replicas_count,
-            replicas_needed: rawRole.replicas_count,
+            replicas_count: rawRole.replicas_count ?? 0,
+            replicas_needed: rawRole.replicas_count ?? 0,
             source: "script"
           })
           .eq("id", existingRoleId)
+
+        if (updateRoleError) throw updateRoleError
       } else {
         // Create new role - replicas_count is primary, keep replicas_needed in sync
         const { data: createdRole, error: createRoleError } = await supabase
           .from("project_roles")
           .insert({
             project_id: projectId,
-            role_name: rawRole.role_name,
+            role_name: rawRole.role_name.trim(),
             role_name_normalized: normalizedName,
-            replicas_count: rawRole.replicas_count,
-            replicas_needed: rawRole.replicas_count,
+            replicas_count: rawRole.replicas_count ?? 0,
+            replicas_needed: rawRole.replicas_count ?? 0,
             source: "script"
           })
           .select("id")
@@ -74,7 +83,7 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
 
         if (createRoleError) throw createRoleError
         if (createdRole) {
-          existingRolesByName.set(rawRole.role_name, createdRole.id)
+          existingRolesByNormalizedName.set(normalizedName, createdRole.id)
         }
       }
     }
@@ -82,18 +91,23 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
     // 3. Map warnings to role_conflicts
     const { data: rawWarnings, error: warningsError } = await supabase
       .from("script_casting_warnings")
-      .select("*")
+      .select("role_1_name, role_2_name, warning_type, scene_reference")
       .eq("project_id", projectId)
 
     if (warningsError) throw warningsError
 
-    // Get all roles for this project to map names to IDs
+    // Get all roles for this project to map normalized names to IDs
     const { data: projectRoles } = await supabase
       .from("project_roles")
-      .select("id, role_name")
+      .select("id, role_name, role_name_normalized")
       .eq("project_id", projectId)
 
-    const roleMap = new Map(projectRoles?.map(r => [r.role_name, r.id]))
+    const roleMap = new Map<string, string>()
+    for (const role of projectRoles || []) {
+      const normalized = normalizeRoleKey(role.role_name_normalized || role.role_name)
+      if (!normalized || roleMap.has(normalized)) continue
+      roleMap.set(normalized, role.id)
+    }
 
     const warningUpserts: {
       project_id: string
@@ -104,8 +118,8 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
     }[] = []
 
     for (const warning of rawWarnings || []) {
-      const roleIdA = roleMap.get(warning.role_1_name)
-      const roleIdB = roleMap.get(warning.role_2_name)
+      const roleIdA = roleMap.get(normalizeRoleKey(warning.role_1_name))
+      const roleIdB = roleMap.get(normalizeRoleKey(warning.role_2_name))
 
       if (roleIdA && roleIdB) {
         // Ensure roleIdA < roleIdB
@@ -136,13 +150,18 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
       if (warningsUpsertError) throw warningsUpsertError
     }
 
-    // 4. Mark script as applied
-    await supabase
-      .from("casting_project_scripts")
+    // 4. Link script_lines rows to stable role IDs for progress + assignment sync
+    await backfillScriptLinesRoleIds(projectId)
+
+    // 5. Mark script as applied
+    const { error: applyMarkError } = await supabase
+      .from("project_scripts")
       .update({
         applied_at: new Date().toISOString()
       })
       .eq("id", scriptId)
+
+    if (applyMarkError) throw applyMarkError
 
     revalidatePath(`/projects/${projectId}`)
     return { success: true }
@@ -169,13 +188,27 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
     if (roleError || !role) throw new Error("Role not found")
     const projectId = role.project_id
 
+    // Fetch role IDs for this project (do not rely on role_castings.project_id)
+    const { data: projectRoles, error: projectRolesError } = await supabase
+      .from("project_roles")
+      .select("id")
+      .eq("project_id", projectId)
+
+    if (projectRolesError) throw projectRolesError
+    const projectRoleIds = (projectRoles || []).map((projectRole) => projectRole.id)
+    if (projectRoleIds.length === 0) {
+      return { success: false, error: "לא נמצאו תפקידים בפרויקט" }
+    }
+
     // 1. Check for conflicts
     // Get all roles this actor is already assigned to in this project
-    const { data: currentAssignments } = await supabase
+    const { data: currentAssignments, error: currentAssignmentsError } = await supabase
       .from("role_castings")
       .select("role_id")
-      .eq("project_id", projectId)
       .eq("actor_id", actorId)
+      .in("role_id", projectRoleIds)
+
+    if (currentAssignmentsError) throw currentAssignmentsError
 
     if (currentAssignments && currentAssignments.length > 0) {
       const assignedRoleIds = currentAssignments.map(a => a.role_id)
@@ -203,20 +236,39 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
       }
     }
 
-    // 2. Perform upsert
+    // 2. Determine default status — only one actor should remain "מלוהק" by default
+    const { data: existingCasted, error: existingCastedError } = await supabase
+      .from("role_castings")
+      .select("id, actor_id")
+      .eq("role_id", roleId)
+      .eq("status", "מלוהק")
+      .neq("actor_id", actorId)
+
+    if (existingCastedError) throw existingCastedError
+    const defaultStatus = existingCasted && existingCasted.length > 0 ? "באודישן" : "מלוהק"
+
+    // 3. Perform upsert
     const { error } = await supabase
       .from("role_castings")
       .upsert({
-        project_id: projectId,
         role_id: roleId,
         actor_id: actorId,
-        status: "מלוהק",
+        status: defaultStatus,
         updated_at: new Date().toISOString()
       }, {
-        onConflict: "role_id"
+        onConflict: "role_id,actor_id"
       })
 
     if (error) throw error
+
+    // Keep script line assignments synced to stable role identity
+    const { error: scriptLineAssignError } = await supabase
+      .from("script_lines")
+      .update({ actor_id: actorId })
+      .eq("project_id", projectId)
+      .eq("role_id", roleId)
+
+    if (scriptLineAssignError) throw scriptLineAssignError
 
     revalidatePath(`/projects/${projectId}`)
     return { success: true }
@@ -228,40 +280,48 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
 
 /**
  * Unassigns the actor from a role.
+ * Provide actorId to unassign a specific actor (required when multiple actors share a role).
  * If the casting was "מלוהק", also clears script_lines assignments for that role.
  */
-export async function unassignActorFromRole(roleId: string): Promise<CastingActionResult> {
+export async function unassignActorFromRole(roleId: string, actorId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
     const { data: role } = await supabase
       .from("project_roles")
-      .select("project_id, role_name")
+      .select("project_id")
       .eq("id", roleId)
       .single()
 
-    // Fetch casting to check if it was "מלוהק" and get actor_id before deleting
+    // Fetch casting to check if it was "מלוהק" before deleting
     const { data: casting } = await supabase
       .from("role_castings")
-      .select("status, actor_id")
+      .select("status")
       .eq("role_id", roleId)
+      .eq("actor_id", actorId)
       .maybeSingle()
+
+    if (!casting) {
+      return { success: true }
+    }
 
     const { error } = await supabase
       .from("role_castings")
       .delete()
       .eq("role_id", roleId)
+      .eq("actor_id", actorId)
 
     if (error) throw error
 
     // If actor was "מלוהק", clear their script_lines assignments
-    if (role && casting?.status === "מלוהק" && casting.actor_id) {
-      await supabase
+    if (role && casting.status === "מלוהק") {
+      const { error: clearLinesError } = await supabase
         .from("script_lines")
         .update({ actor_id: null })
         .eq("project_id", role.project_id)
-        .eq("role_name", role.role_name)
-        .eq("actor_id", casting.actor_id)
+        .eq("role_id", roleId)
+        .eq("actor_id", actorId)
+      if (clearLinesError) throw clearLinesError
     }
 
     if (role) revalidatePath(`/projects/${role.project_id}`)
@@ -278,15 +338,16 @@ export async function unassignActorFromRole(roleId: string): Promise<CastingActi
  * that role to this actor. When status moves away from "מלוהק", clears those
  * assignments. Enforces max one "מלוהק" actor per role.
  */
-export async function updateCastingStatus(roleId: string, status: CastingStatus): Promise<CastingActionResult> {
+export async function updateCastingStatus(roleId: string, actorId: string, status: CastingStatus): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    // Fetch current casting for this role
+    // Fetch current casting row for this role + actor
     const { data: casting, error: castingFetchErr } = await supabase
       .from("role_castings")
-      .select("id, actor_id, status")
+      .select("id, status")
       .eq("role_id", roleId)
+      .eq("actor_id", actorId)
       .maybeSingle()
 
     if (castingFetchErr) throw castingFetchErr
@@ -294,7 +355,7 @@ export async function updateCastingStatus(roleId: string, status: CastingStatus)
 
     const { data: role, error: roleFetchErr } = await supabase
       .from("project_roles")
-      .select("project_id, role_name")
+      .select("project_id")
       .eq("id", roleId)
       .single()
 
@@ -302,13 +363,14 @@ export async function updateCastingStatus(roleId: string, status: CastingStatus)
 
     // Guard: only one "מלוהק" per role
     if (status === "מלוהק") {
-      const { data: existingCasted } = await supabase
+      const { data: existingCasted, error: existingCastedError } = await supabase
         .from("role_castings")
         .select("id, actor_id")
         .eq("role_id", roleId)
         .eq("status", "מלוהק")
-        .neq("id", casting.id)
+        .neq("actor_id", actorId)
 
+      if (existingCastedError) throw existingCastedError
       if (existingCasted && existingCasted.length > 0) {
         return {
           success: false,
@@ -317,30 +379,32 @@ export async function updateCastingStatus(roleId: string, status: CastingStatus)
       }
     }
 
-    // Update the casting status
+    // Update the casting status (use casting.id to target this specific casting record)
     const { error } = await supabase
       .from("role_castings")
       .update({ status, updated_at: new Date().toISOString() })
-      .eq("role_id", roleId)
+      .eq("id", casting.id)
 
     if (error) throw error
 
     // Sync script_lines assignments
-    if (status === "מלוהק" && casting.actor_id) {
+    if (status === "מלוהק") {
       // Assign all script_lines for this role to this actor
-      await supabase
+      const { error: assignLinesError } = await supabase
         .from("script_lines")
-        .update({ actor_id: casting.actor_id })
+        .update({ actor_id: actorId })
         .eq("project_id", role.project_id)
-        .eq("role_name", role.role_name)
-    } else if (casting.status === "מלוהק" && casting.actor_id) {
+        .eq("role_id", roleId)
+      if (assignLinesError) throw assignLinesError
+    } else if (casting.status === "מלוהק") {
       // Moving away from "מלוהק" — clear this actor's assignments for the role
-      await supabase
+      const { error: clearLinesError } = await supabase
         .from("script_lines")
         .update({ actor_id: null })
         .eq("project_id", role.project_id)
-        .eq("role_name", role.role_name)
-        .eq("actor_id", casting.actor_id)
+        .eq("role_id", roleId)
+        .eq("actor_id", actorId)
+      if (clearLinesError) throw clearLinesError
     }
 
     revalidatePath(`/projects/${role.project_id}`)
@@ -355,21 +419,23 @@ export async function updateCastingStatus(roleId: string, status: CastingStatus)
  * Updates casting details.
  */
 export async function updateCastingDetails(
-  roleId: string, 
+  roleId: string,
+  actorId: string,
   details: { notes?: string, replicas_planned?: number, replicas_final?: number }
 ): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
     const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
-    
+
     const { error } = await supabase
       .from("role_castings")
-      .update({ 
+      .update({
         ...details,
-        updated_at: new Date().toISOString() 
+        updated_at: new Date().toISOString()
       })
       .eq("role_id", roleId)
+      .eq("actor_id", actorId)
 
     if (error) throw error
 
@@ -497,17 +563,18 @@ export async function getProjectRolesWithCasting(
 
     // Transform roles to handle children and legacy casting naming
     const transformedRoles = roles.map(role => {
-      const casting = role.role_castings && role.role_castings.length > 0 ? {
-        ...role.role_castings[0],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        actor: role.role_castings[0].actors as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        name: (role.role_castings[0].actors as any)?.full_name // for v0 UI
-      } : null;
-      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const castings = (role.role_castings || []).map((rc: any) => ({
+        ...rc,
+        actor: rc.actors as any,
+        name: rc.actors?.full_name,
+      }))
+      const casting = castings.length > 0 ? castings[0] : null
+
       return {
         ...role,
         casting,
+        castings,
         // Source of truth: replicas_count is primary, fall back to replicas_needed for legacy data
         replicas_count: role.replicas_count ?? role.replicas_needed ?? 0
       }

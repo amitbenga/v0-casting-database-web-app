@@ -94,7 +94,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     try {
       const supabase = createBrowserClient()
       const { data, error } = await supabase
-        .from("casting_project_scripts")
+        .from("project_scripts")
         .select("id, project_id, file_name, file_url, file_type, file_size_bytes, processing_status, processing_error, applied_at, created_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
@@ -110,7 +110,8 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
 
   useEffect(() => {
     loadScripts()
-  }, [loadScripts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
@@ -211,7 +212,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     try {
       const supabase = createBrowserClient()
       const { error } = await supabase
-        .from("casting_project_scripts")
+        .from("project_scripts")
         .delete()
         .eq("id", scriptId)
 
@@ -674,7 +675,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           onApplied={async (scriptId?: string) => {
             // Create stub script_lines from parsed characters so the workspace
             // immediately shows rows after DOCX/PDF upload. script_id is now
-            // populated so rows are linked to the casting_project_scripts record.
+            // populated so rows are linked to the project_scripts record.
             if (parseResult && parseResult.parseResult.characters.length > 0) {
               try {
                 let lineNum = 1

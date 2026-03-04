@@ -19,14 +19,17 @@ import {
   AlertTriangle,
   Link2,
   ExternalLink,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Checkbox } from "@/components/ui/checkbox"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { deleteSubmissions, clearSubmissionsByStatus } from "@/lib/actions/submission-actions"
 
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 
@@ -105,6 +108,8 @@ function AdminPageContent() {
 
   const [isPlaying, setIsPlaying] = useState<string | null>(null)
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isClearing, setIsClearing] = useState(false)
 
   useEffect(() => {
     loadSubmissions()
@@ -267,6 +272,96 @@ function AdminPageContent() {
     }
   }
 
+  function toggleSelectId(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  function selectAllInSection(sectionSubmissions: ActorSubmission[]) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      const allSelected = sectionSubmissions.every((s) => next.has(s.id))
+      if (allSelected) {
+        // deselect all in section
+        sectionSubmissions.forEach((s) => next.delete(s.id))
+      } else {
+        sectionSubmissions.forEach((s) => next.add(s.id))
+      }
+      return next
+    })
+  }
+
+  async function handleClearAll(status: "approved" | "rejected") {
+    const label = status === "approved" ? "מאושרות" : "שנדחו"
+    const confirmed = window.confirm(
+      `האם אתה בטוח שברצונך למחוק את כל הבקשות ה${label}?\nפעולה זו אינה הפיכה.`
+    )
+    if (!confirmed) return
+
+    setIsClearing(true)
+    try {
+      const result = await clearSubmissionsByStatus(status)
+      if (!result.success) {
+        toast({ title: "שגיאה", description: result.error || "שגיאה במחיקה", variant: "destructive" })
+        return
+      }
+      toast({ title: "נמחק בהצלחה", description: `${result.deletedCount} בקשות נמחקו` })
+      // Clear any selections from this section
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        submissions
+          .filter((s) => s.review_status === status)
+          .forEach((s) => next.delete(s.id))
+        return next
+      })
+      await loadSubmissions()
+    } catch {
+      toast({ title: "שגיאה", description: "שגיאה במחיקה", variant: "destructive" })
+    } finally {
+      setIsClearing(false)
+    }
+  }
+
+  async function handleClearSelected(status: "approved" | "rejected") {
+    const sectionIds = submissions
+      .filter((s) => s.review_status === status && selectedIds.has(s.id))
+      .map((s) => s.id)
+
+    if (sectionIds.length === 0) return
+
+    const confirmed = window.confirm(
+      `האם אתה בטוח שברצונך למחוק ${sectionIds.length} בקשות נבחרות?\nפעולה זו אינה הפיכה.`
+    )
+    if (!confirmed) return
+
+    setIsClearing(true)
+    try {
+      const result = await deleteSubmissions(sectionIds)
+      if (!result.success) {
+        toast({ title: "שגיאה", description: result.error || "שגיאה במחיקה", variant: "destructive" })
+        return
+      }
+      toast({ title: "נמחק בהצלחה", description: `${result.deletedCount} בקשות נמחקו` })
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        sectionIds.forEach((id) => next.delete(id))
+        return next
+      })
+      await loadSubmissions()
+    } catch {
+      toast({ title: "שגיאה", description: "שגיאה במחיקה", variant: "destructive" })
+    } finally {
+      setIsClearing(false)
+    }
+  }
+
   function handlePlayAudio(url: string, id: string, e: React.MouseEvent) {
     e.stopPropagation()
 
@@ -381,14 +476,56 @@ function AdminPageContent() {
                 <p className="text-muted-foreground">אין בקשות מאושרות</p>
               </Card>
             ) : (
-              approvedSubmissions.map((submission) => (
-                <SubmissionCard
-                  key={submission.id}
-                  submission={submission}
-                  onPlayAudio={handlePlayAudio}
-                  isPlaying={isPlaying === submission.id}
-                />
-              ))
+              <>
+                {/* Toolbar */}
+                <div className="flex items-center gap-3 pb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => selectAllInSection(approvedSubmissions)}
+                  >
+                    {approvedSubmissions.every((s) => selectedIds.has(s.id)) ? "בטל בחירה" : "בחר הכל"}
+                  </Button>
+                  {approvedSubmissions.some((s) => selectedIds.has(s.id)) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive hover:bg-destructive/10"
+                      disabled={isClearing}
+                      onClick={() => handleClearSelected("approved")}
+                    >
+                      <Trash2 className="h-4 w-4 ml-1" />
+                      נקה נבחרים ({approvedSubmissions.filter((s) => selectedIds.has(s.id)).length})
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={isClearing}
+                    onClick={() => handleClearAll("approved")}
+                  >
+                    <Trash2 className="h-4 w-4 ml-1" />
+                    נקה הכל
+                  </Button>
+                </div>
+                {approvedSubmissions.map((submission) => (
+                  <div key={submission.id} className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedIds.has(submission.id)}
+                      onCheckedChange={() => toggleSelectId(submission.id)}
+                      className="mt-6"
+                    />
+                    <div className="flex-1">
+                      <SubmissionCard
+                        submission={submission}
+                        onPlayAudio={handlePlayAudio}
+                        isPlaying={isPlaying === submission.id}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </TabsContent>
 
@@ -398,14 +535,56 @@ function AdminPageContent() {
                 <p className="text-muted-foreground">אין בקשות שנדחו</p>
               </Card>
             ) : (
-              rejectedSubmissions.map((submission) => (
-                <SubmissionCard
-                  key={submission.id}
-                  submission={submission}
-                  onPlayAudio={handlePlayAudio}
-                  isPlaying={isPlaying === submission.id}
-                />
-              ))
+              <>
+                {/* Toolbar */}
+                <div className="flex items-center gap-3 pb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => selectAllInSection(rejectedSubmissions)}
+                  >
+                    {rejectedSubmissions.every((s) => selectedIds.has(s.id)) ? "בטל בחירה" : "בחר הכל"}
+                  </Button>
+                  {rejectedSubmissions.some((s) => selectedIds.has(s.id)) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive hover:bg-destructive/10"
+                      disabled={isClearing}
+                      onClick={() => handleClearSelected("rejected")}
+                    >
+                      <Trash2 className="h-4 w-4 ml-1" />
+                      נקה נבחרים ({rejectedSubmissions.filter((s) => selectedIds.has(s.id)).length})
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={isClearing}
+                    onClick={() => handleClearAll("rejected")}
+                  >
+                    <Trash2 className="h-4 w-4 ml-1" />
+                    נקה הכל
+                  </Button>
+                </div>
+                {rejectedSubmissions.map((submission) => (
+                  <div key={submission.id} className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedIds.has(submission.id)}
+                      onCheckedChange={() => toggleSelectId(submission.id)}
+                      className="mt-6"
+                    />
+                    <div className="flex-1">
+                      <SubmissionCard
+                        submission={submission}
+                        onPlayAudio={handlePlayAudio}
+                        isPlaying={isPlaying === submission.id}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </TabsContent>
         </Tabs>

@@ -14,6 +14,7 @@ import { CastingWorkspace } from "@/components/projects/casting-workspace"
 import { ScriptsTab } from "@/components/projects/scripts-tab"
 import { ActorsTab } from "@/components/projects/actors-tab"
 import { ScriptWorkspaceTab } from "@/components/projects/script-workspace-tab"
+import { ProjectRecordingProgressSummary } from "@/components/projects/project-recording-progress-summary"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
@@ -57,15 +58,51 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState("roles")
   const [showEditProjectDialog, setShowEditProjectDialog] = useState(false)
 
-  // Load project and stats
+  // Refresh stats only — no loading spinner, safe to call from child components
+  // without causing CastingWorkspace to unmount and re-trigger a fetch loop.
+  const refreshStats = useCallback(async () => {
+    if (!projectId) return
+    try {
+      const supabase = createBrowserClient()
+
+      const [rolesResult, scriptsResult] = await Promise.all([
+        supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
+        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
+      ])
+
+      // Count distinct actors via role IDs (avoids relying on role_castings.project_id)
+      const { data: roles } = await supabase
+        .from("project_roles")
+        .select("id")
+        .eq("project_id", projectId)
+      const roleIds = (roles || []).map((r: { id: string }) => r.id)
+      let actorsCount = 0
+      if (roleIds.length > 0) {
+        const { data: castings } = await supabase
+          .from("role_castings")
+          .select("actor_id")
+          .in("role_id", roleIds)
+        actorsCount = castings ? new Set(castings.map((c: { actor_id: string }) => c.actor_id)).size : 0
+      }
+
+      setStats({
+        rolesCount: rolesResult.count || 0,
+        actorsCount,
+        scriptsCount: scriptsResult.count || 0,
+      })
+    } catch (error) {
+      console.error("Error refreshing stats:", error)
+    }
+  }, [projectId])
+
+  // Full data load — shows loading spinner, used only on initial mount
   const loadData = useCallback(async () => {
     if (!projectId) return
-    
+
     setLoading(true)
     try {
       const supabase = createBrowserClient()
-      
-      // Load project
+
       const { data: projectData, error: projectError } = await supabase
         .from("casting_projects")
         .select("id, name, status, notes, director, casting_director, project_date, created_at, updated_at")
@@ -75,30 +112,18 @@ export default function ProjectDetailPage() {
       if (projectError) throw projectError
       setProject(projectData)
 
-      // Load stats
-      const [rolesResult, scriptsResult, castingsResult] = await Promise.all([
-        supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("casting_project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("role_castings").select("actor_id").eq("project_id", projectId),
-      ])
-
-      const actorsCount = castingsResult.data ? new Set(castingsResult.data.map(c => c.actor_id)).size : 0
-
-      setStats({
-        rolesCount: rolesResult.count || 0,
-        actorsCount: actorsCount,
-        scriptsCount: scriptsResult.count || 0,
-      })
+      await refreshStats()
     } catch (error) {
       console.error("Error loading project data:", error)
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, refreshStats])
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   // Export project
   async function exportProject() {
@@ -212,9 +237,8 @@ export default function ProjectDetailPage() {
                   <DropdownMenuItem className="md:hidden" onClick={() => setShowEditProjectDialog(true)}>
                     ערוך פרויקט
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportProject}>
-                    ייצא פרויקט
-                  </DropdownMenuItem>
+                  {/* ייצא פרויקט — temporarily hidden until feature is complete */}
+                  {/* <DropdownMenuItem onClick={exportProject}>ייצא פרויקט</DropdownMenuItem> */}
                   <DropdownMenuItem onClick={duplicateProject}>
                     שכפל
                   </DropdownMenuItem>
@@ -310,6 +334,8 @@ export default function ProjectDetailPage() {
 
           {/* Main Content */}
           <div className={activeTab === "workspace" ? "space-y-6" : "lg:col-span-3 space-y-6"}>
+            <ProjectRecordingProgressSummary projectId={project.id} />
+
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="roles">
@@ -327,7 +353,7 @@ export default function ProjectDetailPage() {
               </TabsList>
 
               <TabsContent value="roles" className="mt-6">
-                <CastingWorkspace projectId={project.id} onCastingChange={loadData} />
+                <CastingWorkspace projectId={project.id} onCastingChange={refreshStats} />
               </TabsContent>
 
               <TabsContent value="scripts" className="mt-6">
