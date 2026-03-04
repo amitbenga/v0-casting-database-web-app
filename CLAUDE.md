@@ -45,7 +45,7 @@ git worktree add "..\claude\fix-known-bugs" -b claude/fix-known-bugs
 | Language | TypeScript (0 errors חובה) |
 | Backend/DB | Supabase (PostgreSQL + Auth + Storage) |
 | UI | shadcn/ui + Tailwind CSS |
-| Data fetching | SWR + useSWRInfinite (cursor pagination) |
+| Data fetching | SWR + useSWRInfinite (cursor pagination) + SWR key factory |
 | Package manager | pnpm |
 | Tests | Vitest — `pnpm test` (300+ tests) |
 | Validation | Zod — runtime schema validation in parser pipeline |
@@ -322,6 +322,33 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 | ג | `claude/add-script-handling-IH2JC` | ✅ הושלם — מוזג ל-main |
 | ד | `claude/improve-model-4-workspace-C8vDl` | ✅ הושלם — ייצוא Excel, auto-assign, bulk delete, pagination |
 | ה | `claude/enhance-file-parser-C8JeT` | ✅ הושלם — PDF/DOCX tabular support, Zod validation, diagnostics |
+| ו | `claude/improve-app-performance-y2wVC` | ✅ הושלם — ביצועים (מרץ 2026) |
+
+### שלב ו — Performance Improvements (מרץ 2026)
+
+**מה הושלם:**
+- **SWR caching** — כל הדפים (actors, projects, folders, actor detail) משתמשים ב-SWR עם:
+  - Global SWRConfig: `revalidateOnFocus: false`, `dedupingInterval: 30000`, `keepPreviousData: true`
+  - SWR Key Factory (`lib/swr-keys.ts`) — centralized cache keys
+  - keepPreviousData guards — מניעת flash של entity ישן בניווט בין detail pages
+  - Optimistic updates עם rollback (save previousData, restore on error)
+- **Skeleton loading** — כל 8 ה-loading.tsx files מציגים skeleton UI (לא null/spinner)
+- **Navigation prefetching** — `<Link>` במקום `router.push`/`window.location.href` (כולל ActorCard)
+- **Auth optimization** — Supabase client singleton + profile cache ב-memory (cleared on logout)
+- **Dynamic imports** — 4 טאבים בדף פרויקט נטענים lazy (CastingWorkspace, ScriptsTab, ActorsTab, ScriptWorkspaceTab)
+- **Payload optimization** — `select("*")` הוחלף בשדות ספציפיים בclient fetchers
+- **SWRProvider** — `components/swr-provider.tsx` עוטף את כל האפליקציה
+
+**קבצים חדשים:**
+- `lib/swr-keys.ts` — SWR key factory
+- `components/swr-provider.tsx` — Global SWR config
+- `app/actors/[id]/loading.tsx` — Actor detail skeleton
+- `app/admin/loading.tsx` — Admin page skeleton
+
+**DB optimization plan (מוכן ליישום):**
+- אינדקסים: `idx_actors_full_name_trgm`, `idx_role_castings_actor_id`, `idx_script_lines_project_role`
+- View: `project_summary` (מרכז project+roles+actors+scripts count ב-query אחד)
+- Payload: narrow select בServer Actions (עדיין select("*") בחלקם)
 
 ---
 
