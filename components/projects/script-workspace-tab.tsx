@@ -34,13 +34,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2 } from "lucide-react"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds } from "@/lib/actions/script-line-actions"
+import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
+import type { StructuredParseResult } from "@/lib/parser/structured-parser"
 
 interface ScriptWorkspaceTabProps {
   projectId: string
@@ -284,7 +285,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [filterRole, setFilterRole] = useState<string>("__all__")
   const [filterStatus, setFilterStatus] = useState<string>("__all__")
   const [isImporting, setIsImporting] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [isTranslating, setIsTranslating] = useState(false)
   const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
+  const [structuredData, setStructuredData] = useState<StructuredParseResult[] | null>(null)
   const [showImportDialog, setShowImportDialog] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -415,20 +419,103 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }
 
-  // File selection
+  // File selection — unified handler for Excel, PDF, DOCX, TXT
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ""
 
+    const ext = file.name.split(".").pop()?.toLowerCase()
+
     try {
-      const result = await parseExcelFile(file)
-      if (result.sheets.length === 0) {
-        toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקובץ", variant: "destructive" })
+      // ── Excel files: existing flow ──────────────────────────────────────
+      if (ext === "xlsx" || ext === "xls") {
+        const result = await parseExcelFile(file)
+        if (result.sheets.length === 0) {
+          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקובץ", variant: "destructive" })
+          return
+        }
+        setExcelResult(result)
+        setStructuredData(null)
+        setShowImportDialog(true)
         return
       }
-      setExcelResult(result)
-      setShowImportDialog(true)
+
+      // ── PDF files ───────────────────────────────────────────────────────
+      if (ext === "pdf") {
+        const { extractTablesFromPDF, extractTextFromPDF } = await import("@/lib/parser/text-extractor")
+        const tables = await extractTablesFromPDF(file)
+
+        // If tables with enough rows found, use the column-mapping dialog
+        if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
+          setStructuredData(tables)
+          setExcelResult(null)
+          setShowImportDialog(true)
+          return
+        }
+
+        // Fallback: extract plain text and try dialogue extraction
+        const text = await extractTextFromPDF(file)
+        if (text.trim().length < 50) {
+          toast({ title: "שגיאה", description: "לא חולץ טקסט מספיק מה-PDF. ייתכן שהקובץ סרוק או מבוסס תמונה.", variant: "destructive" })
+          return
+        }
+        const { extractDialogueLines } = await import("@/lib/parser/structured-parser")
+        const dialogueLines = extractDialogueLines(text)
+        if (dialogueLines.length > 0) {
+          await handleImport(dialogueLines)
+        } else {
+          toast({ title: "שגיאה", description: "לא נמצאו שורות דיאלוג בקובץ ה-PDF", variant: "destructive" })
+        }
+        return
+      }
+
+      // ── DOCX files ──────────────────────────────────────────────────────
+      if (ext === "docx") {
+        const { extractTablesFromDOCX, extractTextFromDOCX } = await import("@/lib/parser/text-extractor")
+        const tables = await extractTablesFromDOCX(file)
+
+        if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
+          setStructuredData(tables)
+          setExcelResult(null)
+          setShowImportDialog(true)
+          return
+        }
+
+        // Fallback: extract plain text and try dialogue extraction
+        const text = await extractTextFromDOCX(file)
+        if (text.trim().length < 50) {
+          toast({ title: "שגיאה", description: "לא חולץ טקסט מספיק מה-DOCX", variant: "destructive" })
+          return
+        }
+        const { extractDialogueLines } = await import("@/lib/parser/structured-parser")
+        const dialogueLines = extractDialogueLines(text)
+        if (dialogueLines.length > 0) {
+          await handleImport(dialogueLines)
+        } else {
+          toast({ title: "שגיאה", description: "לא נמצאו שורות דיאלוג בקובץ ה-DOCX", variant: "destructive" })
+        }
+        return
+      }
+
+      // ── TXT files ───────────────────────────────────────────────────────
+      if (ext === "txt") {
+        const text = await file.text()
+        if (text.trim().length < 10) {
+          toast({ title: "שגיאה", description: "הקובץ ריק או לא מכיל טקסט מספיק", variant: "destructive" })
+          return
+        }
+        const { extractDialogueLines } = await import("@/lib/parser/structured-parser")
+        const dialogueLines = extractDialogueLines(text)
+        if (dialogueLines.length > 0) {
+          await handleImport(dialogueLines)
+        } else {
+          toast({ title: "שגיאה", description: "לא נמצאו שורות דיאלוג בקובץ הטקסט. ודא שהפורמט הוא NAME: dialogue או NAME ואחריו שורה מוזחת.", variant: "destructive" })
+        }
+        return
+      }
+
+      toast({ title: "שגיאה", description: `פורמט קובץ .${ext} אינו נתמך`, variant: "destructive" })
     } catch (err) {
       console.error(err)
       toast({ title: "שגיאה", description: "לא ניתן לקרוא את הקובץ", variant: "destructive" })
@@ -447,18 +534,81 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
         setShowImportDialog(false)
         setExcelResult(null)
+
+        // Auto-sync actors from existing castings
+        const syncResult = await syncActorsToScriptLines(projectId)
+
         const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
         setLines(freshLines)
         setTotal(freshTotal)
+
+        const syncNote = syncResult.success && syncResult.synced > 0
+          ? ` (${syncResult.synced} שורות שובצו אוטומטית)`
+          : ""
         toast({
           title: "ייבוא הצליח",
-          description: `${result.linesCreated} שורות יובאו לסביבת העבודה`,
+          description: `${result.linesCreated} שורות יובאו לסביבת העבודה${syncNote}`,
         })
       } catch (err) {
         console.error(err)
         toast({ title: "שגיאת ייבוא", description: String(err), variant: "destructive" })
       } finally {
         setIsImporting(false)
+      }
+    },
+    [projectId, toast]
+  )
+
+  // Sync actors from castings to script lines
+  const handleSyncActors = useCallback(
+    async () => {
+      setIsSyncing(true)
+      try {
+        const result = await syncActorsToScriptLines(projectId)
+        if (!result.success) throw new Error(result.error)
+
+        // Refresh lines to show updated actor assignments
+        const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+        setLines(freshLines)
+        setTotal(freshTotal)
+
+        toast({
+          title: "סנכרון הושלם",
+          description: `${result.synced} שורות עודכנו, ${result.cleared} שורות נוקו`,
+        })
+      } catch (err) {
+        console.error(err)
+        toast({ title: "שגיאת סנכרון", description: String(err), variant: "destructive" })
+      } finally {
+        setIsSyncing(false)
+      }
+    },
+    [projectId, toast]
+  )
+
+  // Auto-translate all lines without existing translation
+  const handleAutoTranslate = useCallback(
+    async () => {
+      setIsTranslating(true)
+      try {
+        const { translateScriptLines } = await import("@/lib/actions/translate-actions")
+        const result = await translateScriptLines(projectId)
+        if (!result.success) throw new Error(result.error)
+
+        if (result.translated === 0) {
+          toast({ title: "אין שורות לתרגום", description: "כל השורות כבר מתורגמות" })
+        } else {
+          // Refresh lines to show translations
+          const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+          setLines(freshLines)
+          setTotal(freshTotal)
+          toast({ title: "תרגום הושלם", description: `${result.translated} שורות תורגמו` })
+        }
+      } catch (err) {
+        console.error(err)
+        toast({ title: "שגיאת תרגום", description: String(err), variant: "destructive" })
+      } finally {
+        setIsTranslating(false)
       }
     },
     [projectId, toast]
@@ -581,16 +731,30 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     <div className="space-y-4 w-full">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap" dir="rtl">
-        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.pdf,.docx,.txt" className="hidden" onChange={handleFileSelect} />
         <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
           <Upload className="h-4 w-4" />
-          {"ייבא Excel"}
+          {"ייבא קובץ"}
         </Button>
 
         {hasLines && (
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
             <Download className="h-4 w-4" />
             {"ייצא Excel"}
+          </Button>
+        )}
+
+        {hasLines && (
+          <Button variant="outline" size="sm" onClick={handleSyncActors} disabled={isSyncing} className="gap-1.5">
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "מסנכרן..." : "סנכרן שחקנים"}
+          </Button>
+        )}
+
+        {hasLines && (
+          <Button variant="outline" size="sm" onClick={handleAutoTranslate} disabled={isTranslating} className="gap-1.5">
+            <Languages className="h-4 w-4" />
+            {isTranslating ? "מתרגם..." : "תרגם לעברית"}
           </Button>
         )}
 
@@ -724,10 +888,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
           <FileSpreadsheet className="h-12 w-12 text-muted-foreground" />
           <p className="text-lg font-medium">{"סביבת העבודה ריקה"}</p>
-          <p className="text-sm text-muted-foreground">{"ייבא קובץ Excel של תסריט הדיבוב כדי להתחיל"}</p>
+          <p className="text-sm text-muted-foreground">{"ייבא קובץ תסריט (Excel, PDF, DOCX או TXT) כדי להתחיל"}</p>
           <Button onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-4 w-4 ml-2" />
-            {"ייבא Excel"}
+            {"ייבא קובץ"}
           </Button>
         </div>
       )}
@@ -930,16 +1094,18 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       </Dialog>
 
       {/* Import dialog */}
-      {excelResult && (
+      {(excelResult || structuredData) && (
         <ScriptLinesImportDialog
           open={showImportDialog}
           onOpenChange={(open) => {
             if (!open) {
               setShowImportDialog(false)
               setExcelResult(null)
+              setStructuredData(null)
             }
           }}
-          excelResult={excelResult}
+          excelResult={excelResult ?? undefined}
+          structuredData={structuredData ?? undefined}
           onImport={handleImport}
           isImporting={isImporting}
         />
