@@ -21,10 +21,10 @@ async function fetchFolderData(folderId: string) {
   const supabase = createBrowserClient()
 
   const [folderResult, actorsResult] = await Promise.all([
-    supabase.from("folders").select("*").eq("id", folderId).single(),
+    supabase.from("folders").select("id, name, description, created_at").eq("id", folderId).single(),
     supabase
       .from("folder_actors")
-      .select(`*, actors (*)`)
+      .select(`folder_id, actor_id, actors (id, full_name, gender, birth_year, phone, email, image_url, voice_sample_url)`)
       .eq("folder_id", folderId),
   ])
 
@@ -108,7 +108,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       toast({ title: "ריק", description: "אין שחקנים בתיקייה לייצוא" })
       return
     }
-    const filename = `folder_${folder.name.replace(/\s+/g, "_")}`
+    const filename = `folder_${folder?.name.replace(/\s+/g, "_") ?? "export"}`
     exportActors(actors, format, filename)
   }
 

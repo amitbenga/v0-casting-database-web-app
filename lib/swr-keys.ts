@@ -23,4 +23,8 @@ export const swrKeys = {
     list: () => "folders" as const,
     detail: (folderId: string) => `folders/${folderId}` as const,
   },
+
+  actor: {
+    detail: (actorId: string) => `actors/${actorId}` as const,
+  },
 } as const

@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useParams } from "next/navigation"
+import useSWR from "swr"
 import { Mail, Phone, Calendar, Edit, Download, Share2, MoreVertical, Music, GraduationCap, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,6 +17,42 @@ import { VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, typ
 import { AppHeader } from "@/components/app-header"
 import { exportActor } from "@/lib/export-utils"
 import { useToast } from "@/hooks/use-toast"
+import { swrKeys } from "@/lib/swr-keys"
+
+async function fetchActor(actorId: string): Promise<Actor> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("actors")
+    .select("id, full_name, gender, birth_year, phone, email, is_singer, is_course_grad, vat_status, image_url, voice_sample_url, notes, city, skills, languages, other_lang_text, created_at, updated_at, dubbing_experience_years, singing_styles, singing_styles_other")
+    .eq("id", actorId)
+    .single()
+
+  if (error) throw error
+
+  return {
+    id: data.id,
+    full_name: data.full_name,
+    gender: data.gender,
+    birth_year: data.birth_year,
+    phone: data.phone,
+    email: data.email || "",
+    is_singer: data.is_singer || false,
+    is_course_grad: data.is_course_grad || false,
+    vat_status: data.vat_status,
+    image_url: data.image_url || "",
+    voice_sample_url: data.voice_sample_url || "",
+    notes: data.notes || "",
+    city: data.city || "",
+    skills: Array.isArray(data.skills) ? data.skills : [],
+    languages: Array.isArray(data.languages) ? data.languages : [],
+    other_lang_text: data.other_lang_text || "",
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+    dubbing_experience_years: data.dubbing_experience_years || 0,
+    singing_styles: Array.isArray(data.singing_styles) ? data.singing_styles : [],
+    singing_styles_other: Array.isArray(data.singing_styles_other) ? data.singing_styles_other : [],
+  }
+}
 
 export default function ActorProfile() {
   const params = useParams()
@@ -23,8 +60,10 @@ export default function ActorProfile() {
   const actorId = params?.id as string
 
   const [isEditing, setIsEditing] = useState(false)
-  const [actor, setActor] = useState<Actor | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data: actor, isLoading: loading, mutate } = useSWR(
+    actorId ? swrKeys.actor.detail(actorId) : null,
+    () => fetchActor(actorId),
+  )
 
   const handleShare = async () => {
     if (!actor) return
@@ -57,60 +96,55 @@ export default function ActorProfile() {
     exportActor(actor, format)
   }
 
-  useEffect(() => {
-    if (!actorId) return
-
-    async function loadActor() {
-      try {
-        const supabase = createClient()
-        const { data, error } = await supabase.from("actors").select("*").eq("id", actorId).single()
-
-        if (error) {
-          console.error("[v0] Error loading actor:", error)
-          return
-        }
-
-        if (data) {
-          const mappedActor: Actor = {
-            id: data.id,
-            full_name: data.full_name,
-            gender: data.gender,
-            birth_year: data.birth_year,
-            phone: data.phone,
-            email: data.email || "",
-            is_singer: data.is_singer || false,
-            is_course_grad: data.is_course_grad || false,
-            vat_status: data.vat_status,
-            image_url: data.image_url || "",
-            voice_sample_url: data.voice_sample_url || "",
-            notes: data.notes || "",
-            city: data.city || "",
-            skills: Array.isArray(data.skills) ? data.skills : [],
-            languages: Array.isArray(data.languages) ? data.languages : [],
-            other_lang_text: data.other_lang_text || "",
-            created_at: data.created_at,
-            updated_at: data.updated_at,
-            // שדות חדשים - דיבוב ושירה
-            dubbing_experience_years: data.dubbing_experience_years || 0,
-            singing_styles: Array.isArray(data.singing_styles) ? data.singing_styles : [],
-            singing_styles_other: Array.isArray(data.singing_styles_other) ? data.singing_styles_other : [],
-          }
-          setActor(mappedActor)
-        }
-      } catch (error) {
-        console.error("[v0] Error:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadActor()
-  }, [actorId])
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">טוען...</p>
+      <div className="min-h-screen bg-background">
+        {/* Header skeleton */}
+        <div className="border-b bg-card">
+          <div className="container mx-auto px-4 md:px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="h-7 w-40 bg-muted animate-pulse rounded" />
+                <div className="flex gap-2">
+                  <div className="h-5 w-16 bg-muted animate-pulse rounded-full" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <div className="h-9 w-20 bg-muted animate-pulse rounded-md" />
+                <div className="h-9 w-9 bg-muted animate-pulse rounded-md" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="container mx-auto px-4 md:px-6 py-6 max-w-6xl">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-card overflow-hidden">
+                <div className="aspect-[3/4] bg-muted animate-pulse" />
+              </div>
+              <div className="rounded-lg border bg-card p-4 space-y-3">
+                <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                <div className="h-px bg-border" />
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="h-4 w-4 bg-muted animate-pulse rounded" />
+                    <div className="space-y-1 flex-1">
+                      <div className="h-3 w-12 bg-muted animate-pulse rounded" />
+                      <div className="h-3 w-24 bg-muted animate-pulse rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="lg:col-span-2 space-y-4">
+              <div className="rounded-lg border bg-card p-6 space-y-3">
+                <div className="h-5 w-24 bg-muted animate-pulse rounded" />
+                <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                <div className="h-4 w-3/4 bg-muted animate-pulse rounded" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -157,7 +191,7 @@ export default function ActorProfile() {
         return
       }
 
-      setActor(updatedActor)
+      mutate(updatedActor, false)
       setIsEditing(false)
     } catch (error) {
       console.error("[v0] Error:", error)

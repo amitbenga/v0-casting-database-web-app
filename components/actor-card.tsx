@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useEffect, memo } from "react"
 import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User, Download } from "lucide-react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,7 +38,6 @@ export const ActorCard = memo(function ActorCard({
   const [showOverlay, setShowOverlay] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const router = useRouter()
 
   // Cleanup audio on unmount to prevent memory leaks
   useEffect(() => {
@@ -53,9 +52,7 @@ export const ActorCard = memo(function ActorCard({
   const currentYear = new Date().getFullYear()
   const age = currentYear - (actor.birth_year ?? 0)
 
-  const handleNavigateToProfile = () => {
-    router.push(`/actors/${actor.id}`)
-  }
+  const actorProfileHref = `/actors/${actor.id}`
 
   const handlePlayAudio = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -92,12 +89,6 @@ export const ActorCard = memo(function ActorCard({
     if (onAddToProject) {
       onAddToProject(actor)
     }
-  }
-
-  const handleViewDetails = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    router.push(`/actors/${actor.id}`)
   }
 
   const handleAddToProject = (e: React.MouseEvent) => {
@@ -145,7 +136,7 @@ export const ActorCard = memo(function ActorCard({
       onMouseEnter={() => setShowOverlay(true)}
       onMouseLeave={() => setShowOverlay(false)}
     >
-      <div className="relative aspect-[3/4] overflow-hidden bg-muted cursor-pointer" onClick={handleNavigateToProfile}>
+      <Link href={actorProfileHref} className="relative aspect-[3/4] overflow-hidden bg-muted cursor-pointer block">
         {actor.image_url ? (
           <img
             src={actor.image_url || "/placeholder.svg"}
@@ -224,7 +215,7 @@ export const ActorCard = memo(function ActorCard({
             </div>
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Card Footer */}
       <div className="p-2 md:p-3 space-y-2 md:space-y-3">
@@ -273,12 +264,12 @@ export const ActorCard = memo(function ActorCard({
             onClick={(e) => e.stopPropagation()}
             className="h-4 w-4"
           />
-          <span
+          <Link
+            href={actorProfileHref}
             className="font-medium text-xs md:text-sm flex-1 line-clamp-1 cursor-pointer hover:text-primary transition-colors"
-            onClick={handleNavigateToProfile}
           >
             {actor.full_name}
-          </span>
+          </Link>
           <DropdownMenu dir="rtl">
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
@@ -290,14 +281,8 @@ export const ActorCard = memo(function ActorCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  handleViewDetails(e as any)
-                }}
-                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
-              >
-                פרטים מלאים
+              <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors">
+                <Link href={actorProfileHref}>פרטים מלאים</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={(e) => {
