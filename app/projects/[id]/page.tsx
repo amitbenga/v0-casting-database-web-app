@@ -35,6 +35,7 @@ const ScriptWorkspaceTab = dynamic(
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
+import { swrKeys } from "@/lib/swr-keys"
 
 const PROJECT_STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -108,12 +109,15 @@ export default function ProjectDetailPage() {
   const projectId = typeof params?.id === "string" ? params.id : null
 
   const { data, isLoading: loading, mutate } = useSWR(
-    projectId ? `project-${projectId}` : null,
+    projectId ? swrKeys.projects.detail(projectId) : null,
     () => fetchProjectData(projectId!),
   )
 
-  const project = data?.project ?? null
-  const stats = data?.stats ?? { rolesCount: 0, actorsCount: 0, scriptsCount: 0 }
+  // Guard: keepPreviousData can briefly show stale data from a different project.
+  // If the cached data doesn't match the current route ID, treat as loading.
+  const isStaleData = data?.project && data.project.id !== projectId
+  const project = isStaleData ? null : (data?.project ?? null)
+  const stats = isStaleData ? { rolesCount: 0, actorsCount: 0, scriptsCount: 0 } : (data?.stats ?? { rolesCount: 0, actorsCount: 0, scriptsCount: 0 })
 
   const [activeTab, setActiveTab] = useState("roles")
   const [showEditProjectDialog, setShowEditProjectDialog] = useState(false)
@@ -173,12 +177,36 @@ export default function ProjectDetailPage() {
     }
   }
 
-  if (loading) {
+  if (loading || isStaleData) {
+    // Match the loading.tsx skeleton structure for seamless transition
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">טוען פרויקט...</p>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card sticky top-0 z-10">
+          <div className="container mx-auto px-4 md:px-6 py-4">
+            <div className="flex items-center gap-4">
+              <div className="h-9 w-9 bg-muted animate-pulse rounded-md" />
+              <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 md:px-6 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
+            <div className="space-y-6">
+              <div className="rounded-lg border bg-card p-6 space-y-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-10 bg-muted animate-pulse rounded" />
+                ))}
+              </div>
+            </div>
+            <div className="lg:col-span-3 space-y-6">
+              <div className="h-10 bg-muted animate-pulse rounded-md" />
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )

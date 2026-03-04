@@ -11,6 +11,7 @@ import { CreateFolderDialog } from "@/components/create-folder-dialog"
 import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { swrKeys } from "@/lib/swr-keys"
 
 async function fetchFolders() {
   const supabase = createClient()
@@ -28,7 +29,7 @@ async function fetchFolders() {
 }
 
 export default function FoldersPage() {
-  const { data: folders = [], isLoading: loading, mutate } = useSWR("folders", fetchFolders)
+  const { data: folders = [], isLoading: loading, mutate } = useSWR(swrKeys.folders.list(), fetchFolders)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
 
@@ -48,20 +49,26 @@ export default function FoldersPage() {
 
   const handleDeleteFolder = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק תיקייה זו?")) {
-      // Optimistic update
-      mutate(async (current: any) => (current || []).filter((f: any) => f.id !== id), { revalidate: false })
+      const previousData = folders
+      // Optimistic update — remove from cache immediately
+      mutate(
+        previousData.filter((f: any) => f.id !== id),
+        false,
+      )
       try {
         const supabase = createClient()
         const { error } = await supabase.from("folders").delete().eq("id", id)
 
         if (error) {
           console.error("[v0] Error deleting folder:", error)
-          mutate()
+          // Rollback on failure
+          mutate(previousData, false)
           return
         }
       } catch (error) {
         console.error("[v0] Error:", error)
-        mutate()
+        // Rollback on failure
+        mutate(previousData, false)
       }
     }
   }
@@ -70,8 +77,24 @@ export default function FoldersPage() {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader />
-        <div className="flex items-center justify-center h-[60vh]">
-          <p className="text-muted-foreground">טוען תיקיות...</p>
+        <div className="container mx-auto px-4 md:px-6 py-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="h-8 w-28 bg-muted animate-pulse rounded" />
+            <div className="h-10 w-28 bg-muted animate-pulse rounded-md" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-muted animate-pulse rounded" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-5 w-24 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )

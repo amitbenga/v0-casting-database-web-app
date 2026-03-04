@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import type { Actor, FilterState } from "@/lib/types"
+import { swrKeys } from "@/lib/swr-keys"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { AppHeader } from "@/components/app-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -127,11 +128,11 @@ function ActorsDatabaseContent() {
   // SWR Infinite for cursor-based pagination
   const getKey = (pageIndex: number, previousPageData: { actors: Actor[]; nextCursor: string | null } | null) => {
     // First page - no cursor
-    if (pageIndex === 0) return ["actors", null]
+    if (pageIndex === 0) return swrKeys.actors.infinite(null)
     // No more pages
     if (previousPageData && !previousPageData.nextCursor) return null
     // Return cursor for next page
-    return ["actors", previousPageData?.nextCursor]
+    return swrKeys.actors.infinite(previousPageData?.nextCursor ?? null)
   }
   
   const { data, size, setSize, isLoading, mutate } = useSWRInfinite(

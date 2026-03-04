@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import useSWR from "swr"
 import { Card } from "@/components/ui/card"
 import type { ProjectProgressResponse } from "@/lib/progress/types"
+import { swrKeys } from "@/lib/swr-keys"
 
 interface ProjectRecordingProgressSummaryProps {
   projectId: string
@@ -21,8 +22,8 @@ async function fetchProgress(url: string): Promise<ProjectProgressResponse> {
 
 export function ProjectRecordingProgressSummary({ projectId }: ProjectRecordingProgressSummaryProps) {
   const { data, isLoading: loading, error } = useSWR(
-    `/api/projects/${encodeURIComponent(projectId)}/progress`,
-    fetchProgress,
+    swrKeys.projects.progress(projectId),
+    () => fetchProgress(`/api/projects/${encodeURIComponent(projectId)}/progress`),
   )
 
   const percentLabel = useMemo(() => formatPercent(data?.percentRecorded ?? 0), [data?.percentRecorded])

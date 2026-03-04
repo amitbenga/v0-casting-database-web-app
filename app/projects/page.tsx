@@ -15,6 +15,7 @@ import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
+import { swrKeys } from "@/lib/swr-keys"
 
 const STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -59,7 +60,7 @@ async function fetchProjects() {
 
 export default function ProjectsPage() {
   const { toast } = useToast()
-  const { data: projects = [], isLoading: loading, mutate } = useSWR("projects", fetchProjects)
+  const { data: projects = [], isLoading: loading, mutate } = useSWR(swrKeys.projects.list(), fetchProjects)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -108,7 +109,7 @@ export default function ProjectsPage() {
 
       toast({ title: "הצלחה", description: "הפרויקט שוכפל בהצלחה" })
       if (newProject) {
-        mutate(async (current: any) => [newProject, ...(current || [])], { revalidate: false })
+        mutate([newProject, ...projects], false)
       }
     } catch (error) {
       console.error("[v0] Error:", error)
@@ -122,20 +123,27 @@ export default function ProjectsPage() {
 
   const handleDeleteProject = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק פרויקט זה?")) {
+      const previousData = projects
       // Optimistic update — remove from cache immediately
-      mutate(async (current: any) => (current || []).filter((p: any) => p.id !== id), { revalidate: false })
+      mutate(
+        previousData.filter((p: any) => p.id !== id),
+        false, // Don't revalidate yet
+      )
       try {
         const supabase = createClient()
         const { error } = await supabase.from("casting_projects").delete().eq("id", id)
 
         if (error) {
           console.error("[v0] Error deleting project:", error)
-          // Revert on failure
-          mutate()
+          // Rollback on failure
+          mutate(previousData, false)
+          toast({ title: "שגיאה", description: "שגיאה במחיקת פרויקט", variant: "destructive" })
         }
       } catch (error) {
         console.error("[v0] Error:", error)
-        mutate()
+        // Rollback on failure
+        mutate(previousData, false)
+        toast({ title: "שגיאה", description: "שגיאה במחיקת פרויקט", variant: "destructive" })
       }
     }
   }
@@ -144,8 +152,16 @@ export default function ProjectsPage() {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader />
-        <div className="flex items-center justify-center h-[60vh]">
-          <p className="text-muted-foreground">טוען פרויקטים...</p>
+        <div className="container mx-auto px-4 md:px-6 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-5 space-y-3 animate-pulse">
+                <div className="h-5 w-32 bg-muted rounded" />
+                <div className="h-5 w-16 bg-muted rounded-full" />
+                <div className="h-3 w-24 bg-muted rounded" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )

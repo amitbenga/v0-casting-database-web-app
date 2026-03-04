@@ -15,6 +15,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { exportActors } from "@/lib/export-utils"
 import { useToast } from "@/hooks/use-toast"
+import { swrKeys } from "@/lib/swr-keys"
 
 async function fetchFolderData(folderId: string) {
   const supabase = createBrowserClient()
@@ -39,12 +40,14 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
   const router = useRouter()
   const { toast } = useToast()
   const { data, isLoading: loading, mutate } = useSWR(
-    `folder-${params.id}`,
+    swrKeys.folders.detail(params.id),
     () => fetchFolderData(params.id),
   )
 
-  const folder = data?.folder ?? null
-  const actors = data?.actors ?? []
+  // Guard: keepPreviousData can briefly show stale data from a different folder.
+  const isStaleData = data?.folder && data.folder.id !== params.id
+  const folder = isStaleData ? null : (data?.folder ?? null)
+  const actors = isStaleData ? [] : (data?.actors ?? [])
 
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddActorDialog, setShowAddActorDialog] = useState(false)
@@ -54,13 +57,14 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
   async function removeActorFromFolder(actorId: string) {
     if (!confirm("האם להסיר שחקן זה מהתיקייה?")) return
 
-    // Optimistic update
+    const previousData = data
+    // Optimistic update — remove actor immediately
     mutate(
-      async (current: any) => current ? {
-        ...current,
-        actors: current.actors.filter((a: any) => a.id !== actorId),
-      } : current,
-      { revalidate: false },
+      previousData ? {
+        ...previousData,
+        actors: previousData.actors.filter((a: any) => a.id !== actorId),
+      } : previousData,
+      false,
     )
 
     try {
@@ -68,7 +72,8 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       const { error } = await supabase.from("folder_actors").delete().eq("folder_id", params.id).eq("actor_id", actorId)
 
       if (error) {
-        mutate()
+        // Rollback on failure
+        mutate(previousData, false)
         throw error
       }
     } catch (error) {
@@ -146,12 +151,36 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  if (loading) {
+  if (loading || isStaleData) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">טוען תיקייה...</p>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card sticky top-0 z-10">
+          <div className="container mx-auto px-4 md:px-6 py-4">
+            <div className="flex items-center gap-4">
+              <div className="h-9 w-9 bg-muted animate-pulse rounded-md" />
+              <div className="h-6 w-36 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 md:px-6 py-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-10 flex-1 bg-muted animate-pulse rounded-md" />
+            <div className="h-10 w-28 bg-muted animate-pulse rounded-md" />
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+                  </div>
+                  <div className="h-8 w-8 bg-muted animate-pulse rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
