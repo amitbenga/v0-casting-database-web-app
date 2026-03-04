@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
+import useSWR from "swr"
 import { Plus, Search, Calendar, Users, MoreVertical, FolderOpen, UserCircle, Film } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,43 +42,30 @@ function getStatusLabel(status: string) {
   return STATUS_LABELS[status] ?? status
 }
 
+async function fetchProjects() {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("casting_projects")
+    .select("id,name,status,notes,director,casting_director,project_date,created_at")
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error loading projects:", error)
+    throw error
+  }
+
+  return data || []
+}
+
 export default function ProjectsPage() {
   const { toast } = useToast()
-  const [projects, setProjects] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: projects = [], isLoading: loading, mutate } = useSWR("projects", fetchProjects)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedProject, setSelectedProject] = useState<any | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const debouncedSearch = useDebounce(searchQuery, 300)
-
-  useEffect(() => {
-    loadProjects()
-  }, [])
-
-  async function loadProjects() {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("casting_projects")
-        .select("id,name,status,notes,director,casting_director,project_date,created_at")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        console.error("[v0] Error loading projects:", error)
-        return
-      }
-
-      if (data) {
-        setProjects(data)
-      }
-    } catch (error) {
-      console.error("[v0] Error:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const filteredProjects = useMemo(() => {
     const query = debouncedSearch.toLowerCase()
@@ -120,7 +108,7 @@ export default function ProjectsPage() {
 
       toast({ title: "הצלחה", description: "הפרויקט שוכפל בהצלחה" })
       if (newProject) {
-        setProjects((prev) => [newProject, ...prev])
+        mutate(async (current: any) => [newProject, ...(current || [])], { revalidate: false })
       }
     } catch (error) {
       console.error("[v0] Error:", error)
@@ -134,8 +122,8 @@ export default function ProjectsPage() {
 
   const handleDeleteProject = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק פרויקט זה?")) {
-      // Optimistic update
-      setProjects((prev) => prev.filter((p) => p.id !== id))
+      // Optimistic update — remove from cache immediately
+      mutate(async (current: any) => (current || []).filter((p: any) => p.id !== id), { revalidate: false })
       try {
         const supabase = createClient()
         const { error } = await supabase.from("casting_projects").delete().eq("id", id)
@@ -143,11 +131,11 @@ export default function ProjectsPage() {
         if (error) {
           console.error("[v0] Error deleting project:", error)
           // Revert on failure
-          await loadProjects()
+          mutate()
         }
       } catch (error) {
         console.error("[v0] Error:", error)
-        await loadProjects()
+        mutate()
       }
     }
   }
@@ -363,7 +351,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      <CreateProjectDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onProjectCreated={loadProjects} />
+      <CreateProjectDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onProjectCreated={() => mutate()} />
 
       {selectedProject && (
         <EditProjectDialog
@@ -371,7 +359,7 @@ export default function ProjectsPage() {
           onOpenChange={setShowEditDialog}
           project={selectedProject}
           onProjectUpdated={() => {
-            loadProjects()
+            mutate()
             setShowEditDialog(false)
             setSelectedProject(null)
           }}

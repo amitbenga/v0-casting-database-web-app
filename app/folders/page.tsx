@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import useSWR from "swr"
 import { Plus, Search, Folder, MoreVertical, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,40 +12,27 @@ import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
+async function fetchFolders() {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("folders")
+    .select("*, folder_actors(count)")
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error loading folders:", error)
+    throw error
+  }
+
+  return data || []
+}
+
 export default function FoldersPage() {
-  const [folders, setFolders] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: folders = [], isLoading: loading, mutate } = useSWR("folders", fetchFolders)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
 
-  useEffect(() => {
-    loadFolders()
-  }, [])
-
-  async function loadFolders() {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("folders")
-        .select("*, folder_actors(count)")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        console.error("[v0] Error loading folders:", error)
-        return
-      }
-
-      if (data) {
-        setFolders(data)
-      }
-    } catch (error) {
-      console.error("[v0] Error:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filteredFolders = folders.filter((folder) => folder.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredFolders = folders.filter((folder: any) => folder.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
   const getColorClass = (color: string) => {
     const colors: Record<string, string> = {
@@ -60,18 +48,20 @@ export default function FoldersPage() {
 
   const handleDeleteFolder = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק תיקייה זו?")) {
+      // Optimistic update
+      mutate(async (current: any) => (current || []).filter((f: any) => f.id !== id), { revalidate: false })
       try {
         const supabase = createClient()
         const { error } = await supabase.from("folders").delete().eq("id", id)
 
         if (error) {
           console.error("[v0] Error deleting folder:", error)
+          mutate()
           return
         }
-
-        await loadFolders()
       } catch (error) {
         console.error("[v0] Error:", error)
+        mutate()
       }
     }
   }
@@ -117,7 +107,7 @@ export default function FoldersPage() {
       <div className="container mx-auto px-4 md:px-6 py-6 md:py-8">
         {/* Folders Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-          {filteredFolders.map((folder) => (
+          {filteredFolders.map((folder: any) => (
             <Card key={folder.id} className="p-4 md:p-6 hover:shadow-lg transition-shadow group">
               <div className="space-y-3 md:space-y-4">
                 {/* Folder Icon and Header */}
@@ -183,7 +173,7 @@ export default function FoldersPage() {
         )}
       </div>
 
-      <CreateFolderDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onFolderCreated={loadFolders} />
+      <CreateFolderDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onFolderCreated={() => mutate()} />
     </div>
   )
 }
