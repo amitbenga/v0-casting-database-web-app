@@ -44,26 +44,32 @@ export function RolesTab({ projectId }: RolesTabProps) {
     sortByReplicas: null,
   })
 
-  const loadRoles = async () => {
+  const loadRoles = async (silent = false) => {
     try {
-      setLoading(true)
-      setError(null)
+      if (!silent) {
+        setLoading(true)
+        setError(null)
+      }
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
-      
-      // Expand all parent roles by default
-      const parentIds = response.roles
-        .filter((r) => r.children && r.children.length > 0)
-        .map((r) => r.id)
-      setExpandedRoles(new Set(parentIds))
+
+      // Expand all parent roles by default (only on initial load)
+      if (!silent) {
+        const parentIds = response.roles
+          .filter((r) => r.children && r.children.length > 0)
+          .map((r) => r.id)
+        setExpandedRoles(new Set(parentIds))
+      }
     } catch (err) {
-      setError("שגיאה בטעינת התפקידים")
+      if (!silent) setError("שגיאה בטעינת התפקידים")
       console.error("Error loading roles:", err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
+
+  const refreshRoles = () => loadRoles(true)
 
   const handleCreateRole = async () => {
     if (!newRoleName.trim()) return
@@ -80,7 +86,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
         setShowAddRoleDialog(false)
         setNewRoleName("")
         setNewRoleReplicas(0)
-        loadRoles()
+        refreshRoles()
       } else {
         toast({
           title: "שגיאה",
@@ -179,7 +185,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
     return (
       <div className="text-center py-12">
         <p className="text-destructive mb-4">{error}</p>
-        <Button onClick={loadRoles} variant="outline">
+        <Button onClick={() => loadRoles()} variant="outline">
           נסה שוב
         </Button>
       </div>
@@ -344,7 +350,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
                     <CollapsibleContent className="space-y-2">
                       {/* Parent role card if it has its own casting */}
                       {role.casting && (
-                        <RoleCastingCard role={role} conflicts={conflicts} onUpdate={loadRoles} />
+                        <RoleCastingCard role={role} conflicts={conflicts} onUpdate={refreshRoles} />
                       )}
                       
                       {/* Child roles */}
@@ -354,7 +360,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
                           role={child}
                           conflicts={conflicts}
                           isChild
-                          onUpdate={loadRoles}
+                          onUpdate={refreshRoles}
                         />
                       ))}
                     </CollapsibleContent>
@@ -365,7 +371,7 @@ export function RolesTab({ projectId }: RolesTabProps) {
 
             // Regular role without children
             return (
-              <RoleCastingCard key={role.id} role={role} conflicts={conflicts} onUpdate={loadRoles} />
+              <RoleCastingCard key={role.id} role={role} conflicts={conflicts} onUpdate={refreshRoles} />
             )
           })}
         </div>
