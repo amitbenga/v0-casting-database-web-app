@@ -26,6 +26,11 @@ export default function LoginPage() {
       setError("שגיאה בהתחברות. בדוק את האימייל והסיסמה.")
       setLoading(false)
     }
+    // On success: signIn() redirects to "/" via router.push — no need to setLoading(false)
+    // but if redirect is delayed, reset loading so the button is not stuck
+    else {
+      setLoading(false)
+    }
   }
 
   return (

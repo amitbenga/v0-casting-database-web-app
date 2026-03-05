@@ -22,13 +22,13 @@ export async function saveScriptLines(
 
   try {
     if (options.replaceAll) {
-      const deleteQuery = supabase
+      let deleteQuery = supabase
         .from("script_lines")
         .delete()
         .eq("project_id", projectId)
 
       if (options.scriptId) {
-        deleteQuery.eq("script_id", options.scriptId)
+        deleteQuery = deleteQuery.eq("script_id", options.scriptId)
       }
 
       const { error: deleteError } = await deleteQuery
@@ -251,6 +251,7 @@ export async function syncActorsToScriptLines(
     const syncActorMap = new Map<string, string[]>() // actor_id → line IDs
 
     for (const line of allLines) {
+      if (!line.role_name) continue
       const normalizedName = line.role_name.trim().toLowerCase()
       const castActorId = roleActorMap.get(normalizedName)
 

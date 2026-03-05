@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
 import { swrKeys } from "@/lib/swr-keys"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 const STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -60,7 +61,7 @@ async function fetchProjects() {
   return data || []
 }
 
-export default function ProjectsPage() {
+function ProjectsPageContent() {
   const { toast } = useToast()
   const { data: projects = [], isLoading: loading, mutate } = useSWR(swrKeys.projects.list(), fetchProjects)
   const [searchQuery, setSearchQuery] = useState("")
@@ -404,5 +405,13 @@ export default function ProjectsPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function ProjectsPage() {
+  return (
+    <ProtectedRoute>
+      <ProjectsPageContent />
+    </ProtectedRoute>
   )
 }

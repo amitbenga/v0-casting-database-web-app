@@ -18,6 +18,7 @@ import { AppHeader } from "@/components/app-header"
 import { exportActor } from "@/lib/export-utils"
 import { useToast } from "@/hooks/use-toast"
 import { swrKeys } from "@/lib/swr-keys"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 async function fetchActor(actorId: string): Promise<Actor> {
   const supabase = createClient()
@@ -54,7 +55,7 @@ async function fetchActor(actorId: string): Promise<Actor> {
   }
 }
 
-export default function ActorProfile() {
+function ActorProfileContent() {
   const params = useParams()
   const { toast } = useToast()
   const actorId = params?.id as string
@@ -486,5 +487,13 @@ export default function ActorProfile() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ActorProfile() {
+  return (
+    <ProtectedRoute>
+      <ActorProfileContent />
+    </ProtectedRoute>
   )
 }

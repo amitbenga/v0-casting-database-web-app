@@ -12,6 +12,7 @@ import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { swrKeys } from "@/lib/swr-keys"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 async function fetchFolders() {
   const supabase = createClient()
@@ -28,7 +29,7 @@ async function fetchFolders() {
   return data || []
 }
 
-export default function FoldersPage() {
+function FoldersPageContent() {
   const { data: folders = [], isLoading: loading, mutate } = useSWR(swrKeys.folders.list(), fetchFolders)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -160,8 +161,6 @@ export default function FoldersPage() {
                       <DropdownMenuItem>
                         <Link href={`/folders/${folder.id}`}>צפייה בתיקייה</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem>עריכת תיקייה</DropdownMenuItem>
-                      <DropdownMenuItem>שכפול</DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"
                         onClick={(e) => {
@@ -198,5 +197,13 @@ export default function FoldersPage() {
 
       <CreateFolderDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onFolderCreated={() => mutate()} />
     </div>
+  )
+}
+
+export default function FoldersPage() {
+  return (
+    <ProtectedRoute>
+      <FoldersPageContent />
+    </ProtectedRoute>
   )
 }
