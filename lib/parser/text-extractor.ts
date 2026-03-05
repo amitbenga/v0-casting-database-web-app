@@ -450,6 +450,73 @@ export async function extractTablesFromDOCX(
 }
 
 /**
+ * Raw PDF text extraction — fallback when PDF.js fails.
+ *
+ * Scans the PDF binary for literal string objects `(...)` in the PDF syntax.
+ * Works for many text-based PDFs where fonts can't be decoded by PDF.js
+ * (e.g., CIDFont without a proper ToUnicode map).
+ *
+ * Returns empty string if nothing readable is found.
+ */
+export async function extractTextFromPDFRaw(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(arrayBuffer)
+  const collected: string[] = []
+  let i = 0
+
+  while (i < bytes.length) {
+    if (bytes[i] === 0x28) {
+      // Start of literal string '('
+      i++
+      let s = ""
+      let depth = 1
+      while (i < bytes.length && depth > 0) {
+        const b = bytes[i]
+        if (b === 0x5c && i + 1 < bytes.length) {
+          // Backslash escape
+          i++
+          const e = bytes[i]
+          if (e === 0x6e) s += "\n"
+          else if (e === 0x74) s += "\t"
+          else if (e === 0x72) s += "\r"
+          else if (e >= 0x30 && e <= 0x37) {
+            // Octal: up to 3 digits
+            let oct = String.fromCharCode(e)
+            if (i + 1 < bytes.length && bytes[i + 1] >= 0x30 && bytes[i + 1] <= 0x37) {
+              i++; oct += String.fromCharCode(bytes[i])
+            }
+            if (i + 1 < bytes.length && bytes[i + 1] >= 0x30 && bytes[i + 1] <= 0x37) {
+              i++; oct += String.fromCharCode(bytes[i])
+            }
+            const code = parseInt(oct, 8)
+            s += code >= 0x20 ? String.fromCharCode(code) : " "
+          } else {
+            s += String.fromCharCode(e)
+          }
+        } else if (b === 0x28) {
+          depth++; s += "("
+        } else if (b === 0x29) {
+          depth--; if (depth > 0) s += ")"
+        } else {
+          // Keep printable ASCII; replace others with space
+          s += b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : " "
+        }
+        i++
+      }
+      // Keep strings with enough readable content
+      const clean = s.replace(/\s+/g, " ").trim()
+      if (clean.length > 3 && /[A-Za-z0-9]/.test(clean)) {
+        collected.push(clean)
+      }
+    } else {
+      i++
+    }
+  }
+
+  return collected.join("\n")
+}
+
+/**
  * Extract text from a plain text file
  */
 export async function extractTextFromTXT(file: File): Promise<string> {

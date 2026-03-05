@@ -34,7 +34,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages } from "lucide-react"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
 import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
@@ -287,9 +287,11 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [isImporting, setIsImporting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
-  const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
+  const [excelResults, setExcelResults] = useState<ExcelParseResult[] | null>(null)
   const [structuredData, setStructuredData] = useState<StructuredParseResult[] | null>(null)
   const [showImportDialog, setShowImportDialog] = useState(false)
+  const [pendingAiFile, setPendingAiFile] = useState<File | null>(null)
+  const [isAiParsing, setIsAiParsing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Jump-to-line (Agent 6)
@@ -425,26 +427,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     e.target.value = ""
     if (allFiles.length === 0) return
 
-    // ── Multiple Excel files: parse all and merge sheets ─────────────────
+    // ── Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
     const excelFiles = allFiles.filter((f) => /\.(xlsx|xls)$/i.test(f.name))
-    if (excelFiles.length > 1) {
+    if (excelFiles.length > 0) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
-        const merged = {
-          sheets: results.flatMap((r, i) =>
-            r.sheets.map((s) => ({
-              ...s,
-              name: `${excelFiles[i].name.replace(/\.[^.]+$/, "")} — ${s.name}`,
-            }))
-          ),
-          fileName: `${excelFiles.length} קבצי Excel`,
-          totalRows: results.reduce((sum, r) => sum + r.totalRows, 0),
-        }
-        if (merged.sheets.length === 0) {
+        if (results.every((r) => r.sheets.length === 0)) {
           toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקבצים", variant: "destructive" })
           return
         }
-        setExcelResult(merged)
+        setExcelResults(results)
         setStructuredData(null)
         setShowImportDialog(true)
         return
@@ -458,44 +450,64 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     const ext = file.name.split(".").pop()?.toLowerCase()
 
     try {
-      // ── Excel files: existing flow ──────────────────────────────────────
-      if (ext === "xlsx" || ext === "xls") {
-        const result = await parseExcelFile(file)
-        if (result.sheets.length === 0) {
-          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקובץ", variant: "destructive" })
-          return
-        }
-        setExcelResult(result)
-        setStructuredData(null)
-        setShowImportDialog(true)
-        return
-      }
 
       // ── PDF files ───────────────────────────────────────────────────────
       if (ext === "pdf") {
-        const { extractTablesFromPDF, extractTextFromPDF } = await import("@/lib/parser/text-extractor")
+        const {
+          extractTablesFromPDF,
+          extractTextFromPDF,
+          extractTextFromPDFRaw,
+        } = await import("@/lib/parser/text-extractor")
+        const { autoDetectColumns, parseScriptLinesFromStructuredData, extractDialogueLines } =
+          await import("@/lib/parser/structured-parser")
+
+        // 1. Try table extraction → auto-import directly (no dialog for non-Excel)
         const tables = await extractTablesFromPDF(file)
-
-        // If tables with enough rows found, use the column-mapping dialog
         if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
-          setStructuredData(tables)
-          setExcelResult(null)
-          setShowImportDialog(true)
-          return
+          const allLines = tables.flatMap((table) => {
+            const mapping = autoDetectColumns(table.headers)
+            if (!mapping.roleNameColumn) return []
+            return parseScriptLinesFromStructuredData(table, {
+              ...mapping,
+              roleNameColumn: mapping.roleNameColumn,
+            })
+          })
+          if (allLines.length > 0) {
+            await handleImport(allLines)
+            return
+          }
         }
 
-        // Fallback: extract plain text and try dialogue extraction
-        const text = await extractTextFromPDF(file)
+        // 2. Fallback: extract plain text → dialogue lines
+        let text = ""
+        try {
+          text = await extractTextFromPDF(file)
+        } catch {
+          // PDF.js failed — try raw binary extraction
+          try { text = await extractTextFromPDFRaw(file) } catch { /* ignore */ }
+        }
+        // If PDF.js returned empty but no exception, also try raw
         if (text.trim().length < 50) {
-          toast({ title: "שגיאה", description: "לא חולץ טקסט מספיק מה-PDF. ייתכן שהקובץ סרוק או מבוסס תמונה.", variant: "destructive" })
+          try { text = await extractTextFromPDFRaw(file) } catch { /* ignore */ }
+        }
+
+        if (text.trim().length < 50) {
+          setPendingAiFile(file)
+          toast({
+            title: "לא הצלחנו לחלץ טקסט מה-PDF",
+            description: "הקובץ ייתכן שהוא סרוק. לחץ על \"פרסר עם AI\" בסרגל.",
+          })
           return
         }
-        const { extractDialogueLines } = await import("@/lib/parser/structured-parser")
         const dialogueLines = extractDialogueLines(text)
         if (dialogueLines.length > 0) {
           await handleImport(dialogueLines)
         } else {
-          toast({ title: "שגיאה", description: "לא נמצאו שורות דיאלוג בקובץ ה-PDF", variant: "destructive" })
+          setPendingAiFile(file)
+          toast({
+            title: "לא נמצאו שורות דיאלוג ב-PDF",
+            description: "המבנה לא מוכר לפרסר. לחץ על \"פרסר עם AI\" בסרגל.",
+          })
         }
         return
       }
@@ -503,27 +515,39 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       // ── DOCX files ──────────────────────────────────────────────────────
       if (ext === "docx") {
         const { extractTablesFromDOCX, extractTextFromDOCX } = await import("@/lib/parser/text-extractor")
-        const tables = await extractTablesFromDOCX(file)
+        const { autoDetectColumns, parseScriptLinesFromStructuredData, extractDialogueLines } =
+          await import("@/lib/parser/structured-parser")
 
+        // 1. Try table extraction → auto-import
+        const tables = await extractTablesFromDOCX(file)
         if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
-          setStructuredData(tables)
-          setExcelResult(null)
-          setShowImportDialog(true)
-          return
+          const allLines = tables.flatMap((table) => {
+            const mapping = autoDetectColumns(table.headers)
+            if (!mapping.roleNameColumn) return []
+            return parseScriptLinesFromStructuredData(table, {
+              ...mapping,
+              roleNameColumn: mapping.roleNameColumn,
+            })
+          })
+          if (allLines.length > 0) {
+            await handleImport(allLines)
+            return
+          }
         }
 
-        // Fallback: extract plain text and try dialogue extraction
+        // 2. Fallback: plain text → dialogue lines
         const text = await extractTextFromDOCX(file)
         if (text.trim().length < 50) {
-          toast({ title: "שגיאה", description: "לא חולץ טקסט מספיק מה-DOCX", variant: "destructive" })
+          setPendingAiFile(file)
+          toast({ title: "לא ניתן לחלץ טקסט מה-DOCX", description: "לחץ על \"פרסר עם AI\" בסרגל." })
           return
         }
-        const { extractDialogueLines } = await import("@/lib/parser/structured-parser")
         const dialogueLines = extractDialogueLines(text)
         if (dialogueLines.length > 0) {
           await handleImport(dialogueLines)
         } else {
-          toast({ title: "שגיאה", description: "לא נמצאו שורות דיאלוג בקובץ ה-DOCX", variant: "destructive" })
+          setPendingAiFile(file)
+          toast({ title: "לא נמצאו שורות דיאלוג ב-DOCX", description: "לחץ על \"פרסר עם AI\" בסרגל." })
         }
         return
       }
@@ -563,7 +587,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         if (!result.success) throw new Error(result.error)
 
         setShowImportDialog(false)
-        setExcelResult(null)
+        setExcelResults(null)
 
         // Auto-sync actors from existing castings
         const syncResult = await syncActorsToScriptLines(projectId)
@@ -768,6 +792,41 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }
 
+  // AI parsing fallback — called when PDF/DOCX extraction fails
+  async function handleAiParse() {
+    if (!pendingAiFile) return
+    setIsAiParsing(true)
+    try {
+      // Read file as base64 to pass to server action
+      const arrayBuffer = await pendingAiFile.arrayBuffer()
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      const { parseScriptWithAI } = await import("@/lib/actions/ai-parse-action")
+      const result = await parseScriptWithAI({
+        fileBase64: base64,
+        fileName: pendingAiFile.name,
+        mimeType: pendingAiFile.type || "application/pdf",
+      })
+      if (!result.success || !result.lines?.length) {
+        toast({
+          title: "פרסור AI לא מצא שורות",
+          description: result.error ?? "נסה קובץ אחר או הכנס את הנתונים ידנית",
+          variant: "destructive",
+        })
+        return
+      }
+      await handleImport(result.lines)
+      setPendingAiFile(null)
+    } catch (err) {
+      toast({
+        title: "שגיאה בפרסור AI",
+        description: err instanceof Error ? err.message : "שגיאה לא ידועה",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAiParsing(false)
+    }
+  }
+
   const hasLines = lines.length > 0
 
   return (
@@ -798,6 +857,19 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           <Button variant="outline" size="sm" onClick={handleAutoTranslate} disabled={isTranslating} className="gap-1.5">
             <Languages className="h-4 w-4" />
             {isTranslating ? "מתרגם..." : "תרגם לעברית"}
+          </Button>
+        )}
+
+        {pendingAiFile && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAiParse}
+            disabled={isAiParsing}
+            className="gap-1.5 text-purple-700 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700"
+          >
+            <Sparkles className={`h-4 w-4 ${isAiParsing ? "animate-pulse" : ""}`} />
+            {isAiParsing ? "מפרסר..." : `פרסר עם AI — ${pendingAiFile.name}`}
           </Button>
         )}
 
@@ -1137,17 +1209,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       </Dialog>
 
       {/* Import dialog */}
-      {(excelResult || structuredData) && (
+      {(excelResults || structuredData) && (
         <ScriptLinesImportDialog
           open={showImportDialog}
           onOpenChange={(open) => {
             if (!open) {
               setShowImportDialog(false)
-              setExcelResult(null)
+              setExcelResults(null)
               setStructuredData(null)
             }
           }}
-          excelResult={excelResult ?? undefined}
+          excelResults={excelResults ?? undefined}
           structuredData={structuredData ?? undefined}
           onImport={handleImport}
           isImporting={isImporting}
