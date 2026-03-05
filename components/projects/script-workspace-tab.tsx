@@ -287,7 +287,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [isImporting, setIsImporting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
-  const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
+  const [excelResults, setExcelResults] = useState<ExcelParseResult[] | null>(null)
   const [structuredData, setStructuredData] = useState<StructuredParseResult[] | null>(null)
   const [showImportDialog, setShowImportDialog] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -425,26 +425,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     e.target.value = ""
     if (allFiles.length === 0) return
 
-    // ── Multiple Excel files: parse all and merge sheets ─────────────────
+    // ── Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
     const excelFiles = allFiles.filter((f) => /\.(xlsx|xls)$/i.test(f.name))
-    if (excelFiles.length > 1) {
+    if (excelFiles.length > 0) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
-        const merged = {
-          sheets: results.flatMap((r, i) =>
-            r.sheets.map((s) => ({
-              ...s,
-              name: `${excelFiles[i].name.replace(/\.[^.]+$/, "")} — ${s.name}`,
-            }))
-          ),
-          fileName: `${excelFiles.length} קבצי Excel`,
-          totalRows: results.reduce((sum, r) => sum + r.totalRows, 0),
-        }
-        if (merged.sheets.length === 0) {
+        if (results.every((r) => r.sheets.length === 0)) {
           toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקבצים", variant: "destructive" })
           return
         }
-        setExcelResult(merged)
+        setExcelResults(results)
         setStructuredData(null)
         setShowImportDialog(true)
         return
@@ -458,18 +448,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     const ext = file.name.split(".").pop()?.toLowerCase()
 
     try {
-      // ── Excel files: existing flow ──────────────────────────────────────
-      if (ext === "xlsx" || ext === "xls") {
-        const result = await parseExcelFile(file)
-        if (result.sheets.length === 0) {
-          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקובץ", variant: "destructive" })
-          return
-        }
-        setExcelResult(result)
-        setStructuredData(null)
-        setShowImportDialog(true)
-        return
-      }
 
       // ── PDF files ───────────────────────────────────────────────────────
       if (ext === "pdf") {
@@ -479,7 +457,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         // If tables with enough rows found, use the column-mapping dialog
         if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
           setStructuredData(tables)
-          setExcelResult(null)
+          setExcelResults(null)
           setShowImportDialog(true)
           return
         }
@@ -507,7 +485,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
         if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
           setStructuredData(tables)
-          setExcelResult(null)
+          setExcelResults(null)
           setShowImportDialog(true)
           return
         }
@@ -563,7 +541,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         if (!result.success) throw new Error(result.error)
 
         setShowImportDialog(false)
-        setExcelResult(null)
+        setExcelResults(null)
 
         // Auto-sync actors from existing castings
         const syncResult = await syncActorsToScriptLines(projectId)
@@ -1137,17 +1115,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       </Dialog>
 
       {/* Import dialog */}
-      {(excelResult || structuredData) && (
+      {(excelResults || structuredData) && (
         <ScriptLinesImportDialog
           open={showImportDialog}
           onOpenChange={(open) => {
             if (!open) {
               setShowImportDialog(false)
-              setExcelResult(null)
+              setExcelResults(null)
               setStructuredData(null)
             }
           }}
-          excelResult={excelResult ?? undefined}
+          excelResults={excelResults ?? undefined}
           structuredData={structuredData ?? undefined}
           onImport={handleImport}
           isImporting={isImporting}
