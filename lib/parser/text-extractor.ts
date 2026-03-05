@@ -19,11 +19,12 @@ import type { StructuredParseResult } from "./structured-parser"
  * up-to-date even after hot-module reloads in development.
  */
 function configurePdfjsWorker(pdfjsLib: { version: string; GlobalWorkerOptions: { workerSrc: string } }) {
-  // Primary: unpkg CDN (reliable, version-pinned)
-  const cdnUrl = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
-  // Always overwrite — do NOT guard with `if (!workerSrc)`:
-  // a stale or empty workerSrc from a previous failed attempt must be replaced.
-  pdfjsLib.GlobalWorkerOptions.workerSrc = cdnUrl
+  // Use the local copy of the PDF.js worker served from /public.
+  // This avoids external CDN dependencies (unpkg/jsDelivr) that can fail due to
+  // network restrictions, CORS issues, or slow cache misses.
+  // The file is copied to public/ during setup:
+  //   cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
 }
 
 /**

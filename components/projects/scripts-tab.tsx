@@ -347,14 +347,27 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               ref={excelInputRef}
               type="file"
               accept=".xlsx,.xls"
+              multiple
               onChange={async (e) => {
-                const file = e.target.files?.[0]
-                if (!file) return
+                const files = Array.from(e.target.files ?? [])
+                if (files.length === 0) return
                 try {
-                  const result = await parseExcelFile(file)
-                  setExcelResult(result)
+                  // Parse all selected Excel files and merge their sheets
+                  const results = await Promise.all(files.map(parseExcelFile))
+                  const merged: typeof results[0] = {
+                    sheets: results.flatMap((r, i) =>
+                      r.sheets.map((s) => ({
+                        ...s,
+                        // Prefix sheet name with file name when multiple files selected
+                        name: files.length > 1 ? `${files[i].name.replace(/\.[^.]+$/, "")} — ${s.name}` : s.name,
+                      }))
+                    ),
+                    fileName: files.length === 1 ? files[0].name : `${files.length} קבצים`,
+                    totalRows: results.reduce((sum, r) => sum + r.totalRows, 0),
+                  }
+                  setExcelResult(merged)
                   setShowExcelPreview(true)
-                  toast({ title: "קובץ Excel נקרא בהצלחה", description: `${result.totalRows} שורות נמצאו` })
+                  toast({ title: "קובץ Excel נקרא בהצלחה", description: `${merged.totalRows} שורות נמצאו מ-${merged.sheets.length} גיליונות` })
                 } catch (err) {
                   toast({ title: "שגיאה בקריאת קובץ Excel", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
                 }
