@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import useSWR from "swr"
-import { Plus, Search, Calendar, Users, MoreVertical, FolderOpen, UserCircle, Film } from "lucide-react"
+import { Plus, Search, Calendar, Users, MoreVertical, UserCircle, Film, Clapperboard, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -45,9 +45,11 @@ function getStatusLabel(status: string) {
 
 async function fetchProjects() {
   const supabase = createClient()
+  // project_summary view (migration 006) joins casting_projects + role_castings + project_scripts + script_lines
+  // in one round-trip, replacing 4 separate count queries.
   const { data, error } = await supabase
-    .from("casting_projects")
-    .select("id,name,status,notes,director,casting_director,project_date,created_at")
+    .from("project_summary")
+    .select("*")
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -351,9 +353,29 @@ export default function ProjectsPage() {
                   )}
                 </div>
 
-                {/* Created At */}
-                <div className="text-xs text-muted-foreground">
-                  נוצר {new Date(project.created_at).toLocaleDateString("he-IL")}
+                {/* Stats row from project_summary view */}
+                <div className="flex items-center gap-3 pt-1 border-t text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1" title="תפקידים / שובצו">
+                    <Users className="h-3.5 w-3.5" />
+                    <span>
+                      {project.actors_cast ?? 0}/{project.roles_count ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1" title="תסריטים">
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>{project.scripts_count ?? 0}</span>
+                  </div>
+                  {(project.total_lines ?? 0) > 0 && (
+                    <div className="flex items-center gap-1" title="שורות / הוקלטו">
+                      <Clapperboard className="h-3.5 w-3.5" />
+                      <span>
+                        {project.recorded_lines ?? 0}/{project.total_lines ?? 0}
+                      </span>
+                    </div>
+                  )}
+                  <span className="mr-auto">
+                    {new Date(project.created_at).toLocaleDateString("he-IL")}
+                  </span>
                 </div>
               </div>
             </Card>
