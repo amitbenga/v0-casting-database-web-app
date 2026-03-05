@@ -69,8 +69,6 @@ interface FileMapping {
   roleCol: string
   timecodeCol: string
   sourceCol: string
-  translationCol: string
-  recStatusCol: string
   notesCol: string
 }
 
@@ -98,8 +96,6 @@ function autoDetectForHeaders(headers: string[], isExcel: boolean): Omit<FileMap
     roleCol: detected.roleNameColumn ?? "",
     timecodeCol: detected.timecodeColumn ?? NONE,
     sourceCol: detected.sourceTextColumn ?? NONE,
-    translationCol: detected.translationColumn ?? NONE,
-    recStatusCol: detected.recStatusColumn ?? NONE,
     notesCol: detected.notesColumn ?? NONE,
   }
 }
@@ -166,8 +162,6 @@ export function ScriptLinesImportDialog({
   const [sRoleCol, setSRoleCol] = useState("")
   const [sTimecodeCol, setSTimecodeCol] = useState(NONE)
   const [sSourceCol, setSSourceCol] = useState(NONE)
-  const [sTranslationCol, setSTranslationCol] = useState(NONE)
-  const [sRecStatusCol, setSRecStatusCol] = useState(NONE)
   const [sNotesCol, setSNotesCol] = useState(NONE)
 
   useEffect(() => {
@@ -183,8 +177,6 @@ export function ScriptLinesImportDialog({
     setSRoleCol(d.roleNameColumn ?? "")
     setSTimecodeCol(d.timecodeColumn ?? NONE)
     setSSourceCol(d.sourceTextColumn ?? NONE)
-    setSTranslationCol(d.translationColumn ?? NONE)
-    setSRecStatusCol(d.recStatusColumn ?? NONE)
     setSNotesCol(d.notesColumn ?? NONE)
   }
 
@@ -203,16 +195,12 @@ export function ScriptLinesImportDialog({
   const roleCol = isExcelMode ? (activeMapping?.roleCol ?? "") : sRoleCol
   const timecodeCol = isExcelMode ? (activeMapping?.timecodeCol ?? NONE) : sTimecodeCol
   const sourceCol = isExcelMode ? (activeMapping?.sourceCol ?? NONE) : sSourceCol
-  const translationCol = isExcelMode ? (activeMapping?.translationCol ?? NONE) : sTranslationCol
-  const recStatusCol = isExcelMode ? (activeMapping?.recStatusCol ?? NONE) : sRecStatusCol
   const notesCol = isExcelMode ? (activeMapping?.notesCol ?? NONE) : sNotesCol
   const displayHeaders = isExcelMode ? activeSheetHeaders : (structuredSheets[structuredSheet]?.headers ?? [])
 
   function setRoleCol(v: string) { isExcelMode ? updateFileField(activeFile, "roleCol", v) : setSRoleCol(v) }
   function setTimecodeCol(v: string) { isExcelMode ? updateFileField(activeFile, "timecodeCol", v) : setSTimecodeCol(v) }
   function setSourceCol(v: string) { isExcelMode ? updateFileField(activeFile, "sourceCol", v) : setSSourceCol(v) }
-  function setTranslationCol(v: string) { isExcelMode ? updateFileField(activeFile, "translationCol", v) : setSTranslationCol(v) }
-  function setRecStatusCol(v: string) { isExcelMode ? updateFileField(activeFile, "recStatusCol", v) : setSRecStatusCol(v) }
   function setNotesCol(v: string) { isExcelMode ? updateFileField(activeFile, "notesCol", v) : setSNotesCol(v) }
 
   // Sheets shown in the sheet-selector for the active context
@@ -236,8 +224,6 @@ export function ScriptLinesImportDialog({
       roleNameColumn: m.roleCol,
       timecodeColumn: m.timecodeCol !== NONE ? m.timecodeCol : undefined,
       sourceTextColumn: m.sourceCol !== NONE ? m.sourceCol : undefined,
-      translationColumn: m.translationCol !== NONE ? m.translationCol : undefined,
-      recStatusColumn: m.recStatusCol !== NONE ? m.recStatusCol : undefined,
       notesColumn: m.notesCol !== NONE ? m.notesCol : undefined,
     }
     return parseScriptLinesFromExcel(allFiles[fileIdx], mapping)
@@ -251,8 +237,6 @@ export function ScriptLinesImportDialog({
       roleNameColumn: sRoleCol,
       timecodeColumn: sTimecodeCol !== NONE ? sTimecodeCol : undefined,
       sourceTextColumn: sSourceCol !== NONE ? sSourceCol : undefined,
-      translationColumn: sTranslationCol !== NONE ? sTranslationCol : undefined,
-      recStatusColumn: sRecStatusCol !== NONE ? sRecStatusCol : undefined,
       notesColumn: sNotesCol !== NONE ? sNotesCol : undefined,
     }
     return parseScriptLinesFromStructuredData(
@@ -271,7 +255,7 @@ export function ScriptLinesImportDialog({
   const activeLines = useMemo(
     () => (isExcelMode ? parseLinesForFile(activeFile) : parseStructuredLines()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fileMappings, activeFile, sRoleCol, sTimecodeCol, sSourceCol, sTranslationCol, sRecStatusCol, sNotesCol, structuredSheet]
+    [fileMappings, activeFile, sRoleCol, sTimecodeCol, sSourceCol, sNotesCol, structuredSheet]
   )
   const previewLines = activeLines.slice(0, 8)
 
@@ -282,7 +266,7 @@ export function ScriptLinesImportDialog({
         ? allFiles.reduce((sum, _, i) => sum + parseLinesForFile(i).length, 0)
         : parseStructuredLines().length,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fileMappings, sRoleCol, sTimecodeCol, sSourceCol, sTranslationCol, sRecStatusCol, sNotesCol, structuredSheet]
+    [fileMappings, sRoleCol, sTimecodeCol, sSourceCol, sNotesCol, structuredSheet]
   )
 
   function handleImport() {
@@ -395,7 +379,7 @@ export function ScriptLinesImportDialog({
         )}
 
         {/* ── Column mapping grid ───────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg">
+        <div className="grid grid-cols-2 gap-3 p-3 bg-muted/40 rounded-lg">
           <div>
             <Label className="text-xs">{"תפקיד"} *</Label>
             <ColSelect value={roleCol} onChange={setRoleCol} required />
@@ -405,16 +389,8 @@ export function ScriptLinesImportDialog({
             <ColSelect value={timecodeCol} onChange={setTimecodeCol} />
           </div>
           <div>
-            <Label className="text-xs">{"סטטוס הקלטה (REC)"}</Label>
-            <ColSelect value={recStatusCol} onChange={setRecStatusCol} />
-          </div>
-          <div>
             <Label className="text-xs">{"טקסט מקור (אנגלית)"}</Label>
             <ColSelect value={sourceCol} onChange={setSourceCol} />
-          </div>
-          <div>
-            <Label className="text-xs">{"תרגום (עברית)"}</Label>
-            <ColSelect value={translationCol} onChange={setTranslationCol} />
           </div>
           <div>
             <Label className="text-xs">{"הערות"}</Label>
@@ -440,9 +416,7 @@ export function ScriptLinesImportDialog({
                       <TableHead className="w-10">{"#"}</TableHead>
                       {timecodeCol !== NONE && <TableHead className="w-20">TC</TableHead>}
                       <TableHead>{"תפקיד"}</TableHead>
-                      {recStatusCol !== NONE && <TableHead className="w-20">REC</TableHead>}
                       {sourceCol !== NONE && <TableHead>{"טקסט מקור"}</TableHead>}
-                      {translationCol !== NONE && <TableHead>{"תרגום"}</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -453,23 +427,9 @@ export function ScriptLinesImportDialog({
                           <TableCell className="text-xs font-mono">{line.timecode ?? "\u2014"}</TableCell>
                         )}
                         <TableCell className="font-medium text-sm">{line.role_name}</TableCell>
-                        {recStatusCol !== NONE && (
-                          <TableCell>
-                            {line.rec_status ? (
-                              <Badge variant="secondary" className="text-xs">{line.rec_status}</Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">{"\u2014"}</span>
-                            )}
-                          </TableCell>
-                        )}
                         {sourceCol !== NONE && (
-                          <TableCell className="text-sm max-w-[200px] truncate" dir="ltr">
+                          <TableCell className="text-sm max-w-[300px] truncate" dir="ltr">
                             {line.source_text ?? "\u2014"}
-                          </TableCell>
-                        )}
-                        {translationCol !== NONE && (
-                          <TableCell className="text-sm max-w-[200px] truncate" dir="rtl">
-                            {line.translation ?? "\u2014"}
                           </TableCell>
                         )}
                       </TableRow>
