@@ -52,10 +52,10 @@ CREATE INDEX IF NOT EXISTS idx_project_roles_project_source
 CREATE INDEX IF NOT EXISTS idx_project_scripts_project_id
   ON project_scripts (project_id);
 
--- Parse status filter (pending / done / error) in scripts-tab
-CREATE INDEX IF NOT EXISTS idx_project_scripts_parse_status
-  ON project_scripts (project_id, parse_status)
-  WHERE parse_status IS NOT NULL;
+-- Processing status filter (pending / done / error) in scripts-tab
+CREATE INDEX IF NOT EXISTS idx_project_scripts_processing_status
+  ON project_scripts (project_id, processing_status)
+  WHERE processing_status IS NOT NULL;
 
 -- ─────────────────────────────────────────────
 -- script_lines
