@@ -61,25 +61,45 @@ function normalizeRecStatus(value: string | number | null): RecStatus | null {
 /**
  * Heuristic mapping of column headers to workspace fields.
  * Works with any header list — Excel, PDF, DOCX.
+ *
+ * Uses partial (contains) matching instead of exact `^...$` anchors so that
+ * common column names like "שם תפקיד", "Character Name", "TC In", etc. are
+ * correctly detected even when they contain extra words.
  */
 export function autoDetectColumns(
   headers: string[]
 ): Partial<StructuredColumnMapping> {
+  // Case-insensitive contains-style search (pattern can match anywhere in header)
   const find = (pattern: RegExp): string | undefined =>
     headers.find((h) => pattern.test(h.trim()))
 
   return {
-    timecodeColumn: find(/^(timecode|tc|time[\s_-]?in|time_in|in[\s_-]?time)$/i),
+    // Timecode: "timecode", "tc", "time in", "time_in", "TC In", …
+    timecodeColumn: find(/timecode|tc\b|time[\s_-]?in\b|in[\s_-]?time\b/i),
+
+    // Role name — highest priority keywords first; avoid matching actor/speaker cols
     roleNameColumn:
-      find(/^(character|char|דמות|תפקיד|role[\s_-]?name|role)$/i) ?? "",
+      find(/תפקיד|דמות/i) ??                // Hebrew: role / character
+      find(/character|role[\s_-]?name/i) ??  // English: "character", "role name"
+      find(/\brole\b/i) ??                    // English: bare "role"
+      find(/\bchar\b/i) ??                    // Short abbreviation
+      "",
+
+    // Source text (original dialogue)
     sourceTextColumn: find(
-      /^(dialogue|dialog|text|eng(lish)?|source[\s_-]?text|subtitles?)$/i
+      /dialogue|dialog|source[\s_-]?text|subtitles?|\beng(?:lish)?\b/i
     ),
+
+    // Hebrew translation
     translationColumn: find(
-      /^(עברית|heb(rew)?|תרגום|translation|target[\s_-]?text)$/i
+      /עברית|תרגום|translation|target[\s_-]?text|\bheb(?:rew)?\b/i
     ),
-    recStatusColumn: find(/^(rec(ording)?[\s_-]?status|rec|סטטוס|status)$/i),
-    notesColumn: find(/^(הערות|notes?|note|remarks?)$/i),
+
+    // Recording status
+    recStatusColumn: find(/rec(?:ording)?[\s_-]?status|סטטוס\b/i),
+
+    // Notes / remarks
+    notesColumn: find(/הערות|\bnotes?\b|\bremarks?\b/i),
   }
 }
 
