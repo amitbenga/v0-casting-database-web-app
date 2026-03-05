@@ -330,6 +330,7 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 | ד | `claude/improve-model-4-workspace-C8vDl` | ✅ הושלם — ייצוא Excel, auto-assign, bulk delete, pagination |
 | ה | `claude/enhance-file-parser-C8JeT` | ✅ הושלם — PDF/DOCX tabular support, Zod validation, diagnostics |
 | ו | `claude/improve-app-performance-y2wVC` | ✅ הושלם — ביצועים + מערכת תסריטים (מרץ 2026) |
+| ז | `claude/fix-file-parser-F3F4l` | 🟡 בעבודה — תיקון PDF + Excel multi-file |
 
 ### שלב ו — Performance + Script System (מרץ 2026)
 
@@ -367,6 +368,23 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 - `app/actors/[id]/loading.tsx` — Actor detail skeleton
 - `app/admin/loading.tsx` — Admin page skeleton
 - `lib/actions/translate-actions.ts` — Server action לתרגום AI
+
+### שלב ז — File Parser Fixes (מרץ 2026)
+
+**branch:** `claude/fix-file-parser-F3F4l`
+
+**תיקון PDF worker (text-extractor.ts):**
+- **בעיה:** PDF.js נטען worker מ-CDN חיצוני (`unpkg.com`) → נכשל ברשתות מוגבלות → שגיאה "הקובץ ריק או לא ניתן לחלץ ממנו טקסט"
+- **פתרון:** הוספת `public/pdf.worker.min.mjs` (מועתק מ-node_modules בזמן setup) + workerSrc = `/pdf.worker.min.mjs`
+- **הערה לסוכן חדש:** אם הקובץ `public/pdf.worker.min.mjs` חסר, הרץ:
+  ```bash
+  cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs
+  ```
+
+**Excel multi-file upload:**
+- `scripts-tab.tsx` — כפתור "ייבוא תפקידים מ-Excel": עכשיו תומך בבחירת **כמה קבצים** (multiple גלגלים)
+  - כל הגיליונות ממוזגים לרשימה אחת, שמות גיליונות מקבלים prefix של שם קובץ
+- `script-workspace-tab.tsx` — כפתור "ייבא קובץ": עכשיו `multiple`; כמה קבצי Excel → מיזוג אוטומטי
 
 **DB optimization plan (מוכן ליישום):**
 - אינדקסים: `idx_actors_full_name_trgm`, `idx_role_castings_actor_id`, `idx_script_lines_project_role`

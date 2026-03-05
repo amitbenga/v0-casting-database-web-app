@@ -421,10 +421,40 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
 
   // File selection — unified handler for Excel, PDF, DOCX, TXT
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const allFiles = Array.from(e.target.files ?? [])
     e.target.value = ""
+    if (allFiles.length === 0) return
 
+    // ── Multiple Excel files: parse all and merge sheets ─────────────────
+    const excelFiles = allFiles.filter((f) => /\.(xlsx|xls)$/i.test(f.name))
+    if (excelFiles.length > 1) {
+      try {
+        const results = await Promise.all(excelFiles.map(parseExcelFile))
+        const merged = {
+          sheets: results.flatMap((r, i) =>
+            r.sheets.map((s) => ({
+              ...s,
+              name: `${excelFiles[i].name.replace(/\.[^.]+$/, "")} — ${s.name}`,
+            }))
+          ),
+          fileName: `${excelFiles.length} קבצי Excel`,
+          totalRows: results.reduce((sum, r) => sum + r.totalRows, 0),
+        }
+        if (merged.sheets.length === 0) {
+          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקבצים", variant: "destructive" })
+          return
+        }
+        setExcelResult(merged)
+        setStructuredData(null)
+        setShowImportDialog(true)
+        return
+      } catch (err) {
+        toast({ title: "שגיאה בקריאת Excel", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
+        return
+      }
+    }
+
+    const file = allFiles[0]
     const ext = file.name.split(".").pop()?.toLowerCase()
 
     try {
@@ -744,7 +774,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     <div className="space-y-4 w-full">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap" dir="rtl">
-        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.pdf,.docx,.txt" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.pdf,.docx,.txt" multiple className="hidden" onChange={handleFileSelect} />
         <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
           <Upload className="h-4 w-4" />
           {"ייבא קובץ"}

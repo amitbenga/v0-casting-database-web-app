@@ -38,7 +38,11 @@ export interface ExcelMappedRole {
 }
 
 /**
- * Parse an Excel file and return sheet data with headers and rows
+ * Parse an Excel file and return sheet data with headers and rows.
+ *
+ * Uses header:1 (raw arrays) so that sheets with only a header row are still
+ * included — this ensures the sheet selector is shown even if some sheets
+ * have no data rows, allowing the user to navigate between all sheets.
  */
 export async function parseExcelFile(file: File): Promise<ExcelParseResult> {
   const XLSX = await import("xlsx")
@@ -50,19 +54,35 @@ export async function parseExcelFile(file: File): Promise<ExcelParseResult> {
 
   for (const sheetName of workbook.SheetNames) {
     const worksheet = workbook.Sheets[sheetName]
-    const jsonData = XLSX.utils.sheet_to_json<Record<string, string | number | null>>(worksheet, {
-      defval: null,
+
+    // Use header:1 to get raw arrays — avoids the issue where sheets with only
+    // a header row return an empty array in object mode and get silently skipped.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as any[][]
+
+    if (rawRows.length === 0) continue // Truly empty sheet — no cells at all
+
+    // First row becomes column headers; fall back to "עמודה N" for blank cells
+    const headerRow: unknown[] = rawRows[0] ?? []
+    const headers = headerRow.map((cell, i) =>
+      cell != null && String(cell).trim() !== "" ? String(cell).trim() : `עמודה ${i + 1}`
+    )
+
+    // Remaining rows become records keyed by header
+    const dataRows: Record<string, string | number | null>[] = rawRows.slice(1).map((row: unknown[]) => {
+      const record: Record<string, string | number | null> = {}
+      headers.forEach((h, i) => {
+        const val = row[i] as string | number | null | undefined
+        record[h] = val != null ? val : null
+      })
+      return record
     })
-
-    if (jsonData.length === 0) continue
-
-    const headers = Object.keys(jsonData[0] || {})
 
     sheets.push({
       name: sheetName,
       headers,
-      rows: jsonData,
-      preview: jsonData.slice(0, 10),
+      rows: dataRows,
+      preview: dataRows.slice(0, 10),
     })
   }
 

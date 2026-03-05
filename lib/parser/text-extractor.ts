@@ -14,23 +14,29 @@
 import type { StructuredParseResult } from "./structured-parser"
 
 /**
- * Extract text from a PDF file using PDF.js
- * Note: This runs client-side due to PDF.js requirements
+ * Configure the PDF.js worker source.
+ * Always called before creating any PDF document so the worker URL stays
+ * up-to-date even after hot-module reloads in development.
+ */
+function configurePdfjsWorker(pdfjsLib: { version: string; GlobalWorkerOptions: { workerSrc: string } }) {
+  // Use the local copy of the PDF.js worker served from /public.
+  // This avoids external CDN dependencies (unpkg/jsDelivr) that can fail due to
+  // network restrictions, CORS issues, or slow cache misses.
+  // The file is copied to public/ during setup:
+  //   cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
+}
+
+/**
+ * Extract text from a PDF file using PDF.js.
+ * Note: This runs client-side due to PDF.js requirements.
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
   // Dynamic import of PDF.js — use standard entry point (v5.x)
   const pdfjsLib = await import("pdfjs-dist")
 
-  // Set worker source to the bundled worker file
-  // In Next.js, we use a CDN fallback or the installed package worker
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    try {
-      // Try to use the package worker URL (works in modern bundlers)
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
-    } catch {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
-    }
-  }
+  // Always (re-)configure the worker — no conditional guard
+  configurePdfjsWorker(pdfjsLib)
 
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ 
@@ -199,13 +205,8 @@ export async function extractTablesFromPDF(
 
   const pdfjsLib = await import("pdfjs-dist")
 
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    try {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
-    } catch {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
-    }
-  }
+  // Always (re-)configure the worker — same as extractTextFromPDF
+  configurePdfjsWorker(pdfjsLib)
 
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({
@@ -588,67 +589,80 @@ export async function extractTextFromCSV(file: File): Promise<string> {
 
 /**
  * Extract text from an Excel file (.xlsx, .xls)
- * Uses SheetJS to parse the spreadsheet and converts to script-like format
+ * Uses SheetJS to parse the spreadsheet and converts to script-like format.
+ *
+ * Iterates ALL sheets (not just the first) so that workbooks with role data
+ * on any sheet are processed correctly.
  */
 export async function extractTextFromExcel(file: File): Promise<string> {
   const XLSX = await import("xlsx")
-  
+
   const arrayBuffer = await file.arrayBuffer()
   const workbook = XLSX.read(arrayBuffer, { type: "array" })
-  
-  // Use the first sheet
-  const sheetName = workbook.SheetNames[0]
-  if (!sheetName) throw new Error("Excel file has no sheets")
-  
-  const sheet = workbook.Sheets[sheetName]
-  const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
-  
-  if (data.length === 0) {
-    throw new Error("Excel sheet is empty")
-  }
 
-  // Try to detect header row
-  const firstRow = data[0]?.map(c => String(c || "").toLowerCase()) || []
-  const hasHeader = firstRow.some(c => 
-    c.includes("role") || c.includes("name") || c.includes("תפקיד") || 
-    c.includes("שם") || c.includes("character") || c.includes("replicas") || c.includes("רפליקות")
-  )
+  if (workbook.SheetNames.length === 0) throw new Error("Excel file has no sheets")
 
-  // Find the role name column and replicas column
-  let nameCol = 0
-  let replicasCol = 1
-  
-  if (hasHeader) {
-    nameCol = firstRow.findIndex(c => c.includes("role") || c.includes("name") || c.includes("תפקיד") || c.includes("שם") || c.includes("character"))
-    replicasCol = firstRow.findIndex(c => c.includes("replica") || c.includes("count") || c.includes("רפליקות") || c.includes("כמות"))
-    
-    if (nameCol === -1) nameCol = 0
-    if (replicasCol === -1) replicasCol = nameCol === 0 ? 1 : 0
-  }
+  const ROLE_KEYWORDS = ["role", "character", "תפקיד", "דמות"]
+  const NAME_KEYWORDS  = ["name", "שם"]
+  const REPLICA_KEYWORDS = ["replica", "replicas", "count", "רפליקות", "כמות", "lines"]
 
-  const dataRows = hasHeader ? data.slice(1) : data
-  const scriptLines: string[] = []
+  const allScriptLines: string[] = []
 
-  for (const row of dataRows) {
-    if (!row || !row[nameCol]) continue
-    
-    const roleName = String(row[nameCol]).trim().toUpperCase()
-    if (!roleName) continue
-    
-    const replicaCount = replicasCol < row.length ? (parseInt(String(row[replicasCol])) || 1) : 1
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })
 
-    // Generate fake script lines so the parser can extract the character
-    scriptLines.push(`\n${roleName}`)
-    for (let i = 0; i < Math.min(replicaCount, 500); i++) {
-      scriptLines.push(`                    Line ${i + 1}`)
+    if (data.length === 0) continue
+
+    // Try to detect header row using known keywords
+    const firstRow = data[0]?.map((c: unknown) => String(c ?? "").toLowerCase().trim()) ?? []
+    const hasRoleKeyword  = firstRow.some(c => ROLE_KEYWORDS.some(k => c.includes(k)))
+    const hasNameKeyword  = firstRow.some(c => NAME_KEYWORDS.some(k => c.includes(k)))
+    const hasHeader = hasRoleKeyword || hasNameKeyword
+
+    // Find the role name column
+    let nameCol = 0
+    let replicasCol = -1
+
+    if (hasHeader) {
+      // Prefer explicit role/character keywords; fall back to name keywords
+      const roleIdx = firstRow.findIndex(c => ROLE_KEYWORDS.some(k => c.includes(k)))
+      const nameIdx = firstRow.findIndex(c =>
+        NAME_KEYWORDS.some(k => c.includes(k)) &&
+        !["שחקן", "actor", "배우"].some(skip => c.includes(skip)) // avoid actor-name cols
+      )
+      nameCol = roleIdx !== -1 ? roleIdx : nameIdx !== -1 ? nameIdx : 0
+
+      replicasCol = firstRow.findIndex(c => REPLICA_KEYWORDS.some(k => c.includes(k)))
+    }
+
+    const dataRows = hasHeader ? data.slice(1) : data
+
+    for (const row of dataRows) {
+      if (!row || row[nameCol] == null) continue
+
+      const roleName = String(row[nameCol]).trim().toUpperCase()
+      if (!roleName) continue
+
+      const replicaCount =
+        replicasCol >= 0 && row[replicasCol] != null
+          ? parseInt(String(row[replicasCol])) || 1
+          : 1
+
+      // Generate fake script lines so the regex parser can extract the character
+      allScriptLines.push(`\n${roleName}`)
+      for (let i = 0; i < Math.min(replicaCount, 500); i++) {
+        allScriptLines.push(`                    Line ${i + 1}`)
+      }
     }
   }
 
-  if (scriptLines.length === 0) {
-    throw new Error("No role data found in Excel file. Ensure the first column contains role names.")
+  if (allScriptLines.length === 0) {
+    throw new Error("No role data found in Excel file. Ensure a column contains role names.")
   }
 
-  return scriptLines.join("\n")
+  return allScriptLines.join("\n")
 }
 
 /**
