@@ -26,9 +26,9 @@ LEFT JOIN project_scripts ps ON ps.project_id = p.id
 LEFT JOIN LATERAL (
   SELECT
     COUNT(*)                                                     AS total_lines,
-    COUNT(*) FILTER (WHERE sl.recording_status = 'הוקלט')       AS recorded_lines
+    COUNT(*) FILTER (WHERE sl.rec_status = 'הוקלט')             AS recorded_lines
   FROM script_lines sl
-  WHERE sl.project_id = p.id AND sl.script_id = ps.id
+  WHERE sl.project_id = p.id AND sl.script_id = ps.id::text
 ) sl_stats ON true
 GROUP BY p.id, p.name, p.status, p.director, p.casting_director,
          p.project_date, p.notes, p.created_at, p.updated_at;
