@@ -407,7 +407,8 @@ export async function updateCastingStatus(roleId: string, actorId: string, statu
       if (clearLinesError) throw clearLinesError
     }
 
-    revalidatePath(`/projects/${role.project_id}`)
+    // No revalidatePath — status changes are handled optimistically client-side;
+    // structural revalidation happens only on assign/delete
     return { success: true }
   } catch (error: unknown) {
     console.error("Error updating status:", error)
@@ -439,7 +440,7 @@ export async function updateCastingDetails(
 
     if (error) throw error
 
-    if (role) revalidatePath(`/projects/${role.project_id}`)
+    // No revalidatePath — detail edits don't change structure; client updates optimistically
     return { success: true }
   } catch (error: any) {
     console.error("Error updating details:", error)
@@ -524,39 +525,41 @@ export async function getProjectRolesWithCasting(
   const supabase = await createClient()
 
   try {
-    // Get roles with casting
-    const { data: roles, error: rolesError } = await supabase
-      .from("project_roles")
-      .select(`
-        id, project_id, role_name, role_name_normalized, parent_role_id, description, replicas_count, replicas_needed, source, created_at,
-        role_castings (
-          id,
-          actor_id,
-          status,
-          notes,
-          replicas_planned,
-          replicas_final,
-          actors (
+    // Fetch roles + conflicts in parallel — saves one round-trip
+    const [rolesResult, conflictsResult] = await Promise.all([
+      supabase
+        .from("project_roles")
+        .select(`
+          id, project_id, role_name, role_name_normalized, parent_role_id, description, replicas_count, replicas_needed, source, created_at,
+          role_castings (
             id,
-            full_name,
-            image_url,
-            gender,
-            voice_sample_url
+            actor_id,
+            status,
+            notes,
+            replicas_planned,
+            replicas_final,
+            actors (
+              id,
+              full_name,
+              image_url,
+              gender,
+              voice_sample_url
+            )
           )
-        )
-      `)
-      .eq("project_id", projectId)
-      .order("created_at")
+        `)
+        .eq("project_id", projectId)
+        .order("created_at"),
+      supabase
+        .from("role_conflicts")
+        .select("*")
+        .eq("project_id", projectId),
+    ])
 
-    if (rolesError) throw rolesError
+    if (rolesResult.error) throw rolesResult.error
+    if (conflictsResult.error) throw conflictsResult.error
 
-    // Get conflicts
-    const { data: conflicts, error: conflictsError } = await supabase
-      .from("role_conflicts")
-      .select("*")
-      .eq("project_id", projectId)
-
-    if (conflictsError) throw conflictsError
+    const roles = rolesResult.data
+    const conflicts = conflictsResult.data
 
     // Map role names for conflict visualization
     const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]));
