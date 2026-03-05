@@ -36,6 +36,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
 import { swrKeys } from "@/lib/swr-keys"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 
 const PROJECT_STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -102,7 +103,7 @@ async function fetchProjectData(projectId: string): Promise<{ project: Project; 
   }
 }
 
-export default function ProjectDetailPage() {
+function ProjectDetailPageContent() {
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
@@ -431,5 +432,13 @@ export default function ProjectDetailPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function ProjectDetailPage() {
+  return (
+    <ProtectedRoute>
+      <ProjectDetailPageContent />
+    </ProtectedRoute>
   )
 }

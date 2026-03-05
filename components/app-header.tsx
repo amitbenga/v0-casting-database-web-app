@@ -1,10 +1,14 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Briefcase, FolderOpen, Menu, Inbox } from "lucide-react"
+import { Briefcase, FolderOpen, Menu, Inbox, LogOut } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import Image from "next/image"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function AppHeader() {
+  const { signOut } = useAuth()
   return (
     <header className="border-b bg-card sticky top-0 z-10">
       <div className="container mx-auto px-4 md:px-6 py-3 md:py-4">
@@ -41,6 +45,10 @@ export function AppHeader() {
                 ניהול בקשות
               </Link>
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-muted-foreground">
+              <LogOut className="h-4 w-4 ml-2" />
+              יציאה
+            </Button>
           </nav>
 
           {/* תפריט המבורגר למובייל */}
@@ -75,6 +83,10 @@ export function AppHeader() {
                     <Inbox className="h-4 w-4 ml-2" />
                     ניהול בקשות
                   </Link>
+                </Button>
+                <Button variant="ghost" className="justify-start text-muted-foreground" onClick={() => signOut()}>
+                  <LogOut className="h-4 w-4 ml-2" />
+                  יציאה
                 </Button>
               </nav>
             </SheetContent>

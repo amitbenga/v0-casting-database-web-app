@@ -427,8 +427,6 @@ export async function updateCastingDetails(
   const supabase = await createClient()
 
   try {
-    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
-
     const { error } = await supabase
       .from("role_castings")
       .update({
@@ -455,8 +453,9 @@ export async function deleteRole(roleId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
-    const { data: role } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
-    
+    const { data: role, error: roleError } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
+    if (roleError || !role) throw new Error("תפקיד לא נמצא")
+
     // 1. Delete related castings first
     const { error: deleteCastingsError } = await supabase
       .from("role_castings")

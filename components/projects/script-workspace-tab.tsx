@@ -617,35 +617,48 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   // Inline translation update
   const handleTranslationChange = useCallback(
     async (lineId: string, newTranslation: string) => {
-      setLines((prev) =>
-        prev.map((l) =>
+      // Capture original before optimistic update
+      let originalTranslation: string | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalTranslation = line?.translation
+        return prev.map((l) =>
           l.id === lineId ? { ...l, translation: newTranslation } : l
         )
-      )
+      })
       const result = await updateScriptLine(lineId, { translation: newTranslation })
       if (!result.success) {
         toast({ title: "שגיאה", description: "שגיאה בשמירת תרגום", variant: "destructive" })
+        // Revert to original
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, translation: originalTranslation } : l
+          )
+        )
       }
     },
     [toast]
   )
 
-  // Inline rec_status update (Agent 1)
+  // Inline rec_status update
   const handleRecStatusChange = useCallback(
     async (lineId: string, newStatus: RecStatus | null) => {
-      // Optimistic update
-      setLines((prev) =>
-        prev.map((l) =>
+      // Capture original before optimistic update
+      let originalStatus: RecStatus | null | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalStatus = line?.rec_status
+        return prev.map((l) =>
           l.id === lineId ? { ...l, rec_status: newStatus } : l
         )
-      )
+      })
       const result = await updateScriptLine(lineId, { rec_status: newStatus })
       if (!result.success) {
         toast({ title: "שגיאה", description: "שגיאה בשמירת סטטוס", variant: "destructive" })
-        // Revert
+        // Revert to original
         setLines((prev) =>
           prev.map((l) =>
-            l.id === lineId ? { ...l, rec_status: l.rec_status } : l
+            l.id === lineId ? { ...l, rec_status: originalStatus ?? null } : l
           )
         )
       }
