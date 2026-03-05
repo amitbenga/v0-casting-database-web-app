@@ -284,7 +284,15 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
             </Button>
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground/60">לא משובץ</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setShowSearch(true)}
+          >
+            <UserPlus className="h-3 w-3 ml-1" />
+            שבץ
+          </Button>
         )}
       </div>
     </div>
@@ -344,20 +352,15 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
     }
   }, [projectId])
 
-  // Refresh after mutations — notifies parent via stable ref to avoid render loop
+  // Refresh after mutations — silent (no loading spinner), notifies parent via stable ref
   const refreshRoles = useCallback(async () => {
     try {
-      setLoading(true)
-      setError(null)
       const response = await getProjectRolesWithCasting(projectId)
       setRoles(response.roles)
       setConflicts(response.conflicts)
       onCastingChangeRef.current?.()
     } catch (err) {
-      setError("שגיאה בטעינת תפקידים")
       console.error(err)
-    } finally {
-      setLoading(false)
     }
   }, [projectId])
 

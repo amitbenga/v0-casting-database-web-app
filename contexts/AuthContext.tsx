@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
@@ -23,57 +23,69 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Create a stable Supabase client at module level — avoids re-creating on every render
+let _supabase: ReturnType<typeof createClient> | null = null
+function getSupabase() {
+  if (!_supabase) _supabase = createClient()
+  return _supabase
+}
+
+function makeDefaultProfile(userId: string, email?: string): UserProfile {
+  return {
+    id: userId,
+    email: email || "",
+    full_name: email?.split("@")[0] || "User",
+    role: "admin",
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
+  const profileCacheRef = useRef<Map<string, UserProfile>>(new Map())
 
   const loadProfile = useCallback(async (userId: string, userEmail?: string) => {
+    // Check in-memory cache first — avoids re-fetching on every navigation
+    const cached = profileCacheRef.current.get(userId)
+    if (cached) {
+      setProfile(cached)
+      setLoading(false)
+      return
+    }
+
     try {
-      const supabase = createClient()
+      const supabase = getSupabase()
       const { data, error } = await supabase
         .from("user_profiles")
         .select("id, email, full_name, role")
         .eq("id", userId)
         .maybeSingle()
 
-      if (error) {
-        console.warn("[Auth] user_profiles table not found or not accessible, using default profile")
-        // Create a default profile from user data
-        setProfile({
-          id: userId,
-          email: userEmail || user?.email || "",
-          full_name: userEmail?.split("@")[0] || user?.email?.split("@")[0] || "User",
-          role: "admin", // Default to admin for now
-        })
-      } else if (data) {
-        setProfile(data)
+      let resolvedProfile: UserProfile
+      if (error || !data) {
+        if (error) {
+          console.warn("[Auth] user_profiles table not found or not accessible, using default profile")
+        }
+        resolvedProfile = makeDefaultProfile(userId, userEmail)
       } else {
-        // No profile found, create default
-        setProfile({
-          id: userId,
-          email: userEmail || user?.email || "",
-          full_name: userEmail?.split("@")[0] || user?.email?.split("@")[0] || "User",
-          role: "admin",
-        })
+        resolvedProfile = data
       }
+
+      profileCacheRef.current.set(userId, resolvedProfile)
+      setProfile(resolvedProfile)
     } catch (error) {
       console.error("[Auth] Error loading profile:", error)
-      // Fallback to default profile
-      setProfile({
-        id: userId,
-        email: userEmail || user?.email || "",
-        full_name: "User",
-        role: "admin",
-      })
+      const fallback = makeDefaultProfile(userId, userEmail)
+      setProfile(fallback)
     } finally {
       setLoading(false)
     }
-  }, [user?.email])
+  }, [])
 
   useEffect(() => {
-    const supabase = createClient()
+    const supabase = getSupabase()
 
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -94,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loadProfile(session.user.id, session.user.email)
       } else {
         setProfile(null)
+        profileCacheRef.current.clear()
         setLoading(false)
       }
     })
@@ -103,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signIn(email: string, password: string) {
     try {
-      const supabase = createClient()
+      const supabase = getSupabase()
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -120,8 +133,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     try {
-      const supabase = createClient()
+      const supabase = getSupabase()
       await supabase.auth.signOut()
+      profileCacheRef.current.clear()
       router.push("/login")
     } catch (error) {
       console.error("[Auth] Error signing out:", error)
