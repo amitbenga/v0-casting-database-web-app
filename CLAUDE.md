@@ -98,6 +98,8 @@ lib/
                            #   updateScriptLine(lineId, updates)
                            #   deleteAllScriptLines(projectId)
                            #   getScriptRoles(projectId)
+                           #   syncActorsToScriptLines(projectId)
+    translate-actions.ts   # תרגום אוטומטי EN→HE — translateScriptLines(projectId, options)
   parser/
     script-parser.ts       # Parser מודרגש (פב 2026)
     excel-parser.ts        # 2 חלקים:
@@ -280,9 +282,14 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 - Pagination
 - ספירת רפליקות לפי שחקן
 
+**נוסף בשלב ו (מרץ 2026):**
+- **ייבוא אוניברסלי** — PDF/DOCX/TXT בנוסף ל-Excel (routing לפי סיומת קובץ)
+- **סנכרון שחקנים אוטומטי** — `syncActorsToScriptLines()` מתאם actor_id מ-role_castings לפי role_name (case-insensitive)
+- **תרגום אוטומטי EN→HE** — Vercel AI SDK + Claude, batches של 40 שורות, לא דורס עריכות ידניות
+- כפתורי "סנכרן שחקנים" ו"תרגם לעברית" ב-workspace toolbar
+
 **חסר עדיין (לפיתוח עתידי):**
 - עריכת timecode inline
-- תמיכה מלאה ב-PDF/DOCX לייבוא שורות (tabular extraction קיים, UI עדיין מבוסס Excel)
 
 ### מודול 3 — Script Intelligence (Parser)
 
@@ -311,7 +318,7 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 | פעולה | Excel | PDF | DOCX | TXT |
 | --- | --- | --- | --- | --- |
 | חילוץ תפקידים | ✅ | ✅ | ✅ | ✅ |
-| שורות לסביבת ��בודה | ✅ מלא | 🟡 טבלאי חלקי | 🟡 טבלאי חלקי | 🟡 NAME: format |
+| שורות לסביבת עבודה | ✅ מלא | ✅ טבלאי + dialogue | ✅ טבלאי + dialogue | ✅ dialogue |
 
 ### שלבי עבודה
 
@@ -322,11 +329,11 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 | ג | `claude/add-script-handling-IH2JC` | ✅ הושלם — מוזג ל-main |
 | ד | `claude/improve-model-4-workspace-C8vDl` | ✅ הושלם — ייצוא Excel, auto-assign, bulk delete, pagination |
 | ה | `claude/enhance-file-parser-C8JeT` | ✅ הושלם — PDF/DOCX tabular support, Zod validation, diagnostics |
-| ו | `claude/improve-app-performance-y2wVC` | ✅ הושלם — ביצועים (מרץ 2026) |
+| ו | `claude/improve-app-performance-y2wVC` | ✅ הושלם — ביצועים + מערכת תסריטים (מרץ 2026) |
 
-### שלב ו — Performance Improvements (מרץ 2026)
+### שלב ו — Performance + Script System (מרץ 2026)
 
-**מה הושלם:**
+**מה הושלם — ביצועים:**
 - **SWR caching** — כל הדפים (actors, projects, folders, actor detail) משתמשים ב-SWR עם:
   - Global SWRConfig: `revalidateOnFocus: false`, `dedupingInterval: 30000`, `keepPreviousData: true`
   - SWR Key Factory (`lib/swr-keys.ts`) — centralized cache keys
@@ -339,11 +346,27 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 - **Payload optimization** — `select("*")` הוחלף בשדות ספציפיים בclient fetchers
 - **SWRProvider** — `components/swr-provider.tsx` עוטף את כל האפליקציה
 
+**מה הושלם — מערכת תסריטים:**
+- **ייבוא אוניברסלי** — workspace מקבל Excel/PDF/DOCX/TXT (routing לפי סיומת)
+  - PDF → `extractTablesFromPDF()` + fallback to `extractDialogueLines()`
+  - DOCX → `extractTablesFromDOCX()` + fallback to `extractDialogueLines()`
+  - TXT → `extractDialogueLines()`
+- **סנכרון שחקנים** — `syncActorsToScriptLines()` בserver action
+  - מביא castings עם status "מלוהק", בונה map של role_name→actor_id
+  - עדכון batch של script_lines לפי שם תפקיד (case-insensitive)
+  - רץ אוטומטית אחרי ייבוא + כפתור ידני "סנכרן שחקנים"
+- **תרגום אוטומטי EN→HE** — `translateScriptLines()` בserver action
+  - Vercel AI SDK (`generateText`) עם `anthropic/claude-sonnet-4-20250514`
+  - batches של 40 שורות לאיכות הקשר
+  - לא דורס תרגומים קיימים (אלא אם force=true)
+  - Dynamic import לחיסכון bundle
+
 **קבצים חדשים:**
 - `lib/swr-keys.ts` — SWR key factory
 - `components/swr-provider.tsx` — Global SWR config
 - `app/actors/[id]/loading.tsx` — Actor detail skeleton
 - `app/admin/loading.tsx` — Admin page skeleton
+- `lib/actions/translate-actions.ts` — Server action לתרגום AI
 
 **DB optimization plan (מוכן ליישום):**
 - אינדקסים: `idx_actors_full_name_trgm`, `idx_role_castings_actor_id`, `idx_script_lines_project_role`
