@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
+import useSWR from "swr"
 import { useRouter, useParams } from "next/navigation"
+import Link from "next/link"
 import { ArrowLeft, Edit, MoreVertical, Users, Calendar, Film, UserCircle, Clapperboard, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -9,15 +11,31 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import dynamic from "next/dynamic"
 import { EditProjectDialog } from "@/components/edit-project-dialog"
-import { CastingWorkspace } from "@/components/projects/casting-workspace"
-import { ScriptsTab } from "@/components/projects/scripts-tab"
-import { ActorsTab } from "@/components/projects/actors-tab"
-import { ScriptWorkspaceTab } from "@/components/projects/script-workspace-tab"
 import { ProjectRecordingProgressSummary } from "@/components/projects/project-recording-progress-summary"
+
+// Lazy-load heavy tab components — only downloaded when the tab becomes active
+const CastingWorkspace = dynamic(
+  () => import("@/components/projects/casting-workspace").then(m => ({ default: m.CastingWorkspace })),
+  { loading: () => <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />)}</div> },
+)
+const ScriptsTab = dynamic(
+  () => import("@/components/projects/scripts-tab").then(m => ({ default: m.ScriptsTab })),
+  { loading: () => <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />)}</div> },
+)
+const ActorsTab = dynamic(
+  () => import("@/components/projects/actors-tab").then(m => ({ default: m.ActorsTab })),
+  { loading: () => <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />)}</div> },
+)
+const ScriptWorkspaceTab = dynamic(
+  () => import("@/components/projects/script-workspace-tab").then(m => ({ default: m.ScriptWorkspaceTab })),
+  { loading: () => <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />)}</div> },
+)
 import { createBrowserClient } from "@/lib/supabase/client"
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types"
 import { useToast } from "@/hooks/use-toast"
+import { swrKeys } from "@/lib/swr-keys"
 
 const PROJECT_STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -46,84 +64,68 @@ interface ProjectStats {
   scriptsCount: number
 }
 
+// Fetcher for project data + stats in a single SWR call
+async function fetchProjectData(projectId: string): Promise<{ project: Project; stats: ProjectStats }> {
+  const supabase = createBrowserClient()
+
+  // Fetch project and stats in parallel
+  const [projectResult, rolesResult, scriptsResult] = await Promise.all([
+    supabase
+      .from("casting_projects")
+      .select("id, name, status, notes, director, casting_director, project_date, created_at, updated_at")
+      .eq("id", projectId)
+      .single(),
+    supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
+    supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
+  ])
+
+  if (projectResult.error) throw projectResult.error
+
+  // Count distinct actors via role IDs
+  const roleIds = (rolesResult.data || []).map((r: { id: string }) => r.id)
+  let actorsCount = 0
+  if (roleIds.length > 0) {
+    const { data: castings } = await supabase
+      .from("role_castings")
+      .select("actor_id")
+      .in("role_id", roleIds)
+    actorsCount = castings ? new Set(castings.map((c: { actor_id: string }) => c.actor_id)).size : 0
+  }
+
+  return {
+    project: projectResult.data,
+    stats: {
+      rolesCount: rolesResult.count || 0,
+      actorsCount,
+      scriptsCount: scriptsResult.count || 0,
+    },
+  }
+}
+
 export default function ProjectDetailPage() {
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
   const projectId = typeof params?.id === "string" ? params.id : null
 
-  const [project, setProject] = useState<Project | null>(null)
-  const [stats, setStats] = useState<ProjectStats>({ rolesCount: 0, actorsCount: 0, scriptsCount: 0 })
-  const [loading, setLoading] = useState(true)
+  const { data, isLoading: loading, mutate } = useSWR(
+    projectId ? swrKeys.projects.detail(projectId) : null,
+    () => fetchProjectData(projectId!),
+  )
+
+  // Guard: keepPreviousData can briefly show stale data from a different project.
+  // If the cached data doesn't match the current route ID, treat as loading.
+  const isStaleData = data?.project && data.project.id !== projectId
+  const project = isStaleData ? null : (data?.project ?? null)
+  const stats = isStaleData ? { rolesCount: 0, actorsCount: 0, scriptsCount: 0 } : (data?.stats ?? { rolesCount: 0, actorsCount: 0, scriptsCount: 0 })
+
   const [activeTab, setActiveTab] = useState("roles")
   const [showEditProjectDialog, setShowEditProjectDialog] = useState(false)
 
-  // Refresh stats only — no loading spinner, safe to call from child components
-  // without causing CastingWorkspace to unmount and re-trigger a fetch loop.
-  const refreshStats = useCallback(async () => {
-    if (!projectId) return
-    try {
-      const supabase = createBrowserClient()
-
-      const [rolesResult, scriptsResult] = await Promise.all([
-        supabase.from("project_roles").select("id", { count: "exact" }).eq("project_id", projectId),
-        supabase.from("project_scripts").select("id", { count: "exact" }).eq("project_id", projectId),
-      ])
-
-      // Count distinct actors via role IDs (avoids relying on role_castings.project_id)
-      const { data: roles } = await supabase
-        .from("project_roles")
-        .select("id")
-        .eq("project_id", projectId)
-      const roleIds = (roles || []).map((r: { id: string }) => r.id)
-      let actorsCount = 0
-      if (roleIds.length > 0) {
-        const { data: castings } = await supabase
-          .from("role_castings")
-          .select("actor_id")
-          .in("role_id", roleIds)
-        actorsCount = castings ? new Set(castings.map((c: { actor_id: string }) => c.actor_id)).size : 0
-      }
-
-      setStats({
-        rolesCount: rolesResult.count || 0,
-        actorsCount,
-        scriptsCount: scriptsResult.count || 0,
-      })
-    } catch (error) {
-      console.error("Error refreshing stats:", error)
-    }
-  }, [projectId])
-
-  // Full data load — shows loading spinner, used only on initial mount
-  const loadData = useCallback(async () => {
-    if (!projectId) return
-
-    setLoading(true)
-    try {
-      const supabase = createBrowserClient()
-
-      const { data: projectData, error: projectError } = await supabase
-        .from("casting_projects")
-        .select("id, name, status, notes, director, casting_director, project_date, created_at, updated_at")
-        .eq("id", projectId)
-        .single()
-
-      if (projectError) throw projectError
-      setProject(projectData)
-
-      await refreshStats()
-    } catch (error) {
-      console.error("Error loading project data:", error)
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId, refreshStats])
-
-  useEffect(() => {
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  // Refresh stats only — revalidate the SWR cache
+  const refreshStats = useCallback(() => {
+    mutate()
+  }, [mutate])
 
   // Export project
   async function exportProject() {
@@ -175,12 +177,36 @@ export default function ProjectDetailPage() {
     }
   }
 
-  if (loading) {
+  if (loading || isStaleData) {
+    // Match the loading.tsx skeleton structure for seamless transition
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">טוען פרויקט...</p>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card sticky top-0 z-10">
+          <div className="container mx-auto px-4 md:px-6 py-4">
+            <div className="flex items-center gap-4">
+              <div className="h-9 w-9 bg-muted animate-pulse rounded-md" />
+              <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 md:px-6 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
+            <div className="space-y-6">
+              <div className="rounded-lg border bg-card p-6 space-y-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-10 bg-muted animate-pulse rounded" />
+                ))}
+              </div>
+            </div>
+            <div className="lg:col-span-3 space-y-6">
+              <div className="h-10 bg-muted animate-pulse rounded-md" />
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -191,7 +217,9 @@ export default function ProjectDetailPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
           <p className="text-xl">פרויקט לא נמצא</p>
-          <Button onClick={() => router.push("/projects")}>חזרה לפרויקטים</Button>
+          <Button asChild>
+            <Link href="/projects">חזרה לפרויקטים</Link>
+          </Button>
         </div>
       </div>
     )
@@ -204,8 +232,10 @@ export default function ProjectDetailPage() {
         <div className="container mx-auto px-4 md:px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0 flex-1">
-              <Button variant="ghost" size="icon" onClick={() => router.push("/projects")}>
-                <ArrowLeft className="h-5 w-5" />
+              <Button variant="ghost" size="icon" asChild>
+                <Link href="/projects">
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
               </Button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -361,7 +391,7 @@ export default function ProjectDetailPage() {
                   projectId={project.id} 
                   onScriptApplied={() => {
                     setActiveTab("roles")
-                    loadData()
+                    mutate()
                   }}
                 />
               </TabsContent>
@@ -395,7 +425,7 @@ export default function ProjectDetailPage() {
           open={showEditProjectDialog}
           onOpenChange={setShowEditProjectDialog}
           onProjectUpdated={() => {
-            loadData()
+            mutate()
             setShowEditProjectDialog(false)
           }}
         />

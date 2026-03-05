@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import type { Actor, FilterState } from "@/lib/types"
+import { swrKeys } from "@/lib/swr-keys"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { AppHeader } from "@/components/app-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -94,6 +96,7 @@ async function fetchActorsPage(cursor: string | null): Promise<{ actors: Actor[]
 }
 
 function ActorsDatabaseContent() {
+  const router = useRouter()
   const { user } = useAuth() // Get authenticated user
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
@@ -125,11 +128,11 @@ function ActorsDatabaseContent() {
   // SWR Infinite for cursor-based pagination
   const getKey = (pageIndex: number, previousPageData: { actors: Actor[]; nextCursor: string | null } | null) => {
     // First page - no cursor
-    if (pageIndex === 0) return ["actors", null]
+    if (pageIndex === 0) return swrKeys.actors.infinite(null)
     // No more pages
     if (previousPageData && !previousPageData.nextCursor) return null
     // Return cursor for next page
-    return ["actors", previousPageData?.nextCursor]
+    return swrKeys.actors.infinite(previousPageData?.nextCursor ?? null)
   }
   
   const { data, size, setSize, isLoading, mutate } = useSWRInfinite(
@@ -240,9 +243,9 @@ function ActorsDatabaseContent() {
   }, [])
 
   const handleEdit = useCallback((actor: Actor) => {
-    // Navigate to edit page
-    window.location.href = `/actors/${actor.id}`
-  }, [])
+    // Navigate to edit page — client-side navigation (no full page reload)
+    router.push(`/actors/${actor.id}`)
+  }, [router])
 
   const handleDelete = useCallback(async (id: string) => {
     try {

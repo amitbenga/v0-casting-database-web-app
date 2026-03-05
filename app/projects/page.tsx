@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
+import useSWR from "swr"
 import { Plus, Search, Calendar, Users, MoreVertical, FolderOpen, UserCircle, Film } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,7 @@ import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
+import { swrKeys } from "@/lib/swr-keys"
 
 const STATUS_COLORS: Record<string, string> = {
   not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
@@ -41,43 +43,30 @@ function getStatusLabel(status: string) {
   return STATUS_LABELS[status] ?? status
 }
 
+async function fetchProjects() {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("casting_projects")
+    .select("id,name,status,notes,director,casting_director,project_date,created_at")
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error loading projects:", error)
+    throw error
+  }
+
+  return data || []
+}
+
 export default function ProjectsPage() {
   const { toast } = useToast()
-  const [projects, setProjects] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: projects = [], isLoading: loading, mutate } = useSWR(swrKeys.projects.list(), fetchProjects)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedProject, setSelectedProject] = useState<any | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const debouncedSearch = useDebounce(searchQuery, 300)
-
-  useEffect(() => {
-    loadProjects()
-  }, [])
-
-  async function loadProjects() {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("casting_projects")
-        .select("id,name,status,notes,director,casting_director,project_date,created_at")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        console.error("[v0] Error loading projects:", error)
-        return
-      }
-
-      if (data) {
-        setProjects(data)
-      }
-    } catch (error) {
-      console.error("[v0] Error:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const filteredProjects = useMemo(() => {
     const query = debouncedSearch.toLowerCase()
@@ -120,7 +109,7 @@ export default function ProjectsPage() {
 
       toast({ title: "הצלחה", description: "הפרויקט שוכפל בהצלחה" })
       if (newProject) {
-        setProjects((prev) => [newProject, ...prev])
+        mutate([newProject, ...projects], false)
       }
     } catch (error) {
       console.error("[v0] Error:", error)
@@ -134,20 +123,27 @@ export default function ProjectsPage() {
 
   const handleDeleteProject = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק פרויקט זה?")) {
-      // Optimistic update
-      setProjects((prev) => prev.filter((p) => p.id !== id))
+      const previousData = projects
+      // Optimistic update — remove from cache immediately
+      mutate(
+        previousData.filter((p: any) => p.id !== id),
+        false, // Don't revalidate yet
+      )
       try {
         const supabase = createClient()
         const { error } = await supabase.from("casting_projects").delete().eq("id", id)
 
         if (error) {
           console.error("[v0] Error deleting project:", error)
-          // Revert on failure
-          await loadProjects()
+          // Rollback on failure
+          mutate(previousData, false)
+          toast({ title: "שגיאה", description: "שגיאה במחיקת פרויקט", variant: "destructive" })
         }
       } catch (error) {
         console.error("[v0] Error:", error)
-        await loadProjects()
+        // Rollback on failure
+        mutate(previousData, false)
+        toast({ title: "שגיאה", description: "שגיאה במחיקת פרויקט", variant: "destructive" })
       }
     }
   }
@@ -156,8 +152,16 @@ export default function ProjectsPage() {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader />
-        <div className="flex items-center justify-center h-[60vh]">
-          <p className="text-muted-foreground">טוען פרויקטים...</p>
+        <div className="container mx-auto px-4 md:px-6 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-5 space-y-3 animate-pulse">
+                <div className="h-5 w-32 bg-muted rounded" />
+                <div className="h-5 w-16 bg-muted rounded-full" />
+                <div className="h-3 w-24 bg-muted rounded" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -363,7 +367,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      <CreateProjectDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onProjectCreated={loadProjects} />
+      <CreateProjectDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onProjectCreated={() => mutate()} />
 
       {selectedProject && (
         <EditProjectDialog
@@ -371,7 +375,7 @@ export default function ProjectsPage() {
           onOpenChange={setShowEditDialog}
           project={selectedProject}
           onProjectUpdated={() => {
-            loadProjects()
+            mutate()
             setShowEditDialog(false)
             setSelectedProject(null)
           }}

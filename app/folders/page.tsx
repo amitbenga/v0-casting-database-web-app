@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import useSWR from "swr"
 import { Plus, Search, Folder, MoreVertical, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,41 +11,29 @@ import { CreateFolderDialog } from "@/components/create-folder-dialog"
 import { AppHeader } from "@/components/app-header"
 import { createClient } from "@/lib/supabase/client"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { swrKeys } from "@/lib/swr-keys"
+
+async function fetchFolders() {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("folders")
+    .select("*, folder_actors(count)")
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error loading folders:", error)
+    throw error
+  }
+
+  return data || []
+}
 
 export default function FoldersPage() {
-  const [folders, setFolders] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: folders = [], isLoading: loading, mutate } = useSWR(swrKeys.folders.list(), fetchFolders)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
 
-  useEffect(() => {
-    loadFolders()
-  }, [])
-
-  async function loadFolders() {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("folders")
-        .select("*, folder_actors(count)")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        console.error("[v0] Error loading folders:", error)
-        return
-      }
-
-      if (data) {
-        setFolders(data)
-      }
-    } catch (error) {
-      console.error("[v0] Error:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filteredFolders = folders.filter((folder) => folder.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredFolders = folders.filter((folder: any) => folder.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
   const getColorClass = (color: string) => {
     const colors: Record<string, string> = {
@@ -60,18 +49,26 @@ export default function FoldersPage() {
 
   const handleDeleteFolder = async (id: string) => {
     if (confirm("האם אתה בטוח שברצונך למחוק תיקייה זו?")) {
+      const previousData = folders
+      // Optimistic update — remove from cache immediately
+      mutate(
+        previousData.filter((f: any) => f.id !== id),
+        false,
+      )
       try {
         const supabase = createClient()
         const { error } = await supabase.from("folders").delete().eq("id", id)
 
         if (error) {
           console.error("[v0] Error deleting folder:", error)
+          // Rollback on failure
+          mutate(previousData, false)
           return
         }
-
-        await loadFolders()
       } catch (error) {
         console.error("[v0] Error:", error)
+        // Rollback on failure
+        mutate(previousData, false)
       }
     }
   }
@@ -80,8 +77,24 @@ export default function FoldersPage() {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader />
-        <div className="flex items-center justify-center h-[60vh]">
-          <p className="text-muted-foreground">טוען תיקיות...</p>
+        <div className="container mx-auto px-4 md:px-6 py-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="h-8 w-28 bg-muted animate-pulse rounded" />
+            <div className="h-10 w-28 bg-muted animate-pulse rounded-md" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-muted animate-pulse rounded" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-5 w-24 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -117,7 +130,7 @@ export default function FoldersPage() {
       <div className="container mx-auto px-4 md:px-6 py-6 md:py-8">
         {/* Folders Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-          {filteredFolders.map((folder) => (
+          {filteredFolders.map((folder: any) => (
             <Card key={folder.id} className="p-4 md:p-6 hover:shadow-lg transition-shadow group">
               <div className="space-y-3 md:space-y-4">
                 {/* Folder Icon and Header */}
@@ -183,7 +196,7 @@ export default function FoldersPage() {
         )}
       </div>
 
-      <CreateFolderDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onFolderCreated={loadFolders} />
+      <CreateFolderDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onFolderCreated={() => mutate()} />
     </div>
   )
 }

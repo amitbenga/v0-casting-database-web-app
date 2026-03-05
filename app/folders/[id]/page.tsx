@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
+import useSWR from "swr"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Plus, Search, MoreVertical, Folder, Trash2, Play, Pause, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,72 +15,70 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { exportActors } from "@/lib/export-utils"
 import { useToast } from "@/hooks/use-toast"
+import { swrKeys } from "@/lib/swr-keys"
+
+async function fetchFolderData(folderId: string) {
+  const supabase = createBrowserClient()
+
+  const [folderResult, actorsResult] = await Promise.all([
+    supabase.from("folders").select("id, name, description, created_at").eq("id", folderId).single(),
+    supabase
+      .from("folder_actors")
+      .select(`folder_id, actor_id, actors (id, full_name, gender, birth_year, phone, email, image_url, voice_sample_url)`)
+      .eq("folder_id", folderId),
+  ])
+
+  if (folderResult.error) throw folderResult.error
+
+  return {
+    folder: folderResult.data,
+    actors: actorsResult.data?.map((fa: any) => fa.actors) || [],
+  }
+}
 
 export default function FolderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [folder, setFolder] = useState<any>(null)
-  const [actors, setActors] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, isLoading: loading, mutate } = useSWR(
+    swrKeys.folders.detail(params.id),
+    () => fetchFolderData(params.id),
+  )
+
+  // Guard: keepPreviousData can briefly show stale data from a different folder.
+  const isStaleData = data?.folder && data.folder.id !== params.id
+  const folder = isStaleData ? null : (data?.folder ?? null)
+  const actors = isStaleData ? [] : (data?.actors ?? [])
+
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddActorDialog, setShowAddActorDialog] = useState(false)
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  useEffect(() => {
-    loadFolder()
-    loadFolderActors()
-  }, [params.id])
-
-  async function loadFolder() {
-    try {
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("folders").select("*").eq("id", params.id).single()
-
-      if (error) throw error
-
-      setFolder(data)
-    } catch (error) {
-      console.error("[v0] Error loading folder:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadFolderActors() {
-    try {
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from("folder_actors")
-        .select(
-          `
-          *,
-          actors (*)
-        `,
-        )
-        .eq("folder_id", params.id)
-
-      if (error) throw error
-
-      setActors(data?.map((fa) => fa.actors) || [])
-    } catch (error) {
-      console.error("[v0] Error loading folder actors:", error)
-    }
-  }
-
   async function removeActorFromFolder(actorId: string) {
     if (!confirm("האם להסיר שחקן זה מהתיקייה?")) return
+
+    const previousData = data
+    // Optimistic update — remove actor immediately
+    mutate(
+      previousData ? {
+        ...previousData,
+        actors: previousData.actors.filter((a: any) => a.id !== actorId),
+      } : previousData,
+      false,
+    )
 
     try {
       const supabase = createBrowserClient()
       const { error } = await supabase.from("folder_actors").delete().eq("folder_id", params.id).eq("actor_id", actorId)
 
-      if (error) throw error
-
-      setActors((prev) => prev.filter((a) => a.id !== actorId))
+      if (error) {
+        // Rollback on failure
+        mutate(previousData, false)
+        throw error
+      }
     } catch (error) {
       console.error("[v0] Error removing actor from folder:", error)
-        toast({ title: "שגיאה", description: "שגיאה בהסרת שחקן", variant: "destructive" })
+      toast({ title: "שגיאה", description: "שגיאה בהסרת שחקן", variant: "destructive" })
     }
   }
 
@@ -109,12 +108,12 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       toast({ title: "ריק", description: "אין שחקנים בתיקייה לייצוא" })
       return
     }
-    const filename = `folder_${folder.name.replace(/\s+/g, "_")}`
+    const filename = `folder_${folder?.name.replace(/\s+/g, "_") ?? "export"}`
     exportActors(actors, format, filename)
   }
 
   const filteredActors = actors.filter(
-    (actor) =>
+    (actor: any) =>
       actor.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       actor.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       actor.email?.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -152,12 +151,36 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  if (loading) {
+  if (loading || isStaleData) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">טוען תיקייה...</p>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card sticky top-0 z-10">
+          <div className="container mx-auto px-4 md:px-6 py-4">
+            <div className="flex items-center gap-4">
+              <div className="h-9 w-9 bg-muted animate-pulse rounded-md" />
+              <div className="h-6 w-36 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 md:px-6 py-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-10 flex-1 bg-muted animate-pulse rounded-md" />
+            <div className="h-10 w-28 bg-muted animate-pulse rounded-md" />
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+                  </div>
+                  <div className="h-8 w-8 bg-muted animate-pulse rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -168,7 +191,9 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
           <p className="text-xl">תיקייה לא נמצאה</p>
-          <Button onClick={() => router.push("/folders")}>חזרה לתיקיות</Button>
+          <Button asChild>
+            <Link href="/folders">חזרה לתיקיות</Link>
+          </Button>
         </div>
       </div>
     )
@@ -181,8 +206,10 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
         <div className="container mx-auto px-4 md:px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0 flex-1">
-              <Button variant="ghost" size="icon" onClick={() => router.push("/folders")}>
-                <ArrowLeft className="h-5 w-5" />
+              <Button variant="ghost" size="icon" asChild>
+                <Link href="/folders">
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
               </Button>
               <div className="flex items-center gap-3 min-w-0">
                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -251,7 +278,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
         {/* Actors Grid */}
         {filteredActors.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredActors.map((actor) => {
+            {filteredActors.map((actor: any) => {
               const currentAge = actor.birth_year ? new Date().getFullYear() - actor.birth_year : null
 
               return (
@@ -345,7 +372,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
         open={showAddActorDialog}
         onOpenChange={setShowAddActorDialog}
         folderId={params.id}
-        onActorsAdded={loadFolderActors}
+        onActorsAdded={() => mutate()}
       />
     </div>
   )

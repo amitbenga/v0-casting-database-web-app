@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Rubik } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/contexts/AuthContext"
+import { SWRProvider } from "@/components/swr-provider"
 
 const rubik = Rubik({ subsets: ["hebrew", "latin"] })
 
@@ -37,9 +38,11 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl">
       <body className={`${rubik.className} antialiased`}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <SWRProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </SWRProvider>
       </body>
     </html>
   )
