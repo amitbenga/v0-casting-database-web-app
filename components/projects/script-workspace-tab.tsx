@@ -430,13 +430,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     e.target.value = ""
     if (allFiles.length === 0) return
 
-    // ── Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
+    // ���─ Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
     const excelFiles = allFiles.filter((f) => /\.(xlsx|xls)$/i.test(f.name))
     if (excelFiles.length > 0) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
         if (results.every((r) => r.sheets.length === 0)) {
-          toast({ title: "שגיאה", description: "לא נ��צאו גיליונות בקבצים", variant: "destructive" })
+          toast({ title: "שגיאה", description: "לא נ����צאו גיליונות בקבצים", variant: "destructive" })
           return
         }
         setExcelResults(results)
@@ -908,6 +908,48 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           </Button>
         </div>
       )}
+
+      {/* Actor recording progress */}
+      {!loading && hasLines && (() => {
+        // Build per-actor stats from loaded lines
+        const actorMap = new Map<string, { name: string; total: number; recorded: number }>()
+        for (const line of lines) {
+          if (!line.actor_name) continue
+          const key = line.actor_name
+          if (!actorMap.has(key)) actorMap.set(key, { name: line.actor_name, total: 0, recorded: 0 })
+          const entry = actorMap.get(key)!
+          entry.total++
+          if (line.rec_status === "הוקלט") entry.recorded++
+        }
+        const actors = Array.from(actorMap.values()).sort((a, b) => b.total - a.total)
+        if (actors.length === 0) return null
+        return (
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-2" dir="rtl">
+            <p className="text-xs font-medium text-muted-foreground">התקדמות הקלטה לפי שחקן</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {actors.map((a) => {
+                const pct = a.total > 0 ? Math.round((a.recorded / a.total) * 100) : 0
+                return (
+                  <div key={a.name} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium truncate max-w-[140px]">{a.name}</span>
+                      <span className="text-muted-foreground flex-shrink-0 mr-2">
+                        {a.recorded}/{a.total} ({pct}%)
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-green-500 transition-all duration-300"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Filters (Agent 5: combobox for role; Agent 6: jump-to-line) */}
       {!loading && hasLines && (
