@@ -2,6 +2,7 @@
 
 import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
+import { AI_TRANSLATE_MODEL } from "@/lib/ai-config"
 
 interface TranslateResult {
   success: boolean
@@ -59,7 +60,7 @@ export async function translateScriptLines(
         .join("\n")
 
       const { text } = await generateText({
-        model: "anthropic/claude-sonnet-4-20250514",
+        model: AI_TRANSLATE_MODEL,
         messages: [
           {
             role: "system",

@@ -4,15 +4,10 @@
 import { ToolLoopAgent, tool, stepCountIs } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { AI_PARSE_MODEL } from "@/lib/ai-config"
 
 export const maxDuration = 120 // seconds — agent with multiple tool calls needs headroom
 
-// ─────────────────────────────────────────────
-// Model configuration
-// Sonnet is 10-20x cheaper than Opus and handles structured extraction well.
-// Switch to Opus only if you see quality issues on complex scripts.
-// ─────────────────────────────────────────────
-const AI_MODEL = "anthropic/claude-sonnet-4-20250514"
 const MAX_TEXT_LENGTH = 80_000
 
 // ─────────────────────────────────────────────
@@ -103,7 +98,7 @@ export async function POST(req: Request) {
 
     // 4. Build agent
     const agent = new ToolLoopAgent({
-      model: AI_MODEL,
+      model: AI_PARSE_MODEL,
 
       instructions: `You are an expert script parser for a Hebrew dubbing studio casting database.
 
@@ -227,7 +222,7 @@ Workflow:
       .update({
         status: "draft_ready",
         draft_json: draftJson,
-        model_used: AI_MODEL,
+        model_used: AI_PARSE_MODEL,
         tokens_used: tokensUsed,
       })
       .eq("id", importId)
