@@ -356,15 +356,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   }, [lines, filterRole, filterStatus, searchRole])
 
   // Virtualizer for the lines table
+  const ROW_HEIGHT = 44
   const rowVirtualizer = useVirtualizer({
     count: filteredLines.length,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 52,
-    measureElement:
-      typeof window !== "undefined"
-        ? (el) => el?.getBoundingClientRect().height ?? 52
-        : undefined,
-    overscan: 10,
+    estimateSize: () => ROW_HEIGHT,
+    // No measureElement — fixed row height prevents content from expanding rows
+    overscan: 12,
   })
 
   // Selection helpers
@@ -1116,12 +1114,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                   <TableRow
                     key={line.id}
                     data-index={virtualRow.index}
-                    ref={rowVirtualizer.measureElement}
                     style={{
                       position: "absolute",
                       top: 0,
                       left: 0,
                       width: "100%",
+                      height: ROW_HEIGHT,
+                      overflow: "hidden",
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                     className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
@@ -1202,9 +1201,22 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    {/* Translation (Hebrew) — wraps naturally within column, min 2 lines readable */}
-                    <TableCell className="px-2 overflow-hidden align-top py-2">
-                      <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
+                    {/* Translation (Hebrew) — single line, truncated, tooltip shows full */}
+                    <TableCell className="px-2 overflow-hidden align-middle max-h-full">
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="truncate whitespace-nowrap">
+                              <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
+                            </div>
+                          </TooltipTrigger>
+                          {line.translation && (
+                            <TooltipContent side="top" dir="rtl" className="max-w-sm text-xs whitespace-pre-wrap text-right break-words">
+                              {line.translation}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                     </TableCell>
                     {/* Source text (English) — single line truncated, full text on hover tooltip */}
                     <TableCell className="px-2 overflow-hidden align-middle" dir="ltr">
@@ -1216,11 +1228,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                             </p>
                           </TooltipTrigger>
                           {line.source_text && (
-                            <TooltipContent
-                              side="top"
-                              dir="ltr"
-                              className="max-w-sm text-xs whitespace-pre-wrap text-left break-words"
-                            >
+                            <TooltipContent side="top" dir="ltr" className="max-w-sm text-xs whitespace-pre-wrap text-left break-words">
                               {line.source_text}
                             </TooltipContent>
                           )}
