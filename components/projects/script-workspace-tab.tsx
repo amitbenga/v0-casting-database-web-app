@@ -1064,23 +1064,24 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         >
           <Table
             className="w-full"
-            style={{ direction: "rtl", tableLayout: "fixed", minWidth: 900 }}
+            style={{ direction: "rtl", tableLayout: "fixed", minWidth: 980 }}
           >
-            {/* Fixed column widths — required for table-layout: fixed with virtual rows */}
+            {/* All widths are explicit — table-layout:fixed means the browser NEVER
+                recalculates widths based on content. Every cell must clip with overflow:hidden. */}
             <colgroup>
-              <col style={{ width: 48 }} />   {/* # */}
-              <col style={{ width: 40 }} />   {/* checkbox */}
-              <col style={{ width: 96 }} />   {/* TC */}
-              <col style={{ width: 132 }} />  {/* role */}
-              <col style={{ width: 112 }} />  {/* actor */}
-              <col style={{ width: 116 }} />  {/* status */}
-              <col />                          {/* translation — fill */}
-              <col />                          {/* source — fill */}
+              <col style={{ width: 44 }} />   {/* # */}
+              <col style={{ width: 36 }} />   {/* checkbox */}
+              <col style={{ width: 80 }} />   {/* TC */}
+              <col style={{ width: 140 }} />  {/* role */}
+              <col style={{ width: 130 }} />  {/* actor */}
+              <col style={{ width: 120 }} />  {/* status */}
+              <col style={{ width: "25%" }} /> {/* translation */}
+              <col style={{ width: "25%" }} /> {/* source */}
             </colgroup>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead className="text-right">{"#"}</TableHead>
-                <TableHead className="text-center">
+            <TableHeader className="sticky top-0 bg-background z-10 border-b">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-right text-xs px-2">#</TableHead>
+                <TableHead className="text-center px-1">
                   <input
                     ref={selectAllCheckboxRef}
                     type="checkbox"
@@ -1090,12 +1091,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     aria-label="בחר הכל"
                   />
                 </TableHead>
-                <TableHead className="text-right">{"TC"}</TableHead>
-                <TableHead className="text-right">{"תפקיד"}</TableHead>
-                <TableHead className="text-right">{"שחקן"}</TableHead>
-                <TableHead className="text-right">{"סטטוס"}</TableHead>
-                <TableHead className="text-right">{"תרגום"}</TableHead>
-                <TableHead className="text-right" dir="ltr">{"טקסט מקור"}</TableHead>
+                <TableHead className="text-right text-xs px-2">TC</TableHead>
+                <TableHead className="text-right text-xs px-2">תפקיד</TableHead>
+                <TableHead className="text-right text-xs px-2">שחקן</TableHead>
+                <TableHead className="text-right text-xs px-2">סטטוס</TableHead>
+                <TableHead className="text-right text-xs px-2">תרגום</TableHead>
+                <TableHead className="text-right text-xs px-2" dir="ltr">טקסט מקור</TableHead>
               </TableRow>
             </TableHeader>
             {/* Virtual body: position relative + explicit height so virtualizer can position rows */}
@@ -1122,10 +1123,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     }}
                     className={`hover:bg-muted/30 ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
-                    <TableCell className="text-right text-xs text-muted-foreground">
+                    <TableCell className="text-right text-xs text-muted-foreground px-2 overflow-hidden">
                       {line.line_number ?? ""}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center px-1">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
@@ -1134,18 +1135,18 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
                     </TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground text-right">
+                    <TableCell className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden">
                       {line.timecode ?? "\u2014"}
                     </TableCell>
-                    <TableCell>
+                    {/* Role cell — badge clips to column width */}
+                    <TableCell className="px-2 overflow-hidden">
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Badge
                               variant="secondary"
-                              className={`text-xs max-w-full truncate block cursor-pointer hover:opacity-75 transition-opacity ${getRoleColor(line.role_name, roleIndex)}`}
+                              className={`text-xs w-full truncate block cursor-pointer hover:opacity-75 transition-opacity ${getRoleColor(line.role_name, roleIndex)}`}
                               onClick={() => setFilterRole(filterRole === line.role_name ? "__all__" : line.role_name)}
-                              title={filterRole === line.role_name ? "בטל סינון" : `סנן לפי ${line.role_name}`}
                             >
                               {line.role_name}
                             </Badge>
@@ -1154,14 +1155,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    <TableCell className="text-sm text-right">
+                    {/* Actor cell */}
+                    <TableCell className="px-2 overflow-hidden">
                       {line.actor_name ? (
-                        <span className="font-medium">{line.actor_name}</span>
+                        <span className="text-xs font-medium truncate block">{line.actor_name}</span>
                       ) : (
-                        <span className="text-muted-foreground text-xs italic">{"לא שובץ"}</span>
+                        <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    {/* Status cell */}
+                    <TableCell className="px-1 overflow-hidden">
                       <Select
                         value={line.rec_status ?? "__pending__"}
                         onValueChange={(v) =>
@@ -1172,7 +1175,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         }
                       >
                         <SelectTrigger
-                          className={`h-7 w-28 text-xs border-0 shadow-none px-2 ${
+                          className={`h-7 w-full text-xs border-0 shadow-none px-1 ${
                             line.rec_status
                               ? REC_STATUS_CONFIG[line.rec_status].className
                               : "text-muted-foreground"
@@ -1193,10 +1196,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell>
+                    {/* Translation cell */}
+                    <TableCell className="px-2 overflow-hidden">
                       <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground whitespace-pre-wrap" dir="ltr">
+                    {/* Source text — truncate, full text in title */}
+                    <TableCell
+                      className="text-xs text-muted-foreground px-2 overflow-hidden truncate"
+                      dir="ltr"
+                      title={line.source_text ?? ""}
+                    >
                       {line.source_text ?? ""}
                     </TableCell>
                   </TableRow>
