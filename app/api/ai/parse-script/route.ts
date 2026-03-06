@@ -1,5 +1,4 @@
-"use server"
-// IMPORTANT: Server-side only — never import from client components.
+// Route Handler — server-side by default (no "use server" needed).
 // Uses Vercel AI Gateway (zero config) via ai package.
 
 import { ToolLoopAgent, tool, stepCountIs } from "ai"
