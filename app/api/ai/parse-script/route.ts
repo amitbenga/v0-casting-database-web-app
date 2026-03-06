@@ -4,7 +4,7 @@
 import { ToolLoopAgent, tool, stepCountIs } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { AI_PARSE_MODEL } from "@/lib/ai-config"
+import { AI_PARSE_MODEL, AI_MODELS, type AIModelId } from "@/lib/ai-config"
 
 export const maxDuration = 120 // seconds — agent with multiple tool calls needs headroom
 
@@ -50,8 +50,14 @@ function truncateAtLineBreak(text: string, maxLen: number): string {
 // ─────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
-    const { importId } = await req.json()
+    const { importId, model: requestedModel } = await req.json()
     if (!importId) return Response.json({ error: "importId required" }, { status: 400 })
+
+    // Use requested model if valid, otherwise fall back to default
+    const validModelIds = AI_MODELS.map((m) => m.id)
+    const selectedModel: AIModelId = validModelIds.includes(requestedModel)
+      ? requestedModel
+      : AI_PARSE_MODEL
 
     const supabase = await createClient()
 
@@ -98,7 +104,7 @@ export async function POST(req: Request) {
 
     // 4. Build agent
     const agent = new ToolLoopAgent({
-      model: AI_PARSE_MODEL,
+      model: selectedModel,
 
       instructions: `You are an expert script parser for a Hebrew dubbing studio casting database.
 
@@ -222,7 +228,7 @@ Workflow:
       .update({
         status: "draft_ready",
         draft_json: draftJson,
-        model_used: AI_PARSE_MODEL,
+        model_used: selectedModel,
         tokens_used: tokensUsed,
       })
       .eq("id", importId)

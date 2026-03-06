@@ -2,7 +2,7 @@
 
 import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
-import { AI_TRANSLATE_MODEL } from "@/lib/ai-config"
+import { AI_TRANSLATE_MODEL, AI_MODELS, type AIModelId } from "@/lib/ai-config"
 
 interface TranslateResult {
   success: boolean
@@ -17,7 +17,7 @@ interface TranslateResult {
  */
 export async function translateScriptLines(
   projectId: string,
-  options: { lineIds?: string[]; force?: boolean } = {}
+  options: { lineIds?: string[]; force?: boolean; model?: string } = {}
 ): Promise<TranslateResult> {
   const supabase = await createClient()
 
@@ -60,7 +60,7 @@ export async function translateScriptLines(
         .join("\n")
 
       const { text } = await generateText({
-        model: AI_TRANSLATE_MODEL,
+        model: (AI_MODELS.some(m => m.id === options.model) ? options.model : AI_TRANSLATE_MODEL) as AIModelId,
         messages: [
           {
             role: "system",

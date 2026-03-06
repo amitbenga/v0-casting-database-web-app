@@ -1,29 +1,71 @@
 /**
  * AI model configuration — single source of truth.
  *
- * Set via environment variables in .env.local:
- *   AI_PARSE_MODEL=google/gemini-3-flash
- *   AI_TRANSLATE_MODEL=alibaba/qwen3.5-flash
- *
  * Vercel AI Gateway model string format: "provider/model-name"
- *
- * Recommended options (cheapest → most capable):
- * ┌──────────────────────────────────────┬────────────┬────────────┬──────────┐
- * │ Model                                │ Input $/1M │ Output $/1M│ Quality  │
- * ├──────────────────────────────────────┼────────────┼────────────┼──────────┤
- * │ alibaba/qwen3.5-flash               │ $0.10      │ ~$0.30     │ Good     │
- * │ google/gemini-3-flash                │ $0.50      │ $3.00      │ Great    │
- * │ anthropic/claude-haiku-4-5-20251001  │ $0.80      │ $4.00      │ Good     │
- * │ anthropic/claude-sonnet-4-20250514   │ $3.00      │ $15.00     │ Excellent│
- * │ alibaba/qwen3.5-plus                │ $1.20      │ ~$4.00     │ Great    │
- * │ anthropic/claude-opus-4-6            │ $15.00     │ $75.00     │ Best     │
- * └──────────────────────────────────────┴────────────┴────────────┴──────────┘
+ * Zero config — no API keys needed when deployed on Vercel.
  */
 
-/** Model used for script parsing (agentic tool-calling, needs good instruction following) */
-export const AI_PARSE_MODEL =
-  process.env.AI_PARSE_MODEL || "anthropic/claude-sonnet-4-20250514"
+/** Available models for the UI selector */
+export const AI_MODELS = [
+  {
+    id: "google/gemini-3-flash",
+    label: "Gemini 3 Flash",
+    provider: "Google",
+    cost: "$0.50 / $3.00",
+    quality: "Great",
+    description: "Fast, cheap, great quality",
+  },
+  {
+    id: "alibaba/qwen3.5-flash",
+    label: "Qwen 3.5 Flash",
+    provider: "Alibaba",
+    cost: "$0.10 / $0.30",
+    quality: "Good",
+    description: "Cheapest option",
+  },
+  {
+    id: "openai/gpt-5.2",
+    label: "GPT 5.2",
+    provider: "OpenAI",
+    cost: "$2.00 / $8.00",
+    quality: "Excellent",
+    description: "OpenAI flagship",
+  },
+  {
+    id: "anthropic/claude-sonnet-4-20250514",
+    label: "Claude Sonnet 4",
+    provider: "Anthropic",
+    cost: "$3.00 / $15.00",
+    quality: "Excellent",
+    description: "Best instruction following",
+  },
+  {
+    id: "alibaba/qwen3.5-plus",
+    label: "Qwen 3.5 Plus",
+    provider: "Alibaba",
+    cost: "$1.20 / $4.00",
+    quality: "Great",
+    description: "Strong + affordable",
+  },
+  {
+    id: "anthropic/claude-haiku-4-5-20251001",
+    label: "Claude Haiku 4.5",
+    provider: "Anthropic",
+    cost: "$0.80 / $4.00",
+    quality: "Good",
+    description: "Fast Anthropic option",
+  },
+] as const
 
-/** Model used for EN→HE translation (needs good multilingual + natural Hebrew) */
-export const AI_TRANSLATE_MODEL =
-  process.env.AI_TRANSLATE_MODEL || "anthropic/claude-sonnet-4-20250514"
+export type AIModelId = (typeof AI_MODELS)[number]["id"]
+
+/** Default model (env override or Sonnet 4) */
+export const DEFAULT_PARSE_MODEL: AIModelId =
+  (process.env.AI_PARSE_MODEL as AIModelId) || "anthropic/claude-sonnet-4-20250514"
+
+export const DEFAULT_TRANSLATE_MODEL: AIModelId =
+  (process.env.AI_TRANSLATE_MODEL as AIModelId) || "anthropic/claude-sonnet-4-20250514"
+
+/** Server-side aliases (backwards compat) */
+export const AI_PARSE_MODEL = DEFAULT_PARSE_MODEL
+export const AI_TRANSLATE_MODEL = DEFAULT_TRANSLATE_MODEL
