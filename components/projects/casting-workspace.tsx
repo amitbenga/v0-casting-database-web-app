@@ -53,6 +53,7 @@ import {
   updateCastingStatus,
   deleteRole,
 } from "@/lib/actions/casting-actions"
+import { syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
 import type { ProjectRoleWithCasting, RoleConflict, CastingStatus } from "@/lib/types"
 import { CASTING_STATUS_LIST, CASTING_STATUS_COLORS } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
@@ -352,10 +353,14 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
     }
   }, [projectId])
 
-  // Refresh after mutations — silent (no loading spinner), notifies parent via stable ref
+  // Refresh after mutations — silent (no loading spinner), notifies parent via stable ref.
+  // Also syncs actor_id on script_lines so the workspace tab shows the correct actor name.
   const refreshRoles = useCallback(async () => {
     try {
-      const response = await getProjectRolesWithCasting(projectId)
+      const [response] = await Promise.all([
+        getProjectRolesWithCasting(projectId),
+        syncActorsToScriptLines(projectId),
+      ])
       setRoles(response.roles)
       setConflicts(response.conflicts)
       onCastingChangeRef.current?.()

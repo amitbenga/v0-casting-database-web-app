@@ -436,7 +436,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
         if (results.every((r) => r.sheets.length === 0)) {
-          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקבצים", variant: "destructive" })
+          toast({ title: "שגיאה", description: "לא נ��צאו גיליונות בקבצים", variant: "destructive" })
           return
         }
         setExcelResults(results)
@@ -837,10 +837,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap" dir="rtl">
         <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.pdf,.docx,.txt" multiple className="hidden" onChange={handleFileSelect} />
-        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
-          <Upload className="h-4 w-4" />
-          {"ייבא קובץ"}
-        </Button>
 
         {hasLines && (
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
@@ -1009,11 +1005,11 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
           <FileSpreadsheet className="h-12 w-12 text-muted-foreground" />
           <p className="text-lg font-medium">{"סביבת העבודה ריקה"}</p>
-          <p className="text-sm text-muted-foreground">{"ייבא קובץ תסריט (Excel, PDF, DOCX או TXT) כדי להתחיל"}</p>
-          <Button onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4 ml-2" />
-            {"ייבא קובץ"}
-          </Button>
+          <p className="text-sm text-muted-foreground">
+            {"כדי להתחיל, העלה תסריט בכרטיסיית "}
+            <span className="font-medium text-foreground">{"תסריטים"}</span>
+            {" — השורות יופיעו כאן אוטומטית"}
+          </p>
         </div>
       )}
 
