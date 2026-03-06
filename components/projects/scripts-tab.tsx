@@ -42,6 +42,8 @@ import { FileSpreadsheet } from "lucide-react"
 import { saveScriptLines, getScriptLines } from "@/lib/actions/script-line-actions"
 import type { ScriptLineInput } from "@/lib/types"
 import { createScriptImport, getScriptImports, applyScriptImport, type ScriptImport } from "@/lib/actions/ai-import-actions"
+import { AIModelSelector } from "@/components/ai-model-selector"
+import { DEFAULT_PARSE_MODEL, type AIModelId } from "@/lib/ai-config"
 import {
   Dialog,
   DialogContent,
@@ -99,6 +101,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [aiImports, setAiImports] = useState<ScriptImport[]>([])
   const [isAiParsing, setIsAiParsing] = useState(false)
   const [isApplyingImport, setIsApplyingImport] = useState<string | null>(null)
+  const [aiParseModel, setAiParseModel] = useState<AIModelId>(DEFAULT_PARSE_MODEL)
 
   const loadScripts = useCallback(async () => {
     try {
@@ -270,7 +273,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
       const response = await fetch("/api/ai/parse-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ importId }),
+        body: JSON.stringify({ importId, model: aiParseModel }),
       })
       const result = await response.json()
 
@@ -643,7 +646,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                 </>
               )}
             </Button>
-            <span className="text-xs text-muted-foreground">PDF, DOCX, TXT — Claude Opus</span>
+            <AIModelSelector value={aiParseModel} onChange={setAiParseModel} disabled={isAiParsing} />
           </div>
 
           {/* AI Imports List */}

@@ -42,6 +42,8 @@ import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
 import type { StructuredParseResult } from "@/lib/parser/structured-parser"
+import { AIModelSelector } from "@/components/ai-model-selector"
+import { DEFAULT_TRANSLATE_MODEL, type AIModelId } from "@/lib/ai-config"
 
 interface ScriptWorkspaceTabProps {
   projectId: string
@@ -287,6 +289,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [isImporting, setIsImporting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
+  const [aiTranslateModel, setAiTranslateModel] = useState<AIModelId>(DEFAULT_TRANSLATE_MODEL)
   const [excelResults, setExcelResults] = useState<ExcelParseResult[] | null>(null)
   const [structuredData, setStructuredData] = useState<StructuredParseResult[] | null>(null)
   const [showImportDialog, setShowImportDialog] = useState(false)
@@ -646,7 +649,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       setIsTranslating(true)
       try {
         const { translateScriptLines } = await import("@/lib/actions/translate-actions")
-        const result = await translateScriptLines(projectId)
+        const result = await translateScriptLines(projectId, { model: aiTranslateModel })
         if (!result.success) throw new Error(result.error)
 
         if (result.translated === 0) {
@@ -665,7 +668,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         setIsTranslating(false)
       }
     },
-    [projectId, toast]
+    [projectId, toast, aiTranslateModel]
   )
 
   // Inline translation update
@@ -854,10 +857,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         )}
 
         {hasLines && (
-          <Button variant="outline" size="sm" onClick={handleAutoTranslate} disabled={isTranslating} className="gap-1.5">
-            <Languages className="h-4 w-4" />
-            {isTranslating ? "מתרגם..." : "תרגם לעברית"}
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={handleAutoTranslate} disabled={isTranslating} className="gap-1.5">
+              <Languages className="h-4 w-4" />
+              {isTranslating ? "מתרגם..." : "תרגם לעברית"}
+            </Button>
+            <AIModelSelector value={aiTranslateModel} onChange={setAiTranslateModel} disabled={isTranslating} />
+          </>
         )}
 
         {pendingAiFile && (
