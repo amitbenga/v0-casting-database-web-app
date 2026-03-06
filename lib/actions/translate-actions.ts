@@ -89,12 +89,19 @@ export async function translateScriptLines(
       // Parse the response — extract translations by line index
       const translations = parseTranslationResponse(text, batch.length)
 
-      // Build updates for batch upsert (avoid N individual queries)
-      const updates: { id: string; translation: string }[] = []
+      // Build updates for batch upsert.
+      // Must include NOT NULL columns (project_id, role_name) because PostgreSQL
+      // evaluates INSERT constraints before checking for conflicts on upsert.
+      const updates: { id: string; project_id: string; role_name: string; translation: string }[] = []
       for (let j = 0; j < batch.length; j++) {
         const translation = translations[j]
         if (translation) {
-          updates.push({ id: batch[j].id, translation })
+          updates.push({
+            id: batch[j].id,
+            project_id: projectId,
+            role_name: batch[j].role_name,
+            translation,
+          })
         }
       }
 
