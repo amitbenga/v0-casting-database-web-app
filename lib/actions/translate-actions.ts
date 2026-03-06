@@ -88,21 +88,26 @@ export async function translateScriptLines(
       // Parse the response — extract translations by line index
       const translations = parseTranslationResponse(text, batch.length)
 
-      // Update each line in DB
+      // Build updates for batch upsert (avoid N individual queries)
+      const updates: { id: string; translation: string }[] = []
       for (let j = 0; j < batch.length; j++) {
         const translation = translations[j]
-        if (!translation) continue
-
-        const { error: updateError } = await supabase
-          .from("script_lines")
-          .update({ translation })
-          .eq("id", batch[j].id)
-
-        if (updateError) {
-          console.error(`Failed to update line ${batch[j].id}:`, updateError)
-          continue
+        if (translation) {
+          updates.push({ id: batch[j].id, translation })
         }
-        totalTranslated++
+      }
+
+      if (updates.length > 0) {
+        // Supabase upsert with onConflict lets us batch-update all lines at once
+        const { error: batchError } = await supabase
+          .from("script_lines")
+          .upsert(updates, { onConflict: "id", ignoreDuplicates: false })
+
+        if (batchError) {
+          console.error("Batch translation update failed:", batchError)
+        } else {
+          totalTranslated += updates.length
+        }
       }
     }
 
