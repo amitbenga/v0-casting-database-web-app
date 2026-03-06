@@ -194,14 +194,16 @@ Workflow:
     // 5. Run agent with the raw script text as the user message
     let tokensUsed = 0
     try {
-      const result = await agent.run([
-        {
-          role: "user",
-          content: `Parse this script:\n\n${scriptText}`,
-        },
-      ])
+      const result = await agent.generate({
+        messages: [
+          {
+            role: "user" as const,
+            content: `Parse this script:\n\n${scriptText}`,
+          },
+        ],
+      })
       // Extract token usage if available
-      tokensUsed = (result as { usage?: { totalTokens?: number } })?.usage?.totalTokens ?? 0
+      tokensUsed = result?.usage?.totalTokens ?? 0
     } catch (agentError) {
       // Agent failed — save failure status
       const errorMsg = agentError instanceof Error ? agentError.message : String(agentError)

@@ -139,7 +139,8 @@ export async function applyScriptImport(
         role_name: r.role_name,
         role_name_normalized: r.role_name_normalized,
         replicas_needed: r.replicas_count,
-        parent_role_id: null,
+        parent_role_id: undefined,
+        source: "script" as const,
       }))
 
       const roleResult = await applyParsedRoles(projectId, rolesForDB, [])
@@ -161,9 +162,9 @@ export async function applyScriptImport(
         notes: undefined,
       }))
 
-      const lineResult = await saveScriptLines(projectId, linesForDB, { replace: false })
+      const lineResult = await saveScriptLines(projectId, linesForDB, { replaceAll: false })
       if (!lineResult.success) throw new Error(lineResult.error)
-      linesCreated = lineResult.count ?? 0
+      linesCreated = lineResult.linesCreated ?? 0
     }
 
     // Mark import as applied

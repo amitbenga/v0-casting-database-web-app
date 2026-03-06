@@ -247,8 +247,8 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     setIsAiParsing(true)
     try {
       // 1. Extract raw text client-side (reuse existing text extraction)
-      const { extractTextFromFile } = await import("@/lib/parser/text-extractor")
-      const rawText = await extractTextFromFile(file)
+      const { extractText } = await import("@/lib/parser/text-extractor")
+      const { text: rawText } = await extractText(file)
 
       if (!rawText || rawText.trim().length < 50) {
         toast({ title: "לא ניתן לחלץ טקסט מהקובץ", description: "נסה קובץ אחר או פורמט אחר", variant: "destructive" })
