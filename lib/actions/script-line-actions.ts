@@ -1,12 +1,76 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import type { ScriptLine, ScriptLineInput } from "@/lib/types"
 
 interface ActionResult {
   success: boolean
   error?: string
+}
+
+/**
+ * Internal helper to backfill role_id on script_lines.
+ * Called automatically after saveScriptLines inserts new lines.
+ */
+async function backfillScriptLinesRoleIdsInternal(
+  projectId: string,
+  supabase: SupabaseClient
+): Promise<number> {
+  // 1. Get all project_roles for this project
+  const { data: roles, error: rolesError } = await supabase
+    .from("project_roles")
+    .select("id, role_name")
+    .eq("project_id", projectId)
+
+  if (rolesError) throw rolesError
+
+  // Build map: normalized role_name → role_id
+  const roleMap = new Map<string, string>()
+  for (const role of roles ?? []) {
+    roleMap.set(role.role_name.trim().toLowerCase(), role.id)
+  }
+
+  // 2. Get all script_lines without role_id
+  const { data: lines, error: linesError } = await supabase
+    .from("script_lines")
+    .select("id, role_name")
+    .eq("project_id", projectId)
+    .is("role_id", null)
+
+  if (linesError) throw linesError
+  if (!lines || lines.length === 0) return 0
+
+  // 3. Group lines by role_id
+  const roleLineMap = new Map<string, string[]>()
+  for (const line of lines) {
+    if (!line.role_name) continue
+    const normalized = line.role_name.trim().toLowerCase()
+    const roleId = roleMap.get(normalized)
+    if (roleId) {
+      const existing = roleLineMap.get(roleId) ?? []
+      existing.push(line.id)
+      roleLineMap.set(roleId, existing)
+    }
+  }
+
+  // 4. Batch update
+  const BATCH = 500
+  let updated = 0
+  for (const [roleId, lineIds] of roleLineMap) {
+    for (let i = 0; i < lineIds.length; i += BATCH) {
+      const batch = lineIds.slice(i, i + BATCH)
+      const { error } = await supabase
+        .from("script_lines")
+        .update({ role_id: roleId })
+        .in("id", batch)
+      if (error) throw error
+      updated += batch.length
+    }
+  }
+
+  return updated
 }
 
 /**
@@ -62,6 +126,12 @@ export async function saveScriptLines(
       if (error) throw error
       total += batch.length
     }
+
+    // Auto-backfill role_id from project_roles so progress tracking works
+    // Fire-and-forget — don't await, errors don't fail the import
+    backfillScriptLinesRoleIdsInternal(projectId, supabase).catch((e) =>
+      console.error("backfillScriptLinesRoleIds failed:", e)
+    )
 
     revalidatePath(`/projects/${projectId}`)
     return { success: true, linesCreated: total }
@@ -303,6 +373,24 @@ export async function syncActorsToScriptLines(
   } catch (err) {
     console.error("syncActorsToScriptLines error:", err)
     return { success: false, synced: 0, cleared: 0, error: String(err) }
+  }
+}
+
+/**
+ * Backfill role_id on script_lines from project_roles.
+ * Matches by normalized role_name (trimmed, lowercase).
+ * Call this after creating roles + importing script lines.
+ */
+export async function backfillScriptLinesRoleIds(
+  projectId: string
+): Promise<{ success: boolean; updated: number; error?: string }> {
+  const supabase = await createClient()
+  try {
+    const updated = await backfillScriptLinesRoleIdsInternal(projectId, supabase)
+    return { success: true, updated }
+  } catch (err) {
+    console.error("backfillScriptLinesRoleIds error:", err)
+    return { success: false, updated: 0, error: String(err) }
   }
 }
 

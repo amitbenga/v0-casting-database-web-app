@@ -30,10 +30,16 @@ SELECT
   COUNT(DISTINCT rc.id)                                          AS castings_count,
   COUNT(DISTINCT rc.id) FILTER (WHERE rc.status = 'מלוהק')       AS casted_count,
 
-  -- Script stats
+  -- Script stats (counts directly from script_lines, independent of project_scripts)
   COUNT(DISTINCT ps.id)                                          AS scripts_count,
-  COALESCE(SUM(sl_stats.total_lines), 0)::int                    AS total_lines,
-  COALESCE(SUM(sl_stats.recorded_lines), 0)::int                 AS recorded_lines
+  COALESCE((
+    SELECT COUNT(*) FROM script_lines sl2 WHERE sl2.project_id = p.id
+  ), 0)::int                                                     AS total_lines,
+  COALESCE((
+    SELECT COUNT(*) FROM script_lines sl3 WHERE sl3.project_id = p.id AND sl3.rec_status = 'הוקלט'
+  ), 0)::int                                                     AS recorded_lines,
+  -- Count actors with status "מלוהק" (actual casts, not just linked)
+  COUNT(DISTINCT rc.actor_id) FILTER (WHERE rc.status = 'מלוהק') AS actors_cast
 
 FROM casting_projects p
 LEFT JOIN project_roles pr
@@ -42,14 +48,6 @@ LEFT JOIN role_castings rc
   ON rc.role_id = pr.id
 LEFT JOIN project_scripts ps
   ON ps.project_id = p.id
-LEFT JOIN LATERAL (
-  SELECT
-    COUNT(*)                                                   AS total_lines,
-    COUNT(*) FILTER (WHERE sl.rec_status = 'הוקלט')           AS recorded_lines
-  FROM script_lines sl
-  WHERE sl.project_id = p.id
-    AND sl.script_id   = ps.id::text
-) sl_stats ON true
 GROUP BY
   p.id, p.name, p.status, p.director, p.casting_director,
   p.project_date, p.notes, p.created_at, p.updated_at;
