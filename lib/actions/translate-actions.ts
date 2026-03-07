@@ -134,6 +134,7 @@ export async function translateScriptLines(
 /**
  * Parse AI translation response into an array indexed by line number.
  * Expected format: "[0] translation text\n[1] translation text\n..."
+ * Post-processes to remove character name if present (e.g., "JOHN: Hello" → "Hello")
  */
 function parseTranslationResponse(text: string, expectedCount: number): (string | null)[] {
   const result: (string | null)[] = new Array(expectedCount).fill(null)
@@ -143,7 +144,15 @@ function parseTranslationResponse(text: string, expectedCount: number): (string 
     const match = line.match(/^\[(\d+)\]\s*(.+)$/)
     if (match) {
       const idx = parseInt(match[1])
-      const translation = match[2].trim()
+      let translation = match[2].trim()
+      
+      // Post-process: remove character name if present
+      // Pattern: "CHAR_NAME: text" or "דמות: טקסט"
+      const charMatch = translation.match(/^[^:]+:\s*(.+)$/)
+      if (charMatch) {
+        translation = charMatch[1]
+      }
+      
       if (idx >= 0 && idx < expectedCount && translation) {
         result[idx] = translation
       }

@@ -434,7 +434,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
         if (results.every((r) => r.sheets.length === 0)) {
-          toast({ title: "שגיאה", description: "לא נ����צאו גיליונות בקבצים", variant: "destructive" })
+          toast({ title: "שגיאה", description: "לא נ����צאו ��יליונות בקבצים", variant: "destructive" })
           return
         }
         setExcelResults(results)
@@ -922,22 +922,34 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         const actors = Array.from(actorMap.values()).sort((a, b) => b.total - a.total)
         if (actors.length === 0) return null
         return (
-          <div className="rounded-lg border bg-muted/30 p-3 space-y-2" dir="rtl">
-            <p className="text-xs font-medium text-muted-foreground">התקדמות הקלטה לפי שחקן</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="rounded-lg border bg-gradient-to-br from-muted/20 to-muted/40 p-4 space-y-3" dir="rtl">
+            <p className="text-sm font-semibold text-foreground">התקדמות הקלטה לפי שחקן</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {actors.map((a) => {
                 const pct = a.total > 0 ? Math.round((a.recorded / a.total) * 100) : 0
+                const isComplete = pct === 100
                 return (
-                  <div key={a.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium truncate max-w-[140px]">{a.name}</span>
-                      <span className="text-muted-foreground flex-shrink-0 mr-2">
-                        {a.recorded}/{a.total} ({pct}%)
+                  <div key={a.name} className="space-y-1.5 p-2 rounded bg-background/50 border border-muted/40">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm truncate max-w-[120px]">{a.name}</span>
+                      <span className={`text-xs font-bold flex-shrink-0 px-2 py-0.5 rounded ${
+                        isComplete 
+                          ? "bg-green-500/20 text-green-700 dark:text-green-300"
+                          : "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                      }`}>
+                        {pct}%
                       </span>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{a.recorded}/{a.total}</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-green-500 transition-all duration-300"
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          isComplete 
+                            ? "bg-green-500"
+                            : "bg-gradient-to-r from-amber-400 to-amber-500"
+                        }`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>

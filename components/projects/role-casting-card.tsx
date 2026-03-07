@@ -229,7 +229,7 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-sm font-medium">{casting.actor?.full_name || "שחקן"}</span>
-                {casting.actor?.voice_sample_url && (
+                {casting.actor?.voice_sample_url ? (
                   <Button
                     size="icon"
                     variant="ghost"
@@ -241,6 +241,8 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
                   >
                     <Play className="h-3 w-3" />
                   </Button>
+                ) : (
+                  <div className="text-xs text-muted-foreground font-medium px-2">{"—"}</div>
                 )}
               </div>
 

@@ -46,13 +46,26 @@ export function ProjectRecordingProgressSummary({ projectId }: ProjectRecordingP
 
   return (
     <Card className="p-4 space-y-2 text-right" dir="rtl">
-      <p className="text-base font-semibold">התקדמות הקלטה: {percentLabel}%</p>
-      <p className="text-sm text-muted-foreground">
-        מוקלט: {data.totals.recorded} / {data.totals.total}
-      </p>
-      {data.totals.unmatched > 0 && (
-        <p className="text-sm text-amber-700 dark:text-amber-400">לא משויך לתפקיד: {data.totals.unmatched}</p>
-      )}
+      <div className="flex items-baseline justify-between">
+        <p className="text-sm font-medium text-muted-foreground">התקדמות הקלטה</p>
+        <p className="text-2xl font-bold text-primary">{percentLabel}%</p>
+      </div>
+      <div className="space-y-1 text-sm">
+        <p>
+          <span className="text-muted-foreground">הוקלט:</span>{" "}
+          <span className="font-medium text-foreground">
+            {data.totals.recorded} / {data.totals.total}
+          </span>
+        </p>
+        {data.totals.total === 0 && (
+          <p className="text-muted-foreground italic">{"אין שורות בתסריט — העלה תסריט קודם"}</p>
+        )}
+        {data.totals.unmatched > 0 && (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            <span className="text-muted-foreground">לא משויך:</span> {data.totals.unmatched}
+          </p>
+        )}
+      </div>
     </Card>
   )
 }
