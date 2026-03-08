@@ -433,13 +433,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     e.target.value = ""
     if (allFiles.length === 0) return
 
-    // ���─ Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
+    // ── Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
     const excelFiles = allFiles.filter((f) => /\.(xlsx|xls)$/i.test(f.name))
     if (excelFiles.length > 0) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
         if (results.every((r) => r.sheets.length === 0)) {
-          toast({ title: "שגיאה", description: "לא נ����צאו ����יליונות בקבצים", variant: "destructive" })
+          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקבצים", variant: "destructive" })
           return
         }
         setExcelResults(results)
@@ -825,7 +825,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     } catch (err) {
       toast({
         title: "שגיאה בפרסור AI",
-        description: err instanceof Error ? err.message : "שגיאה לא ידוע��",
+        description: err instanceof Error ? err.message : "שגיאה לא ידועה",
         variant: "destructive",
       })
     } finally {
