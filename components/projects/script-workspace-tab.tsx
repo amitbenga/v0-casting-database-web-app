@@ -135,13 +135,6 @@ function TranslationCell({
       {value || <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>}
     </div>
   )
-  }
-
-  return (
-    <div onClick={startEdit} className="cursor-pointer min-h-[40px] p-1 text-sm hover:bg-muted/50 rounded transition-colors whitespace-pre-wrap" dir="rtl">
-      {value || <span className="text-muted-foreground italic">{"לחץ לעריכה..."}</span>}
-    </div>
-  )
 }
 
 // Searchable role combobox (Agent 5)
