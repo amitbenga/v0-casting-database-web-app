@@ -242,15 +242,13 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
                     <Play className="h-3 w-3" />
                   </Button>
                 ) : (
-                  /* Play icon with red diagonal slash — no audio file */
-                  <div className="relative h-6 w-6 flex items-center justify-center text-muted-foreground/50" title="אין קובץ הקלטה">
-                    <Play className="h-3 w-3" />
-                    <svg
-                      className="absolute inset-0 w-full h-full"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <line x1="5" y1="4" x2="19" y2="20" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+                  /* Play icon with red diagonal slash — no audio file. Single SVG renders both. */
+                  <div title="אין קובץ הקלטה" className="h-6 w-6 flex items-center justify-center">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                      {/* Play triangle */}
+                      <path d="M3 2.5L11 7L3 11.5V2.5Z" fill="currentColor" className="text-muted-foreground/40" />
+                      {/* Red slash */}
+                      <line x1="1" y1="1" x2="13" y2="13" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
                     </svg>
                   </div>
                 )}
