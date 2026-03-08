@@ -81,7 +81,7 @@ const REC_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "לא הוקלט", label: "לא הוקלט" },
 ]
 
-// Inline translation cell
+// Inline translation cell — single-line display, h-8 to match fixed row height
 function TranslationCell({
   lineId,
   value,
@@ -90,15 +90,13 @@ function TranslationCell({
   lineId: string
   value: string | undefined
   onChange: (lineId: string, newValue: string) => void
-}) {
+}): React.ReactElement {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? "")
-  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   function startEdit() {
     setDraft(value ?? "")
     setEditing(true)
-    setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function commit() {
@@ -124,7 +122,7 @@ function TranslationCell({
       />
     )
   }
-  
+
   return (
     <div
       onClick={startEdit}
@@ -132,7 +130,10 @@ function TranslationCell({
       dir="rtl"
       title={value ?? ""}
     >
-      {value || <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>}
+      {value
+        ? <span className="truncate">{value}</span>
+        : <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>
+      }
     </div>
   )
 }
@@ -824,7 +825,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     } catch (err) {
       toast({
         title: "שגיאה בפרסור AI",
-        description: err instanceof Error ? err.message : "שגיאה לא ידועה",
+        description: err instanceof Error ? err.message : "שגיאה לא ידוע��",
         variant: "destructive",
       })
     } finally {
