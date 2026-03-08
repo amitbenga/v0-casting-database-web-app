@@ -58,12 +58,7 @@ export function ProjectRecordingProgressSummary({ projectId }: ProjectRecordingP
           </span>
         </p>
         {data.totals.total === 0 && (
-          <p className="text-muted-foreground italic">{"אין שורות בתסריט — העלה תסריט קודם"}</p>
-        )}
-        {data.totals.unmatched > 0 && (
-          <p className="text-sm text-amber-700 dark:text-amber-400">
-            <span className="text-muted-foreground">לא משויך:</span> {data.totals.unmatched}
-          </p>
+          <p className="text-muted-foreground italic">{"העלה תסריט כדי לעקוב אחר התקדמות"}</p>
         )}
       </div>
     </Card>

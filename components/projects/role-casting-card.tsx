@@ -242,7 +242,17 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
                     <Play className="h-3 w-3" />
                   </Button>
                 ) : (
-                  <div className="text-xs text-muted-foreground font-medium px-2">{"—"}</div>
+                  /* Play button with diagonal slash — indicates no audio file */
+                  <div className="relative h-6 w-6 flex items-center justify-center text-muted-foreground/40" title="אין קובץ הקלטה">
+                    <Play className="h-3 w-3" />
+                    <svg
+                      className="absolute inset-0 w-full h-full"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
                 )}
               </div>
 

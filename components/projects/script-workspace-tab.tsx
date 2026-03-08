@@ -34,7 +34,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles } from "lucide-react"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
 import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
@@ -111,23 +111,30 @@ function TranslationCell({
   if (editing) {
     return (
       <textarea
-        ref={inputRef}
+        autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault()
-            commit()
-          }
-          if (e.key === "Escape") {
-            setEditing(false)
-          }
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit() }
+          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
         }}
-        className="w-full min-h-[60px] p-1 text-sm border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        className="w-full h-8 p-1 text-sm border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
         dir="rtl"
       />
     )
+  }
+  
+  return (
+    <div
+      onClick={startEdit}
+      className="cursor-pointer h-8 flex items-center px-1 text-sm hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden"
+      dir="rtl"
+      title={value ?? ""}
+    >
+      {value || <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>}
+    </div>
+  )
   }
 
   return (
@@ -253,6 +260,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null)
+
+  // Actor progress panel
+  const [progressOpen, setProgressOpen] = useState(false)
+  const [selectedProgressActor, setSelectedProgressActor] = useState<string | null>(null)
 
   // Load initial page of lines
   useEffect(() => {
@@ -434,7 +445,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       try {
         const results = await Promise.all(excelFiles.map(parseExcelFile))
         if (results.every((r) => r.sheets.length === 0)) {
-          toast({ title: "שגיאה", description: "לא נ����צאו ��יליונות בקבצים", variant: "destructive" })
+          toast({ title: "שגיאה", description: "לא נ����צאו ����יליונות בקבצים", variant: "destructive" })
           return
         }
         setExcelResults(results)
@@ -907,56 +918,89 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         </div>
       )}
 
-      {/* Actor recording progress */}
+      {/* Actor recording progress — collapsible */}
       {!loading && hasLines && (() => {
-        // Build per-actor stats from loaded lines
         const actorMap = new Map<string, { name: string; total: number; recorded: number }>()
         for (const line of lines) {
           if (!line.actor_name) continue
-          const key = line.actor_name
-          if (!actorMap.has(key)) actorMap.set(key, { name: line.actor_name, total: 0, recorded: 0 })
-          const entry = actorMap.get(key)!
+          if (!actorMap.has(line.actor_name)) actorMap.set(line.actor_name, { name: line.actor_name, total: 0, recorded: 0 })
+          const entry = actorMap.get(line.actor_name)!
           entry.total++
           if (line.rec_status === "הוקלט") entry.recorded++
         }
         const actors = Array.from(actorMap.values()).sort((a, b) => b.total - a.total)
         if (actors.length === 0) return null
+
+        const activeActor = selectedProgressActor
+          ? actors.find((a) => a.name === selectedProgressActor) ?? actors[0]
+          : null
+
         return (
-          <div className="rounded-lg border bg-gradient-to-br from-muted/20 to-muted/40 p-4 space-y-3" dir="rtl">
-            <p className="text-sm font-semibold text-foreground">התקדמות הקלטה לפי שחקן</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {actors.map((a) => {
-                const pct = a.total > 0 ? Math.round((a.recorded / a.total) * 100) : 0
-                const isComplete = pct === 100
-                return (
-                  <div key={a.name} className="space-y-1.5 p-2 rounded bg-background/50 border border-muted/40">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm truncate max-w-[120px]">{a.name}</span>
-                      <span className={`text-xs font-bold flex-shrink-0 px-2 py-0.5 rounded ${
-                        isComplete 
-                          ? "bg-green-500/20 text-green-700 dark:text-green-300"
-                          : "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                      }`}>
-                        {pct}%
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{a.recorded}/{a.total}</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          isComplete 
-                            ? "bg-green-500"
-                            : "bg-gradient-to-r from-amber-400 to-amber-500"
+          <div className="rounded-lg border bg-muted/20" dir="rtl">
+            {/* Header — always visible */}
+            <button
+              type="button"
+              onClick={() => setProgressOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-muted/30 transition-colors rounded-lg"
+            >
+              <span>התקדמות הקלטה לפי שחקן</span>
+              {progressOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </button>
+
+            {/* Expandable body */}
+            {progressOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t">
+                {/* Actor selector pills */}
+                <div className="flex flex-wrap gap-1.5 pt-3">
+                  {actors.map((a) => {
+                    const pct = a.total > 0 ? Math.round((a.recorded / a.total) * 100) : 0
+                    const isSelected = selectedProgressActor === a.name
+                    return (
+                      <button
+                        key={a.name}
+                        type="button"
+                        onClick={() => setSelectedProgressActor(isSelected ? null : a.name)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background border-muted hover:bg-muted/50"
                         }`}
-                        style={{ width: `${pct}%` }}
-                      />
+                      >
+                        <span>{a.name}</span>
+                        <span className={`${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                          {pct}%
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Detail view for selected actor */}
+                {activeActor ? (() => {
+                  const pct = activeActor.total > 0 ? Math.round((activeActor.recorded / activeActor.total) * 100) : 0
+                  const isComplete = pct === 100
+                  return (
+                    <div className="space-y-2 p-3 rounded-lg bg-background border">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm">{activeActor.name}</span>
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${
+                          isComplete ? "bg-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                        }`}>{pct}%</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{activeActor.recorded} הוקלטו מתוך {activeActor.total} שורות</div>
+                      <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${isComplete ? "bg-green-500" : "bg-amber-400"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })() : (
+                  <p className="text-xs text-muted-foreground pb-1">בחר שחקן מעל כדי לראות פירוט</p>
+                )}
+              </div>
+            )}
           </div>
         )
       })()}
@@ -1069,7 +1113,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       {!loading && hasLines && (
         <div
           ref={tableContainerRef}
-          className="border rounded-lg overflow-auto max-h-[calc(100vh-280px)] w-full"
+          className="border rounded-lg overflow-auto max-h-[calc(100vh-180px)] w-full"
           dir="rtl"
         >
           <Table
