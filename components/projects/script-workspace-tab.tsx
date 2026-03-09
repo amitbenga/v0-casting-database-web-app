@@ -1175,12 +1175,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     }}
                     className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
-                    {/* # */}
-                    <TableCell className="text-right text-xs text-muted-foreground px-2 overflow-hidden whitespace-nowrap align-middle">
+                    {/* # — width must match colgroup col[0]=38 */}
+                    <TableCell style={{ width: 38, minWidth: 38, maxWidth: 38 }} className="text-right text-xs text-muted-foreground px-2 overflow-hidden whitespace-nowrap align-middle">
                       {line.line_number ?? ""}
                     </TableCell>
-                    {/* checkbox */}
-                    <TableCell className="text-center px-1 align-middle">
+                    {/* checkbox — width must match colgroup col[1]=34 */}
+                    <TableCell style={{ width: 34, minWidth: 34, maxWidth: 34 }} className="text-center px-1 align-middle">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
@@ -1189,12 +1189,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
                     </TableCell>
-                    {/* TC */}
-                    <TableCell className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap align-middle">
+                    {/* TC — width must match colgroup col[2]=90 */}
+                    <TableCell style={{ width: 90, minWidth: 90, maxWidth: 90 }} className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap align-middle">
                       {line.timecode ?? "\u2014"}
                     </TableCell>
-                    {/* Role — badge, single line, tooltip on overflow */}
-                    <TableCell className="px-2 overflow-hidden align-middle">
+                    {/* Role — width must match colgroup col[3]=140 */}
+                    <TableCell style={{ width: 140, minWidth: 140, maxWidth: 140 }} className="px-2 overflow-hidden align-middle">
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1210,16 +1210,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    {/* Actor — single line, truncate */}
-                    <TableCell className="px-2 overflow-hidden whitespace-nowrap align-middle">
+                    {/* Actor — width must match colgroup col[4]=120 */}
+                    <TableCell style={{ width: 120, minWidth: 120, maxWidth: 120 }} className="px-2 overflow-hidden whitespace-nowrap align-middle">
                       {line.actor_name ? (
                         <span className="text-xs font-medium truncate block">{line.actor_name}</span>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </TableCell>
-                    {/* Status */}
-                    <TableCell className="px-1 overflow-hidden align-middle">
+                    {/* Status — width must match colgroup col[5]=110 */}
+                    <TableCell style={{ width: 110, minWidth: 110, maxWidth: 110 }} className="px-1 overflow-hidden align-middle">
                       <Select
                         value={line.rec_status ?? "__pending__"}
                         onValueChange={(v) =>
@@ -1251,8 +1251,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    {/* Translation (Hebrew) — single line, truncated, tooltip shows full */}
-                    <TableCell className="px-2 overflow-hidden align-middle max-h-full">
+                    {/* Translation (Hebrew) — flex col, matches colgroup col[6] */}
+                    <TableCell style={{ width: "calc(50% - 266px)", minWidth: 220 }} className="px-2 overflow-hidden align-middle">
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1268,8 +1268,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    {/* Source text (English) — single line truncated, full text on hover tooltip */}
-                    <TableCell className="px-2 overflow-hidden align-middle" dir="ltr">
+                    {/* Source text (English) — flex col, matches colgroup col[7] */}
+                    <TableCell style={{ width: "calc(50% - 266px)", minWidth: 220 }} className="px-2 overflow-hidden align-middle" dir="ltr">
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
                           <TooltipTrigger asChild>

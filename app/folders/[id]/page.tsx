@@ -39,7 +39,7 @@ async function fetchFolderData(folderId: string) {
 export default function FolderDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const { toast } = useToast()
-  const { data, isLoading: loading, mutate } = useSWR(
+  const { data, isLoading: loading, error: swrError, mutate } = useSWR(
     swrKeys.folders.detail(params.id),
     () => fetchFolderData(params.id),
   )
@@ -47,7 +47,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
   // Guard: keepPreviousData can briefly show stale data from a different folder.
   const isStaleData = data?.folder && data.folder.id !== params.id
   const folder = isStaleData ? null : (data?.folder ?? null)
-  const actors = isStaleData ? [] : (data?.actors ?? [])
+  const actors = isStaleData ? [] : (data?.actors ?? []).filter(Boolean)
 
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddActorDialog, setShowAddActorDialog] = useState(false)
@@ -190,10 +190,18 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-xl">תיקייה לא נמצאה</p>
-          <Button asChild>
-            <Link href="/folders">חזרה לתיקיות</Link>
-          </Button>
+          <p className="text-xl">{swrError ? "שגיאה בטעינת התיקייה" : "תיקייה לא נמצאה"}</p>
+          {swrError && (
+            <p className="text-sm text-muted-foreground">{swrError.message || String(swrError)}</p>
+          )}
+          <div className="flex gap-2 justify-center">
+            {swrError && (
+              <Button variant="outline" onClick={() => mutate()}>נסה שוב</Button>
+            )}
+            <Button asChild>
+              <Link href="/folders">חזרה לתיקיות</Link>
+            </Button>
+          </div>
         </div>
       </div>
     )

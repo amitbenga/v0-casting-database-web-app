@@ -177,7 +177,7 @@ function FoldersPageContent() {
                 {/* Stats */}
                 <div className="flex items-center gap-2 text-xs md:text-sm pt-3 border-t">
                   <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">{folder.folder_actors.count} שחקנים</span>
+                  <span className="text-muted-foreground">{(folder.folder_actors as Array<{count: number}>)[0]?.count ?? 0} שחקנים</span>
                 </div>
 
                 <div className="text-xs text-muted-foreground">
