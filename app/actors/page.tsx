@@ -194,10 +194,20 @@ function ActorsDatabaseContent() {
   const selectedActorIdsSet = useMemo(() => new Set(selectedActors), [selectedActors])
 
   const handleToggleFavorite = useCallback(async (actorId: string) => {
-    if (!user?.id) return
+    if (!user?.id) {
+      toast({ title: "שגיאה", description: "יש להתחבר כדי להוסיף למועדפים", variant: "destructive" })
+      return
+    }
 
     const supabase = createClient()
     const isFavorited = favoriteIdsSet.has(actorId)
+
+    // Optimistic update
+    if (isFavorited) {
+      setFavorites((prev) => prev.filter((id) => id !== actorId))
+    } else {
+      setFavorites((prev) => [...prev, actorId])
+    }
 
     try {
       if (isFavorited) {
@@ -208,25 +218,32 @@ function ActorsDatabaseContent() {
           .eq("actor_id", actorId)
 
         if (error) {
-          console.error("[v0] Error removing from favorites:", error)
+          // Rollback
+          setFavorites((prev) => [...prev, actorId])
+          toast({ title: "שגיאה", description: "שגיאה בהסרה מהמועדפים", variant: "destructive" })
           return
         }
-
-        setFavorites((prev) => prev.filter((id) => id !== actorId))
       } else {
         const { error } = await supabase.from("favorites").insert({ user_id: user.id, actor_id: actorId })
 
         if (error) {
-          console.error("[v0] Error adding to favorites:", error)
+          // Rollback
+          setFavorites((prev) => prev.filter((id) => id !== actorId))
+          toast({ title: "שגיאה", description: "שגיאה בהוספה למועדפים", variant: "destructive" })
           return
         }
-
-        setFavorites((prev) => [...prev, actorId])
       }
     } catch (error) {
       console.error("[v0] Error toggling favorite:", error)
+      // Rollback on unexpected error
+      if (isFavorited) {
+        setFavorites((prev) => [...prev, actorId])
+      } else {
+        setFavorites((prev) => prev.filter((id) => id !== actorId))
+      }
+      toast({ title: "שגיאה", description: "שגיאה בעדכון מועדפים", variant: "destructive" })
     }
-  }, [user?.id, favoriteIdsSet])
+  }, [user?.id, favoriteIdsSet, toast])
 
   const handleToggleSelect = useCallback((actorId: string) => {
     setSelectedActors((prev) => (prev.includes(actorId) ? prev.filter((id) => id !== actorId) : [...prev, actorId]))

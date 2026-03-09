@@ -14,14 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -1110,48 +1102,41 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           className="border rounded-lg overflow-auto max-h-[calc(100vh-180px)] w-full"
           dir="rtl"
         >
-          <Table
-            className="w-full"
-            style={{ tableLayout: "fixed", minWidth: 1100, direction: "rtl" }}
-          >
-            {/*
-              Column order in DOM (RTL): #, checkbox, TC, role, actor, status, translation(heb), source(eng)
-              Fixed px cols stay fixed; translation + source split the remaining space equally.
-              Total fixed = 38+34+90+140+120+110 = 532px → remaining ~568px split 50/50 ≈ 284px each.
-            */}
-            <colgroup>
-              <col style={{ width: 38 }} />        {/* # */}
-              <col style={{ width: 34 }} />        {/* checkbox */}
-              <col style={{ width: 90 }} />        {/* TC */}
-              <col style={{ width: 140 }} />       {/* תפקיד */}
-              <col style={{ width: 120 }} />       {/* שחקן */}
-              <col style={{ width: 110 }} />       {/* סטטוס */}
-              <col style={{ width: "calc(50% - 266px)", minWidth: 220 }} /> {/* תרגום */}
-              <col style={{ width: "calc(50% - 266px)", minWidth: 220 }} /> {/* טקסט מקור */}
-            </colgroup>
-            <TableHeader className="sticky top-0 bg-background z-10 border-b">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-right text-xs px-2 w-full">#</TableHead>
-                <TableHead className="px-1 text-center">
-                  <input
-                    ref={selectAllCheckboxRef}
-                    type="checkbox"
-                    checked={allFilteredSelected}
-                    onChange={toggleAll}
-                    className="cursor-pointer accent-primary h-4 w-4"
-                    aria-label="בחר הכל"
-                  />
-                </TableHead>
-                <TableHead className="text-right text-xs px-2">TC</TableHead>
-                <TableHead className="text-right text-xs px-2">תפקיד</TableHead>
-                <TableHead className="text-right text-xs px-2">שחקן</TableHead>
-                <TableHead className="text-right text-xs px-2">סטטוס</TableHead>
-                <TableHead className="text-right text-xs px-2">תרגום</TableHead>
-                <TableHead className="text-right text-xs px-2" dir="ltr">טקסט מקור</TableHead>
-              </TableRow>
-            </TableHeader>
-            {/* Virtual body: position relative + explicit height so virtualizer can position rows */}
-            <TableBody
+          {/*
+            Grid-based virtual table — header + body share the same grid-template-columns
+            so columns always align even with absolutely-positioned virtual rows.
+            Fixed cols: 38+34+90+140+120+110 = 532px. Remaining space split 50/50 for translation + source.
+          */}
+          <div style={{ minWidth: 1100, direction: "rtl" }}>
+            {/* Header */}
+            <div
+              className="sticky top-0 bg-background z-10 border-b"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
+                minWidth: 1100,
+              }}
+            >
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">#</div>
+              <div className="px-1 text-center h-10 flex items-center justify-center">
+                <input
+                  ref={selectAllCheckboxRef}
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  onChange={toggleAll}
+                  className="cursor-pointer accent-primary h-4 w-4"
+                  aria-label="בחר הכל"
+                />
+              </div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">TC</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תפקיד</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">שחקן</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">סטטוס</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תרגום</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground" dir="ltr">טקסט מקור</div>
+            </div>
+            {/* Virtual body */}
+            <div
               ref={tableBodyRef}
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
@@ -1161,7 +1146,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const line = filteredLines[virtualRow.index]
                 return (
-                  <TableRow
+                  <div
                     key={line.id}
                     data-index={virtualRow.index}
                     style={{
@@ -1172,15 +1157,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       height: ROW_HEIGHT,
                       overflow: "hidden",
                       transform: `translateY(${virtualRow.start}px)`,
+                      display: "grid",
+                      gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
                     }}
                     className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
-                    {/* # — width must match colgroup col[0]=38 */}
-                    <TableCell style={{ width: 38, minWidth: 38, maxWidth: 38 }} className="text-right text-xs text-muted-foreground px-2 overflow-hidden whitespace-nowrap align-middle">
+                    {/* # */}
+                    <div className="text-right text-xs text-muted-foreground px-2 overflow-hidden whitespace-nowrap flex items-center">
                       {line.line_number ?? ""}
-                    </TableCell>
-                    {/* checkbox — width must match colgroup col[1]=34 */}
-                    <TableCell style={{ width: 34, minWidth: 34, maxWidth: 34 }} className="text-center px-1 align-middle">
+                    </div>
+                    {/* checkbox */}
+                    <div className="text-center px-1 flex items-center justify-center">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
@@ -1188,13 +1175,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
-                    </TableCell>
-                    {/* TC — width must match colgroup col[2]=90 */}
-                    <TableCell style={{ width: 90, minWidth: 90, maxWidth: 90 }} className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap align-middle">
+                    </div>
+                    {/* TC */}
+                    <div className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap flex items-center">
                       {line.timecode ?? "\u2014"}
-                    </TableCell>
-                    {/* Role — width must match colgroup col[3]=140 */}
-                    <TableCell style={{ width: 140, minWidth: 140, maxWidth: 140 }} className="px-2 overflow-hidden align-middle">
+                    </div>
+                    {/* Role */}
+                    <div className="px-2 overflow-hidden flex items-center">
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1209,17 +1196,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                           <TooltipContent side="bottom" dir="rtl">{line.role_name}</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                    </TableCell>
-                    {/* Actor — width must match colgroup col[4]=120 */}
-                    <TableCell style={{ width: 120, minWidth: 120, maxWidth: 120 }} className="px-2 overflow-hidden whitespace-nowrap align-middle">
+                    </div>
+                    {/* Actor */}
+                    <div className="px-2 overflow-hidden whitespace-nowrap flex items-center">
                       {line.actor_name ? (
                         <span className="text-xs font-medium truncate block">{line.actor_name}</span>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
-                    </TableCell>
-                    {/* Status — width must match colgroup col[5]=110 */}
-                    <TableCell style={{ width: 110, minWidth: 110, maxWidth: 110 }} className="px-1 overflow-hidden align-middle">
+                    </div>
+                    {/* Status */}
+                    <div className="px-1 overflow-hidden flex items-center">
                       <Select
                         value={line.rec_status ?? "__pending__"}
                         onValueChange={(v) =>
@@ -1250,13 +1237,13 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                           ))}
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                    {/* Translation (Hebrew) — flex col, matches colgroup col[6] */}
-                    <TableCell style={{ width: "calc(50% - 266px)", minWidth: 220 }} className="px-2 overflow-hidden align-middle">
+                    </div>
+                    {/* Translation (Hebrew) */}
+                    <div className="px-2 overflow-hidden flex items-center min-w-0">
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="truncate whitespace-nowrap">
+                            <div className="truncate whitespace-nowrap w-full">
                               <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
                             </div>
                           </TooltipTrigger>
@@ -1267,9 +1254,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                           )}
                         </Tooltip>
                       </TooltipProvider>
-                    </TableCell>
-                    {/* Source text (English) — flex col, matches colgroup col[7] */}
-                    <TableCell style={{ width: "calc(50% - 266px)", minWidth: 220 }} className="px-2 overflow-hidden align-middle" dir="ltr">
+                    </div>
+                    {/* Source text (English) */}
+                    <div className="px-2 overflow-hidden flex items-center min-w-0" dir="ltr">
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1284,12 +1271,12 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                           )}
                         </Tooltip>
                       </TooltipProvider>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                  </div>
                 )
               })}
-            </TableBody>
-          </Table>
+            </div>
+          </div>
           {filteredLines.length === 0 && (
             <p className="text-center py-8 text-muted-foreground">{"לא נמצאו שורות התואמות לסינון"}</p>
           )}
