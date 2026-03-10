@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { UserPlus, X, FileText, Play, Loader2, AlertTriangle } from "lucide-react"
 import { ActorSearchAutocomplete } from "./actor-search-autocomplete"
+import { useR2Url } from "@/hooks/use-r2-url"
 import {
   assignActorToRole,
   unassignActorFromRole,
@@ -39,6 +40,47 @@ import {
   CASTING_STATUS_COLORS,
 } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
+
+/** Resolves an R2 key (or raw URL/base64) to a display URL for an actor avatar. */
+function CastingAvatar({ imageKey, name }: { imageKey?: string | null; name?: string | null }) {
+  const resolvedUrl = useR2Url(imageKey ?? null)
+  return (
+    <Avatar className="h-7 w-7">
+      {resolvedUrl && <AvatarImage src={resolvedUrl} alt={name ?? ""} />}
+      <AvatarFallback className="text-xs">{(name || "ש").charAt(0)}</AvatarFallback>
+    </Avatar>
+  )
+}
+
+/** Resolves an R2 key (or raw URL/base64) to a playable URL, renders play or slash. */
+function CastingPlayButton({ storageKey }: { storageKey?: string | null }) {
+  const resolvedUrl = useR2Url(storageKey ?? null)
+
+  if (resolvedUrl) {
+    return (
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-6 w-6"
+        onClick={() => {
+          const audio = new Audio(resolvedUrl)
+          audio.play()
+        }}
+      >
+        <Play className="h-3 w-3" />
+      </Button>
+    )
+  }
+
+  return (
+    <div title="אין קובץ הקלטה" className="h-6 w-6 flex items-center justify-center">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <path d="M3 2.5L11 7L3 11.5V2.5Z" fill="currentColor" className="text-muted-foreground/40" />
+        <line x1="1" y1="1" x2="13" y2="13" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    </div>
+  )
+}
 
 interface RoleCastingCardProps {
   role: ProjectRoleWithCasting
@@ -222,36 +264,9 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
             <div key={casting.id} className="flex items-center gap-2">
               {/* Actor chip */}
               <div className="flex items-center gap-2 p-1.5 bg-muted rounded-lg">
-                <Avatar className="h-7 w-7">
-                  <AvatarImage src={casting.actor?.image_url} alt={casting.actor?.full_name} />
-                  <AvatarFallback className="text-xs">
-                    {(casting.actor?.full_name || "ש").charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
+                <CastingAvatar imageKey={casting.actor?.image_url} name={casting.actor?.full_name} />
                 <span className="text-sm font-medium">{casting.actor?.full_name || "שחקן"}</span>
-                {casting.actor?.voice_sample_url ? (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6"
-                    onClick={() => {
-                      const audio = new Audio(casting.actor!.voice_sample_url!)
-                      audio.play()
-                    }}
-                  >
-                    <Play className="h-3 w-3" />
-                  </Button>
-                ) : (
-                  /* Play icon with red diagonal slash — no audio file. Single SVG renders both. */
-                  <div title="אין קובץ הקלטה" className="h-6 w-6 flex items-center justify-center">
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                      {/* Play triangle */}
-                      <path d="M3 2.5L11 7L3 11.5V2.5Z" fill="currentColor" className="text-muted-foreground/40" />
-                      {/* Red slash */}
-                      <line x1="1" y1="1" x2="13" y2="13" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                )}
+                <CastingPlayButton storageKey={casting.actor?.voice_sample_url} />
               </div>
 
               {/* Status dropdown */}

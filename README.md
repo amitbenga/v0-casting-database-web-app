@@ -57,6 +57,62 @@ This application provides casting directors with a comprehensive platform to man
 
 ---
 
+### Media Storage Migration to Cloudflare R2 (March 2026)
+
+Previously all media (actor photos, voice samples, singing samples) was stored as raw Base64 data URLs directly inside PostgreSQL columns. This bloated every `SELECT` query by hundreds of kilobytes per actor and caused slow page loads.
+
+**New architecture — Cloudflare R2:**
+
+| Asset | DB field | New storage | Key pattern |
+|---|---|---|---|
+| Actor photo | `actors.image_url` | R2 private | `actors/{id}/images/{filename}` |
+| Voice sample | `actors.voice_sample_url` | R2 private | `actors/{id}/voice/{filename}` |
+| Singing sample | `actors.singing_sample_url` | R2 private | `actors/{id}/singing/{filename}` |
+| Submission photo | `actor_submissions.image_url` | R2 private | `actor-submissions/{id}/images/{filename}` |
+| Submission audio | `actor_submissions.voice_sample_url` | R2 private | `actor-submissions/{id}/audio/{filename}` |
+| Script file | `project_scripts.file_url` | R2 private | `projects/{id}/scripts/original/{filename}` |
+
+**New files:**
+
+- `lib/r2/client.ts` — singleton `S3Client` pointing at R2 (server-side only)
+- `lib/r2/keys.ts` — canonical key builders (`actorKeys`, `submissionKeys`, `scriptKeys`)
+- `lib/r2/utils.ts` — `sanitizeFilename`, `isR2Key`, `isBase64DataUrl`
+- `lib/r2/upload.ts` — server-side `uploadToR2`, `uploadBase64ToR2`, `getR2PresignedUrl`, `deleteFromR2`
+- `lib/r2/upload-client.ts` — client-safe `uploadFileToR2(file, key)` and `getR2Url(key)` via API proxy
+- `app/api/upload/route.ts` — authenticated POST proxy; receives `FormData { file, key }`, streams to R2
+- `app/api/r2-url/route.ts` — authenticated GET; returns a 1-hour presigned URL for any R2 key
+- `hooks/use-r2-url.ts` — React hook that resolves an R2 key to a presigned URL; passes http/data URLs through unchanged (backwards-compatible with any remaining Base64 rows)
+
+**Upload flow (new submissions/edits):**
+1. User picks a file in `actor-edit-form.tsx` or `app/intake/page.tsx`
+2. `uploadFileToR2(file, key)` posts `FormData` to `/api/upload`
+3. Server route authenticates via Supabase session, then calls `uploadToR2` which `PUT`s to R2
+4. The returned R2 object key (e.g. `actors/abc/images/headshot.jpg`) is saved to the DB column — never the file content
+
+**Read flow:**
+- `useR2Url(storageKeyOrUrl)` is called in `actor-card.tsx`, `role-casting-card.tsx`, and `actor-edit-form.tsx`
+- If the value is already an `http` or `data:` URL it is returned unchanged
+- If it looks like an R2 key it fetches `/api/r2-url?key=...` and returns the 1-hour presigned URL
+
+**Migrating existing Base64 data:**
+```bash
+# Dry run — shows what would be migrated without touching the DB
+node scripts/migrate-base64-to-r2.js --dry-run
+
+# Live run — uploads to R2 and updates DB columns
+node scripts/migrate-base64-to-r2.js
+```
+
+**Required environment variables:**
+```
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=<key>
+R2_SECRET_ACCESS_KEY=<secret>
+R2_BUCKET_NAME=casting-media
+```
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -150,7 +206,7 @@ v0-casting-database-web-app/
 ├── lib/                    # Core application logic
 │   ├── actions/            # Server actions (database mutations)
 │   ├── parser/             # Script parsing logic
-│   ├── supabase/           # Supabase client configuration
+│   ├─�� supabase/           # Supabase client configuration
 │   └── types.ts            # TypeScript type definitions
 ├── public/                 # Static assets
 ├── scripts/                # Utility scripts
