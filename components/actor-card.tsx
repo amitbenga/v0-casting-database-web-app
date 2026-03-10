@@ -84,14 +84,6 @@ export const ActorCard = memo(function ActorCard({
     }
   }
 
-  const handleBookmark = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (onAddToProject) {
-      onAddToProject(actor)
-    }
-  }
-
   const handleAddToProject = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
