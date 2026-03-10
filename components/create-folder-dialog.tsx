@@ -48,7 +48,7 @@ export function CreateFolderDialog({ open, onOpenChange, onFolderCreated }: Crea
         return
       }
 
-      console.log("[v0] Folder created:", result.folder)
+      toast({ title: "התיקייה נוצרה בהצלחה" })
       onOpenChange(false)
       setFormData({ name: "", description: "", color: "blue" })
 
