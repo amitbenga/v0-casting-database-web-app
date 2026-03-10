@@ -15,7 +15,7 @@ export function AppHeader() {
         <div className="flex items-center justify-between gap-4">
           {/* לוגו וכותרת */}
           <div className="flex items-center gap-3 md:gap-4">
-            <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
+            <Link href="/projects" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
               <Image src="/logo.png" alt="Soprodub" width={120} height={30} className="h-6 md:h-8 w-auto" priority />
             </Link>
           </div>
@@ -23,7 +23,7 @@ export function AppHeader() {
           {/* ניווט דסקטופ */}
           <nav className="hidden md:flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/" className="font-medium">
+              <Link href="/actors" className="font-medium">
                 שחקנים
               </Link>
             </Button>
@@ -64,7 +64,7 @@ export function AppHeader() {
               </SheetHeader>
               <nav className="flex flex-col gap-2 mt-6">
                 <Button variant="ghost" className="justify-start" asChild>
-                  <Link href="/">שחקנים</Link>
+                  <Link href="/actors">שחקנים</Link>
                 </Button>
                 <Button variant="ghost" className="justify-start" asChild>
                   <Link href="/projects">

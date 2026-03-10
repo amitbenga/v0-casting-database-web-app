@@ -195,7 +195,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
       if (result.parseResult.characters.length > 0) {
         if (!result.structuredData?.length) {
           toast({
-            title: "הפרסור הושלם",
+            title: "העיבוד הושלם",
             description: `זוהו ${result.parseResult.characters.length} תפקידים מתוך ${result.files.filter(f => f.status === "success").length} קבצים`,
           })
         }
@@ -210,7 +210,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     } catch (error) {
       console.error("Parse error:", error)
       toast({
-        title: "שגיאה בפרסור",
+        title: "שגיאה בעיבוד",
         description: error instanceof Error ? error.message : "שגיאה לא ידועה",
         variant: "destructive",
       })
@@ -403,7 +403,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             העלאת תסריטים
           </CardTitle>
           <CardDescription>
-            העלה קבצי תסריט לפרסור אוטומטי. ניתן להעלות מספר קבצים יחד כתסריט אחד.
+            העלה קבצי תסריט לעיבוד אוטומטי. ניתן להעלות מספר קבצים יחד כתסריט אחד.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -480,7 +480,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           {pendingFiles.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">קבצים לפרסור ({pendingFiles.length})</h4>
+                <h4 className="text-sm font-medium">קבצים לעיבוד ({pendingFiles.length})</h4>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -543,7 +543,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                   {isParsing ? (
                     <>
                       <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                      מפרסר...
+                      מעבד...
                     </>
                   ) : (
                     <>
@@ -573,7 +573,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                 <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-medium text-green-800 dark:text-green-200">
-                    הפרסור הושלם בהצלחה
+                    העיבוד הושלם בהצלחה
                   </p>
                   <div className="flex items-center gap-4 mt-2 text-sm text-green-700 dark:text-green-300">
                     <span className="flex items-center gap-1">
@@ -610,10 +610,10 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-violet-500" />
-            פרסור עם AI
+            עיבוד עם AI
           </CardTitle>
           <CardDescription>
-            כשהפרסר הרגיל לא מצליח — שלח את הקובץ לסוכן AI שיזהה תפקידים ושורות ידנית.
+            כשהעיבוד הרגיל לא מצליח — שלח את הקובץ לסוכן AI שיזהה תפקידים ושורות.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

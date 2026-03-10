@@ -4,6 +4,7 @@ import { Rubik } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { SWRProvider } from "@/components/swr-provider"
+import { Toaster } from "@/components/ui/toaster"
 
 const rubik = Rubik({ subsets: ["hebrew", "latin"] })
 
@@ -42,6 +43,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
           </AuthProvider>
+          <Toaster />
         </SWRProvider>
       </body>
     </html>

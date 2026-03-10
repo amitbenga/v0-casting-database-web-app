@@ -298,7 +298,7 @@ export interface Folder {
   color?: string
   description?: string
   created_at: string
-  updated_at: string
+  updated_at?: string
 }
 
 // Alias for backwards compatibility

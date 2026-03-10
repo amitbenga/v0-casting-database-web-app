@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useEffect, memo } from "react"
 import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User, Download } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -80,14 +81,6 @@ export const ActorCard = memo(function ActorCard({
         setIsPlaying(false)
       })
       setIsPlaying(true)
-    }
-  }
-
-  const handleBookmark = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (onAddToProject) {
-      onAddToProject(actor)
     }
   }
 
@@ -233,19 +226,44 @@ export const ActorCard = memo(function ActorCard({
           >
             <Heart className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isFavorited ? "fill-red-500 text-red-500" : ""}`} />
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200"
-            onClick={handlePlayAudio}
-            disabled={!actor.voice_sample_url}
-          >
-            {isPlaying ? (
-              <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            ) : (
-              <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            )}
-          </Button>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200 relative"
+                  onClick={handlePlayAudio}
+                  disabled={!actor.voice_sample_url}
+                >
+                  {isPlaying ? (
+                    <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  ) : (
+                    <span className="relative inline-flex items-center justify-center">
+                      <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                      {!actor.voice_sample_url && (
+                        <svg
+                          className="absolute inset-0 w-full h-full text-destructive/80 pointer-events-none"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        >
+                          <line x1="2" y1="2" x2="14" y2="14" />
+                        </svg>
+                      )}
+                    </span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {!actor.voice_sample_url && (
+                <TooltipContent side="top">
+                  <p>אין קובץ קול</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <Button
             size="icon"
             variant="ghost"

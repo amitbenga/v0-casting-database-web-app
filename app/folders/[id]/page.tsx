@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useRef } from "react"
 import useSWR from "swr"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { ArrowLeft, Plus, Search, MoreVertical, Folder, Trash2, Play, Pause, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -36,18 +36,20 @@ async function fetchFolderData(folderId: string) {
   }
 }
 
-export default function FolderDetailPage({ params }: { params: { id: string } }) {
+export default function FolderDetailPage() {
   const router = useRouter()
+  const routeParams = useParams()
+  const folderId = typeof routeParams?.id === "string" ? routeParams.id : ""
   const { toast } = useToast()
-  const { data, isLoading: loading, mutate } = useSWR(
-    swrKeys.folders.detail(params.id),
-    () => fetchFolderData(params.id),
+  const { data, isLoading: loading, error: swrError, mutate } = useSWR(
+    folderId ? swrKeys.folders.detail(folderId) : null,
+    () => fetchFolderData(folderId),
   )
 
   // Guard: keepPreviousData can briefly show stale data from a different folder.
-  const isStaleData = data?.folder && data.folder.id !== params.id
+  const isStaleData = data?.folder && data.folder.id !== folderId
   const folder = isStaleData ? null : (data?.folder ?? null)
-  const actors = isStaleData ? [] : (data?.actors ?? [])
+  const actors = isStaleData ? [] : (data?.actors ?? []).filter(Boolean)
 
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddActorDialog, setShowAddActorDialog] = useState(false)
@@ -69,7 +71,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
 
     try {
       const supabase = createBrowserClient()
-      const { error } = await supabase.from("folder_actors").delete().eq("folder_id", params.id).eq("actor_id", actorId)
+      const { error } = await supabase.from("folder_actors").delete().eq("folder_id", folderId).eq("actor_id", actorId)
 
       if (error) {
         // Rollback on failure
@@ -89,10 +91,10 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       const supabase = createBrowserClient()
 
       // מחיקת כל השחקנים מהתיקייה תחילה
-      await supabase.from("folder_actors").delete().eq("folder_id", params.id)
+      await supabase.from("folder_actors").delete().eq("folder_id", folderId)
 
       // מחיקת התיקייה
-      const { error } = await supabase.from("folders").delete().eq("id", params.id)
+      const { error } = await supabase.from("folders").delete().eq("id", folderId)
 
       if (error) throw error
 
@@ -190,10 +192,18 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-xl">תיקייה לא נמצאה</p>
-          <Button asChild>
-            <Link href="/folders">חזרה לתיקיות</Link>
-          </Button>
+          <p className="text-xl">{swrError ? "שגיאה בטעינת התיקייה" : "תיקייה לא נמצאה"}</p>
+          {swrError && (
+            <p className="text-sm text-muted-foreground">{swrError.message || String(swrError)}</p>
+          )}
+          <div className="flex gap-2 justify-center">
+            {swrError && (
+              <Button variant="outline" onClick={() => mutate()}>נסה שוב</Button>
+            )}
+            <Button asChild>
+              <Link href="/folders">חזרה לתיקיות</Link>
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -371,7 +381,7 @@ export default function FolderDetailPage({ params }: { params: { id: string } })
       <AddActorToFolderDialog
         open={showAddActorDialog}
         onOpenChange={setShowAddActorDialog}
-        folderId={params.id}
+        folderId={folderId}
         onActorsAdded={() => mutate()}
       />
     </div>
