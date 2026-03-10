@@ -16,7 +16,7 @@ This application provides casting directors with a comprehensive platform to man
 - **Actor Database:** Comprehensive profiles with skills, languages, voice samples, and more
 - **Public Intake Form:** Actors submit profiles via a separate public form (scprodub repo) → admin reviews and approves
 - **Project Management:** Organize casting projects with roles, assignments, and status tracking
-- **Script Parsing:** Automatically extract roles and dialogue counts from uploaded scripts (77 unit tests)
+- **Script Parsing:** Automatically extract roles and dialogue counts from uploaded scripts (Excel, PDF, DOCX, TXT)
 - **Casting Workspace:** Unified script table with fixed-column layout, inline Hebrew translation editing, per-actor recording progress, and rec-status tracking
 - **Script Upload Centralized:** Script upload is available only via the "תסריטים" tab; the workspace and roles tabs are read-only consumers
 - **Conflict Detection:** Identify scheduling conflicts when the same actor is cast in multiple roles
@@ -107,11 +107,10 @@ Comprehensive documentation is available to help you understand and contribute t
 
 | Document                       | Description                                                      |
 | ------------------------------ | ---------------------------------------------------------------- |
-| **[DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)** | Complete guide for developers: architecture, best practices, rules |
-| **[SUPABASE_SETUP_GUIDE.md](./SUPABASE_SETUP_GUIDE.md)** | Step-by-step Supabase database setup instructions |
-| **[AUTH_SETUP_GUIDE.md](./AUTH_SETUP_GUIDE.md)** | Authentication configuration and user management |
-| **[WORKFLOW.md](./WORKFLOW.md)** | Development workflow and collaboration guidelines |
-| **[SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md)** | Security considerations and audit findings |
+| **[CLAUDE.md](./CLAUDE.md)** | Full context for AI agents — architecture, DB schema, roadmap |
+| **[DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)** | Developer onboarding: architecture, best practices, rules |
+| **[SUPABASE_SETUP_GUIDE.md](./SUPABASE_SETUP_GUIDE.md)** | Step-by-step Supabase database setup (one-time) |
+| **[AUTH_SETUP_GUIDE.md](./AUTH_SETUP_GUIDE.md)** | Authentication configuration and user management (one-time) |
 
 ---
 
@@ -169,7 +168,7 @@ v0-casting-database-web-app/
 | `pnpm run build`      | Build for production                           |
 | `pnpm run start`      | Start production server                        |
 | `pnpm run lint`       | Run ESLint                                     |
-| `pnpm test`           | Run unit tests (Vitest, 77 tests)              |
+| `pnpm test`           | Run unit tests (Vitest, 300+ tests)             |
 
 ### Code Quality
 
@@ -206,18 +205,6 @@ We welcome contributions! Please follow these steps:
 - All code must be strongly typed (TypeScript)
 - Follow the existing code style and conventions
 - Write clear commit messages
-
----
-
-## 🔒 Security
-
-Security is a top priority. Please review the **[SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md)** for important security considerations.
-
-**Key Points:**
-- Never commit secrets or API keys
-- Always use environment variables for sensitive data
-- Leverage Supabase Row Level Security for data access control
-- Keep dependencies up to date
 
 ---
 

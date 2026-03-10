@@ -330,7 +330,7 @@ diagnostics + Zod validation → ScriptLineInput[] לDB
 | ד | `claude/improve-model-4-workspace-C8vDl` | ✅ הושלם — ייצוא Excel, auto-assign, bulk delete, pagination |
 | ה | `claude/enhance-file-parser-C8JeT` | ✅ הושלם — PDF/DOCX tabular support, Zod validation, diagnostics |
 | ו | `claude/improve-app-performance-y2wVC` | ✅ הושלם — ביצועים + מערכת תסריטים (מרץ 2026) |
-| ז | `claude/fix-file-parser-F3F4l` | 🟡 בעבודה — תיקון PDF + Excel multi-file |
+| ז | `claude/fix-file-parser-F3F4l` | ✅ הושלם — תיקון PDF + Excel multi-file |
 
 ### שלב ו — Performance + Script System (מרץ 2026)
 
@@ -431,4 +431,4 @@ pnpm test                # חייב: כל הטסטים עוברים
 - שם: `[agent]/[תיאור]`
 - merge רק דרך PR
 - לא לדחוף ישירות ל-`main`
-- v0 branch נוכחי: `v0/amit-2370-8b365cde`
+- ברנץ'ים ישנים של v0 מוזגו ל-main

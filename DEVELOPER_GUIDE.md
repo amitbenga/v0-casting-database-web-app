@@ -26,23 +26,27 @@ The application is built on a modern, robust, and scalable technology stack. Und
 ### Directory Structure
 
 ```
-.v0-casting-database-web-app/
-├── app/                # Next.js App Router. Each folder is a URL segment.
-│   ├── (auth)/         # Route group for auth pages (login, signup).
-│   ├── (main)/         # Route group for main protected app layout.
-│   └── api/            # API routes.
-├── components/         # Shared React components.
-│   ├── ui/             # Unstyled components from shadcn/ui.
-│   └── projects/       # Components specific to the projects feature.
-├── contexts/           # Global React contexts (e.g., AuthContext).
-├── lib/                # Core logic, utilities, and actions.
-│   ├── actions/        # Server-side actions (database mutations).
-│   ├── parser/         # Logic for parsing scripts.
-│   ├── supabase/       # Supabase client and helper functions.
-│   └── types.ts        # Global TypeScript type definitions.
-├── public/             # Static assets (images, fonts).
-├── scripts/            # Standalone scripts (e.g., for database seeding).
-└── styles/             # Global CSS styles.
+v0-casting-database-web-app/
+├── app/                # Next.js App Router — pages and layouts
+│   ├── actors/[id]/    # Actor profile page
+│   ├── admin/          # Admin dashboard (approve/reject submissions)
+│   ├── folders/        # Actor folder management
+│   ├── intake/         # Internal intake form
+│   ├── login/          # Login page
+│   └── projects/[id]/  # Project detail (roles/actors/scripts/workspace tabs)
+├── components/         # Shared React components
+│   ├── ui/             # Base UI components (shadcn/ui)
+│   └── projects/       # Project-specific components
+├── contexts/           # React contexts (AuthContext)
+├── lib/                # Core logic, utilities, and actions
+│   ├── actions/        # Server Actions (database mutations)
+│   ├── parser/         # Script parsing (Excel/PDF/DOCX/TXT) + 300+ tests
+│   ├── supabase/       # Supabase client configuration
+│   └── types.ts        # Global TypeScript type definitions (source of truth)
+├── public/             # Static assets
+├── migrations/         # SQL migrations (002+)
+├── scripts/            # Legacy SQL scripts (001-025, already executed)
+└── docs/               # Architecture decisions (ADRs) and changelogs
 ```
 
 ---
@@ -244,13 +248,15 @@ Data flow: **scprodub form → `actor_submissions` → admin approval → `actor
 
 ### Row Level Security (RLS)
 
-Supabase uses **Row Level Security** to control data access. All tables have RLS policies that ensure users can only access data they're authorized to see. When writing queries, always use the authenticated Supabase client to ensure policies are enforced.
+Supabase uses **Row Level Security** to control data access. Currently, all tables have **open RLS policies** (`USING (true)`) because the app manages auth at the `AuthContext` level, not through Supabase Auth. All queries arrive as the `anon` role.
 
-**Example:**
+**Important:** Every new migration must include RLS policies with `USING (true)` / `WITH CHECK (true)`.
+
 ```typescript
-const supabase = createClient() // Uses auth context
-const { data, error } = await supabase.from('actors').select('*')
-// RLS automatically filters results based on user permissions
+const supabase = createClient() // Uses anon key
+const { data, error } = await supabase
+  .from('actors')
+  .select('id, full_name, image_url, gender') // Always specify fields, never select('*')
 ```
 
 ---
@@ -321,7 +327,7 @@ useSWR(key, fetcher, {
 
 ### Automated Tests (Vitest)
 
-The project has **77 unit tests** covering the script parser, fuzzy matcher, and pipeline logic.
+The project has **300+ unit tests** covering the script parser, structured parser, content detector, tokenizer, fuzzy matcher, and pipeline logic.
 
 ```bash
 # Run all tests
@@ -331,17 +337,14 @@ pnpm test
 pnpm test --watch
 ```
 
-Test files are located in:
-- `lib/parser/__tests__/script-parser.test.ts`
-- `lib/parser/__tests__/fuzzy-matcher.test.ts`
-- `lib/parser/__tests__/pipeline.test.ts`
+Test files are located in `lib/parser/__tests__/` (10 test files).
 
 Configuration: `vitest.config.ts`
 
 ### Pre-Merge Checklist
 
 - [ ] Run `pnpm exec tsc --noEmit` - No TypeScript errors
-- [ ] Run `pnpm test` - All 77 tests pass
+- [ ] Run `pnpm test` - All tests pass
 - [ ] Run `pnpm run lint` - No linting errors
 - [ ] Run `pnpm run build` - Build completes successfully
 - [ ] Test all modified features in the browser
@@ -436,28 +439,7 @@ added city to the FilterState interface.
 
 ## 13. Roadmap & Future Enhancements
 
-Here are some ideas for future development. Feel free to pick up any of these or propose your own!
-
-### Short-term (Next 3 months)
-- Implement automated testing (unit + integration)
-- Add bulk operations for actors (bulk edit, bulk delete)
-- Improve script parser accuracy
-- Add actor availability calendar
-- Implement role templates for common character types
-
-### Medium-term (3-6 months)
-- Multi-user collaboration features (comments, notifications)
-- Advanced analytics dashboard (casting statistics, actor utilization)
-- Integration with external casting platforms
-- Mobile app (React Native)
-- Voice sample comparison tool
-
-### Long-term (6+ months)
-- AI-powered actor recommendations based on role requirements
-- Automated conflict detection using NLP on scripts
-- Video audition management
-- Contract and payment tracking
-- Multi-language support
+See **[CLAUDE.md](./CLAUDE.md) §8** for the full, up-to-date roadmap including module status, completed phases, and next steps.
 
 ---
 
@@ -484,7 +466,7 @@ This project is proprietary and confidential. All rights reserved.
 
 **Documentation maintained by:** Development Team
 
-**Last updated:** February 2026
+**Last updated:** March 2026
 
 ---
 
