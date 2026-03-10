@@ -42,6 +42,8 @@ import { FileSpreadsheet } from "lucide-react"
 import { saveScriptLines, getScriptLines } from "@/lib/actions/script-line-actions"
 import type { ScriptLineInput } from "@/lib/types"
 import { createScriptImport, getScriptImports, applyScriptImport, type ScriptImport } from "@/lib/actions/ai-import-actions"
+import { uploadFileToR2 } from "@/lib/r2/upload-client"
+import { scriptKeys } from "@/lib/r2/keys"
 import { AIModelSelector } from "@/components/ai-model-selector"
 import { DEFAULT_PARSE_MODEL, type AIModelId } from "@/lib/ai-config"
 import {
@@ -102,6 +104,8 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [isAiParsing, setIsAiParsing] = useState(false)
   const [isApplyingImport, setIsApplyingImport] = useState<string | null>(null)
   const [aiParseModel, setAiParseModel] = useState<AIModelId>(DEFAULT_PARSE_MODEL)
+  // Map of pending file id → R2 key (set after successful upload)
+  const [pendingFileR2Keys, setPendingFileR2Keys] = useState<Record<string, string>>({})
 
   const loadScripts = useCallback(async () => {
     try {
@@ -167,9 +171,29 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     // Mark all as parsing
     setPendingFiles(prev => prev.map(f => ({ ...f, status: "parsing" })))
 
+    // Upload original files to R2 in parallel while parsing client-side
+    const uploadPromises = pendingFiles.map(async (pf) => {
+      const key = scriptKeys.original(projectId, pf.file.name)
+      const result = await uploadFileToR2(pf.file, key)
+      return { id: pf.id, key: result.key ?? null }
+    })
+
     try {
-      const files = pendingFiles.map(pf => pf.file)
-      const result = await parseScriptFiles(files)
+      const [parseResult_, uploadResults] = await Promise.all([
+        parseScriptFiles(pendingFiles.map(pf => pf.file)),
+        Promise.allSettled(uploadPromises),
+      ])
+
+      // Store the R2 keys
+      const keyMap: Record<string, string> = {}
+      for (const r of uploadResults) {
+        if (r.status === "fulfilled" && r.value.key) {
+          keyMap[r.value.id] = r.value.key
+        }
+      }
+      setPendingFileR2Keys(keyMap)
+
+      const result = parseResult_
 
       // Update file statuses based on result
       setPendingFiles(prev => prev.map(pf => {
@@ -879,6 +903,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             type: pf.file.type || pf.file.name.split('.').pop() || 'unknown',
             size: pf.file.size,
           }))}
+          fileKeys={pendingFileR2Keys}
           onApplied={async (scriptId?: string) => {
             // Create stub script_lines from parsed characters so the workspace
             // immediately shows rows after DOCX/PDF upload. script_id is now

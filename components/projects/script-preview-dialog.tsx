@@ -63,6 +63,8 @@ interface ScriptPreviewDialogProps {
   onApplied: (scriptId?: string) => void
   /** Info about the files that were parsed, for saving the script record */
   fileInfo?: { name: string; type: string; size: number }[]
+  /** R2 object keys for each uploaded file, keyed by pending file id */
+  fileKeys?: Record<string, string>
 }
 
 export function ScriptPreviewDialog({
@@ -72,6 +74,7 @@ export function ScriptPreviewDialog({
   projectId,
   onApplied,
   fileInfo,
+  fileKeys,
 }: ScriptPreviewDialogProps) {
   const { toast } = useToast()
   const [editedResult, setEditedResult] = useState(parseResult)
@@ -275,14 +278,20 @@ export function ScriptPreviewDialog({
       if (result.success) {
         // Save script record(s) to project_scripts table; capture the first scriptId
         let firstScriptId: string | undefined
-        if (fileInfo && fileInfo.length > 0) {
-          for (const file of fileInfo) {
-            const scriptRecord = await saveScriptRecord(
-              projectId,
-              file.name,
-              file.type,
-              file.size
-            )
+  if (fileInfo && fileInfo.length > 0) {
+      for (const file of fileInfo) {
+        // Look up the R2 key by value (keys map has pending-file-id → key,
+        // so we match by the key suffix which ends in the sanitized filename)
+        const r2Key = fileKeys
+          ? Object.values(fileKeys).find((k) => k.endsWith(file.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9.\-_]/g, "")))
+          : undefined
+        const scriptRecord = await saveScriptRecord(
+          projectId,
+          file.name,
+          file.type,
+          file.size,
+          r2Key
+        )
             if (scriptRecord.success && scriptRecord.scriptId && !firstScriptId) {
               firstScriptId = scriptRecord.scriptId
             }

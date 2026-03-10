@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { type Actor, VAT_STATUS_LABELS } from "@/lib/types"
+import { useR2Url } from "@/hooks/use-r2-url"
 
 interface ActorCardProps {
   actor: Actor
@@ -53,18 +54,22 @@ export const ActorCard = memo(function ActorCard({
   const currentYear = new Date().getFullYear()
   const age = currentYear - (actor.birth_year ?? 0)
 
+  // Resolve R2 keys to presigned URLs (no-op for http URLs and Base64 data URLs)
+  const resolvedImageUrl = useR2Url(actor.image_url)
+  const resolvedVoiceUrl = useR2Url(actor.voice_sample_url)
+
   const actorProfileHref = `/actors/${actor.id}`
 
   const handlePlayAudio = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
-    if (!actor.voice_sample_url) {
+    if (!resolvedVoiceUrl) {
       return
     }
 
     if (!audioRef.current) {
-      audioRef.current = new Audio(actor.voice_sample_url)
+      audioRef.current = new Audio(resolvedVoiceUrl)
       audioRef.current.addEventListener("ended", () => {
         setIsPlaying(false)
       })
@@ -130,9 +135,9 @@ export const ActorCard = memo(function ActorCard({
       onMouseLeave={() => setShowOverlay(false)}
     >
       <Link href={actorProfileHref} className="relative aspect-[3/4] overflow-hidden bg-muted cursor-pointer block">
-        {actor.image_url ? (
+        {resolvedImageUrl ? (
           <img
-            src={actor.image_url || "/placeholder.svg"}
+            src={resolvedImageUrl}
             alt={actor.full_name}
             loading="lazy"
             decoding="async"
@@ -234,14 +239,14 @@ export const ActorCard = memo(function ActorCard({
                   variant="ghost"
                   className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200 relative"
                   onClick={handlePlayAudio}
-                  disabled={!actor.voice_sample_url}
-                >
-                  {isPlaying ? (
-                    <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                  ) : (
-                    <span className="relative inline-flex items-center justify-center">
-                      <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                      {!actor.voice_sample_url && (
+          disabled={!resolvedVoiceUrl}
+          >
+            {isPlaying ? (
+              <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
+            ) : (
+              <span className="relative inline-flex items-center justify-center">
+                <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                {!actor.voice_sample_url && (
                         <svg
                           className="absolute inset-0 w-full h-full text-destructive/80 pointer-events-none"
                           viewBox="0 0 16 16"

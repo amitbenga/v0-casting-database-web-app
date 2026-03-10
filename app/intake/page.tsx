@@ -17,6 +17,8 @@ import { normalizeEmail, normalizePhone } from "@/lib/normalizers"
 import { useToast } from "@/hooks/use-toast"
 import { SKILLS_LIST, LANGUAGES_LIST } from "@/lib/types"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { uploadFileToR2 } from "@/lib/r2/upload-client"
+import { submissionKeys } from "@/lib/r2/keys"
 
 // Derived from the canonical SKILLS_LIST — single source of truth (task 4A/4B)
 const SKILLS_OPTIONS = SKILLS_LIST.map((s) => s.label)
@@ -28,6 +30,11 @@ function ActorIntakePageContent() {
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  // Store File objects; upload to R2 on submit using a client-generated submission UUID
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [singingFile, setSingingFile] = useState<File | null>(null)
+  // Local preview URLs (revoked on unmount)
   const [uploadedPhoto, setUploadedPhoto] = useState<string>("")
   const [uploadedAudio, setUploadedAudio] = useState<string>("")
   const [uploadedSinging, setUploadedSinging] = useState<string>("")
@@ -53,33 +60,24 @@ function ActorIntakePageContent() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setUploadedPhoto(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      setPhotoFile(file)
+      setUploadedPhoto(URL.createObjectURL(file))
     }
   }
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setUploadedAudio(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      setAudioFile(file)
+      setUploadedAudio(URL.createObjectURL(file))
     }
   }
 
   const handleSingingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setUploadedSinging(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      setSingingFile(file)
+      setUploadedSinging(URL.createObjectURL(file))
     }
   }
 
@@ -96,6 +94,23 @@ function ActorIntakePageContent() {
     setLoading(true)
 
     try {
+      // Use a client-generated UUID as the submission path prefix so we can
+      // upload files before the DB row is created (Postgres generates the real ID).
+      const tempId = crypto.randomUUID()
+
+      // Upload media files to R2 in parallel
+      const [imageKey, voiceKey, singingKey] = await Promise.all([
+        photoFile
+          ? uploadFileToR2(photoFile, submissionKeys.image(tempId, photoFile.name)).then((r) => r.key ?? null)
+          : Promise.resolve(null),
+        audioFile
+          ? uploadFileToR2(audioFile, submissionKeys.audio(tempId, audioFile.name)).then((r) => r.key ?? null)
+          : Promise.resolve(null),
+        singingFile
+          ? uploadFileToR2(singingFile, submissionKeys.audio(tempId, singingFile.name)).then((r) => r.key ?? null)
+          : Promise.resolve(null),
+      ])
+
       const supabase = createBrowserClient()
 
       const submissionData = {
@@ -114,9 +129,10 @@ function ActorIntakePageContent() {
         skills_other: skillsOther || null,
         languages: languages.length > 0 ? languages : null,
         languages_other: languagesOther || null,
-        image_url: uploadedPhoto || null,
-        voice_sample_url: uploadedAudio || null,
-        singing_sample_url: uploadedSinging || null,
+        // Store R2 object keys (not Base64)
+        image_url: imageKey,
+        voice_sample_url: voiceKey,
+        singing_sample_url: singingKey,
         review_status: "pending",
         match_status: "pending",
         matched_actor_id: null,
@@ -127,6 +143,7 @@ function ActorIntakePageContent() {
           languages,
           languages_other: languagesOther,
           submitted_at: new Date().toISOString(),
+          r2_submission_prefix: tempId,
         },
       }
 
@@ -161,6 +178,20 @@ function ActorIntakePageContent() {
     try {
       const supabase = createBrowserClient()
 
+      // Upload files to R2 before saving the draft actor row
+      const tempId = crypto.randomUUID()
+      const [imageKey, voiceKey, singingKey] = await Promise.all([
+        photoFile
+          ? uploadFileToR2(photoFile, submissionKeys.image(tempId, photoFile.name)).then((r) => r.key ?? "")
+          : Promise.resolve(""),
+        audioFile
+          ? uploadFileToR2(audioFile, submissionKeys.audio(tempId, audioFile.name)).then((r) => r.key ?? "")
+          : Promise.resolve(""),
+        singingFile
+          ? uploadFileToR2(singingFile, submissionKeys.audio(tempId, singingFile.name)).then((r) => r.key ?? "")
+          : Promise.resolve(""),
+      ])
+
       const draftData: Record<string, any> = {
         full_name: formData.full_name.trim(),
         gender: formData.gender || "male",
@@ -171,9 +202,9 @@ function ActorIntakePageContent() {
         is_singer: formData.is_singer,
         is_course_grad: formData.is_course_graduate,
         vat_status: formData.vat_status || "ptor",
-        image_url: uploadedPhoto || "",
-        voice_sample_url: uploadedAudio || "",
-        singing_sample_url: uploadedSinging || "",
+        image_url: imageKey,
+        voice_sample_url: voiceKey,
+        singing_sample_url: singingKey,
         skills: skills.map(s => ({ key: s, label: s })),
         languages: languages.map(l => ({ key: l, label: l })),
         is_draft: true,

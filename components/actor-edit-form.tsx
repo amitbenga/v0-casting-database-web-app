@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { ArrowRight, Save, Upload, X, MusicIcon, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -14,6 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleLevel, type SingingStyle, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { uploadFileToR2, getR2Url } from "@/lib/r2/upload-client"
+import { actorKeys } from "@/lib/r2/keys"
+import { isR2Key, isBase64DataUrl } from "@/lib/r2/utils"
 
 interface ActorEditFormProps {
   actor: Actor
@@ -21,10 +23,56 @@ interface ActorEditFormProps {
   onCancel: () => void
 }
 
+/** Resolves an R2 key to a presigned URL and renders an <audio> element. */
+function VoicePreview({ storageKey, onRemove }: { storageKey: string; onRemove: () => void }) {
+  const [src, setSrc] = useState<string | null>(
+    isBase64DataUrl(storageKey) ? storageKey : null
+  )
+  useEffect(() => {
+    if (isR2Key(storageKey)) {
+      getR2Url(storageKey).then((url) => { if (url) setSrc(url) })
+    }
+  }, [storageKey])
+
+  return (
+    <div className="p-4 bg-muted rounded-lg space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MusicIcon className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">קובץ קול קיים</span>
+        </div>
+        <Button type="button" variant="ghost" size="icon" onClick={onRemove}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      {src ? (
+        <audio controls className="w-full">
+          <source src={src} />
+          הדפדפן שלך לא תומך בהשמעת קבצי שמע.
+        </audio>
+      ) : (
+        <p className="text-sm text-muted-foreground">טוען...</p>
+      )}
+    </div>
+  )
+}
+
 export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
   const { toast } = useToast()
   const [formData, setFormData] = useState(actor)
-  const [imagePreview, setImagePreview] = useState(actor.image_url)
+  // imagePreview holds an object URL (local) or a presigned URL (for existing R2 key)
+  // We start with the stored value; if it's an R2 key we'll swap it for a presigned URL
+  const [imagePreview, setImagePreview] = useState<string | undefined>(
+    isBase64DataUrl(actor.image_url) || !isR2Key(actor.image_url) ? actor.image_url : undefined
+  )
+
+  // Resolve existing R2 key → presigned URL on mount
+  useEffect(() => {
+    if (actor.image_url && isR2Key(actor.image_url) && !imagePreview) {
+      getR2Url(actor.image_url).then((url) => { if (url) setImagePreview(url) })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const voiceInputRef = useRef<HTMLInputElement>(null)
@@ -83,44 +131,65 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadingVoice, setUploadingVoice] = useState(false)
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result as string
-        setImagePreview(result)
-        handleChange("image_url", result)
+    if (!file) return
+
+    // Show local preview immediately
+    const objectUrl = URL.createObjectURL(file)
+    setImagePreview(objectUrl)
+    setUploadingImage(true)
+
+    try {
+      const key = actorKeys.image(actor.id, file.name)
+      const result = await uploadFileToR2(file, key)
+      if (!result.success || !result.key) {
+        throw new Error(result.error ?? "Upload failed")
       }
-      reader.readAsDataURL(file)
+      handleChange("image_url", result.key)
+      toast({ title: "תמונה הועלתה", description: "התמונה נשמרה בהצלחה" })
+    } catch (err) {
+      toast({ title: "שגיאה", description: "העלאת התמונה נכשלה", variant: "destructive" })
+      setImagePreview(actor.image_url ?? "")
+      handleChange("image_url", actor.image_url ?? "")
+    } finally {
+      setUploadingImage(false)
     }
   }
 
   const handleRemoveImage = () => {
     setImagePreview("")
     handleChange("image_url", "")
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  const handleVoiceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVoiceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result as string
-        handleChange("voice_sample_url", result)
+    if (!file) return
+
+    setUploadingVoice(true)
+    try {
+      const key = actorKeys.voice(actor.id, file.name)
+      const result = await uploadFileToR2(file, key)
+      if (!result.success || !result.key) {
+        throw new Error(result.error ?? "Upload failed")
       }
-      reader.readAsDataURL(file)
+      handleChange("voice_sample_url", result.key)
+      toast({ title: "קובץ קול הועלה", description: "קובץ הקול נשמר בהצלחה" })
+    } catch (err) {
+      toast({ title: "שגיאה", description: "העלאת קובץ הקול נכשלה", variant: "destructive" })
+    } finally {
+      setUploadingVoice(false)
+      if (voiceInputRef.current) voiceInputRef.current.value = ""
     }
   }
 
   const handleRemoveVoice = () => {
     handleChange("voice_sample_url", "")
-    if (voiceInputRef.current) {
-      voiceInputRef.current.value = ""
-    }
+    if (voiceInputRef.current) voiceInputRef.current.value = ""
   }
 
   return (
@@ -223,21 +292,10 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
 
             <div className="space-y-4">
               {formData.voice_sample_url && (
-                <div className="p-4 bg-muted rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <MusicIcon className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">קובץ קול קיים</span>
-                    </div>
-                    <Button type="button" variant="ghost" size="icon" onClick={handleRemoveVoice}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <audio controls className="w-full">
-                    <source src={formData.voice_sample_url} />
-                    הדפדפן שלך לא תומך בהשמעת קבצי שמע.
-                  </audio>
-                </div>
+                <VoicePreview
+                  storageKey={formData.voice_sample_url}
+                  onRemove={handleRemoveVoice}
+                />
               )}
 
               <div className="space-y-4">

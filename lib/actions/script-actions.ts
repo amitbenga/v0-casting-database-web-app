@@ -209,7 +209,8 @@ export async function saveScriptRecord(
   projectId: string,
   fileName: string,
   fileType: string,
-  fileSizeBytes: number
+  fileSizeBytes: number,
+  fileKey?: string
 ): Promise<{ success: boolean; scriptId?: string; error?: string }> {
   const supabase = await createClient()
 
@@ -222,7 +223,8 @@ export async function saveScriptRecord(
         file_type: fileType,
         file_size_bytes: fileSizeBytes,
         processing_status: "completed",
-        applied_at: new Date().toISOString()
+        applied_at: new Date().toISOString(),
+        ...(fileKey ? { file_url: fileKey } : {}),
       })
       .select("id")
       .single()
@@ -480,7 +482,7 @@ export async function mergeRoles(
     return { success: true }
   } catch (error: unknown) {
     console.error("Error merging roles:", error)
-    const errorMessage = error instanceof Error ? error.message : "שגיאה באיחוד תפקידים"
+    const errorMessage = error instanceof Error ? error.message : "שגיאה באיחוד ��פקידים"
     return { success: false, error: errorMessage }
   }
 }
