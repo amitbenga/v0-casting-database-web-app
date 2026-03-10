@@ -138,7 +138,7 @@ function FoldersPageContent() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1">
                     <div
-                      className={`p-2 md:p-3 rounded-lg ${getColorClass("blue")} group-hover:scale-110 transition-transform`}
+                      className={`p-2 md:p-3 rounded-lg ${getColorClass(folder.color || "blue")} group-hover:scale-110 transition-transform`}
                     >
                       <Folder className="h-5 w-5 md:h-6 md:w-6" />
                     </div>

@@ -365,6 +365,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   // Selection helpers
   const allFilteredSelected = filteredLines.length > 0 && filteredLines.every((l) => selectedIds.has(l.id))
   const someFilteredSelected = filteredLines.some((l) => selectedIds.has(l.id))
+  const lastSelectedIndexRef = useRef<number>(-1)
+
+  // Reset range anchor when filters change
+  useEffect(() => { lastSelectedIndexRef.current = -1 }, [filterRole, filterStatus, searchRole])
 
   useEffect(() => {
     if (selectAllCheckboxRef.current) {
@@ -372,13 +376,31 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }, [someFilteredSelected, allFilteredSelected])
 
-  function toggleRow(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  function toggleRow(id: string, shiftKey = false) {
+    const currentIndex = filteredLines.findIndex((l) => l.id === id)
+
+    if (shiftKey && lastSelectedIndexRef.current >= 0 && currentIndex >= 0) {
+      // Range selection: select all rows between last click and current click
+      const start = Math.min(lastSelectedIndexRef.current, currentIndex)
+      const end = Math.max(lastSelectedIndexRef.current, currentIndex)
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        for (let i = start; i <= end; i++) {
+          next.add(filteredLines[i].id)
+        }
+        return next
+      })
+    } else {
+      // Single toggle
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    }
+
+    if (currentIndex >= 0) lastSelectedIndexRef.current = currentIndex
   }
 
   function toggleAll() {
@@ -493,7 +515,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           setPendingAiFile(file)
           toast({
             title: "לא הצלחנו לחלץ טקסט מה-PDF",
-            description: "הקובץ ייתכן שהוא סרוק. לחץ על \"פרסר עם AI\" בסרגל.",
+            description: "הקובץ ייתכן שהוא סרוק. לחץ על \"עיבוד עם AI\" בסרגל.",
           })
           return
         }
@@ -504,7 +526,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           setPendingAiFile(file)
           toast({
             title: "לא נמצאו שורות דיאלוג ב-PDF",
-            description: "המבנה לא מוכר לפרסר. לחץ על \"פרסר עם AI\" בסרגל.",
+            description: "המבנה לא מוכר לעיבוד. לחץ על \"עיבוד עם AI\" בסרגל.",
           })
         }
         return
@@ -537,7 +559,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         const text = await extractTextFromDOCX(file)
         if (text.trim().length < 50) {
           setPendingAiFile(file)
-          toast({ title: "לא ניתן לחלץ טקסט מה-DOCX", description: "לחץ על \"פרסר עם AI\" בסרגל." })
+          toast({ title: "לא ניתן לחלץ טקסט מה-DOCX", description: "לחץ על \"עיבוד עם AI\" בסרגל." })
           return
         }
         const dialogueLines = extractDialogueLines(text)
@@ -545,7 +567,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           await handleImport(dialogueLines)
         } else {
           setPendingAiFile(file)
-          toast({ title: "לא נמצאו שורות דיאלוג ב-DOCX", description: "לחץ על \"פרסר עם AI\" בסרגל." })
+          toast({ title: "לא נמצאו שורות דיאלוג ב-DOCX", description: "לחץ על \"עיבוד עם AI\" בסרגל." })
         }
         return
       }
@@ -806,7 +828,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       })
       if (!result.success || !result.lines?.length) {
         toast({
-          title: "פרסור AI לא מצא שורות",
+          title: "עיבוד AI לא מצא שורות",
           description: result.error ?? "נסה קובץ אחר או הכנס את הנתונים ידנית",
           variant: "destructive",
         })
@@ -816,7 +838,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       setPendingAiFile(null)
     } catch (err) {
       toast({
-        title: "שגיאה בפרסור AI",
+        title: "שגיאה בעיבוד AI",
         description: err instanceof Error ? err.message : "שגיאה לא ידועה",
         variant: "destructive",
       })
@@ -866,7 +888,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
             className="gap-1.5 text-purple-700 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700"
           >
             <Sparkles className={`h-4 w-4 ${isAiParsing ? "animate-pulse" : ""}`} />
-            {isAiParsing ? "מפרסר..." : `פרסר עם AI — ${pendingAiFile.name}`}
+            {isAiParsing ? "מעבד..." : `עיבוד עם AI — ${pendingAiFile.name}`}
           </Button>
         )}
 
@@ -1171,7 +1193,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
-                        onChange={() => toggleRow(line.id)}
+                        onChange={() => {/* handled by onClick for shift-key support */}}
+                        onClick={(e) => toggleRow(line.id, e.shiftKey)}
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
