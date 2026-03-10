@@ -1,17 +1,21 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Briefcase, FolderOpen, Menu, Inbox } from "lucide-react"
+import { Briefcase, FolderOpen, Menu, Inbox, LogOut } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import Image from "next/image"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function AppHeader() {
+  const { signOut } = useAuth()
   return (
     <header className="border-b bg-card sticky top-0 z-10">
       <div className="container mx-auto px-4 md:px-6 py-3 md:py-4">
         <div className="flex items-center justify-between gap-4">
           {/* לוגו וכותרת */}
           <div className="flex items-center gap-3 md:gap-4">
-            <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
+            <Link href="/projects" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
               <Image src="/logo.png" alt="Soprodub" width={120} height={30} className="h-6 md:h-8 w-auto" priority />
             </Link>
           </div>
@@ -19,7 +23,7 @@ export function AppHeader() {
           {/* ניווט דסקטופ */}
           <nav className="hidden md:flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/" className="font-medium">
+              <Link href="/actors" className="font-medium">
                 שחקנים
               </Link>
             </Button>
@@ -41,6 +45,10 @@ export function AppHeader() {
                 ניהול בקשות
               </Link>
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-muted-foreground">
+              <LogOut className="h-4 w-4 ml-2" />
+              יציאה
+            </Button>
           </nav>
 
           {/* תפריט המבורגר למובייל */}
@@ -56,7 +64,7 @@ export function AppHeader() {
               </SheetHeader>
               <nav className="flex flex-col gap-2 mt-6">
                 <Button variant="ghost" className="justify-start" asChild>
-                  <Link href="/">שחקנים</Link>
+                  <Link href="/actors">שחקנים</Link>
                 </Button>
                 <Button variant="ghost" className="justify-start" asChild>
                   <Link href="/projects">
@@ -75,6 +83,10 @@ export function AppHeader() {
                     <Inbox className="h-4 w-4 ml-2" />
                     ניהול בקשות
                   </Link>
+                </Button>
+                <Button variant="ghost" className="justify-start text-muted-foreground" onClick={() => signOut()}>
+                  <LogOut className="h-4 w-4 ml-2" />
+                  יציאה
                 </Button>
               </nav>
             </SheetContent>

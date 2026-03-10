@@ -17,11 +17,43 @@ This application provides casting directors with a comprehensive platform to man
 - **Public Intake Form:** Actors submit profiles via a separate public form (scprodub repo) → admin reviews and approves
 - **Project Management:** Organize casting projects with roles, assignments, and status tracking
 - **Script Parsing:** Automatically extract roles and dialogue counts from uploaded scripts (77 unit tests)
+- **Casting Workspace:** Unified script table with fixed-column layout, inline Hebrew translation editing, per-actor recording progress, and rec-status tracking
+- **Script Upload Centralized:** Script upload is available only via the "תסריטים" tab; the workspace and roles tabs are read-only consumers
 - **Conflict Detection:** Identify scheduling conflicts when the same actor is cast in multiple roles
 - **Advanced Search & Filtering:** Find the perfect actor using multiple criteria
 - **Collaboration Tools:** Favorites, folders, and notes for team coordination
 
 **Architecture Note:** This app shares a Supabase database with a separate public intake form repo (scprodub). Actor submissions flow from the form → `actor_submissions` table → admin approval page → `actors` table.
+
+---
+
+## Recent Changes
+
+### Workspace & Script Flow (March 2026)
+
+**Script upload centralized**
+- Upload is now only possible from the "תסריטים" tab. The workspace empty-state guides users there instead of offering a redundant upload button.
+
+**Role → Script line linking (`backfillScriptLinesRoleIds`)**
+- After every `saveScriptLines` call, a new internal helper automatically matches `script_lines.role_id` to `project_roles` by normalized `role_name`. This fixes the "0% progress" issue that appeared when all lines lacked a `role_id`.
+
+**`project_summary` view fixed**
+- `total_lines` and `recorded_lines` are now counted directly from `script_lines` (subquery), independent of the `project_scripts` join that was always empty.
+
+**Actor name in workspace**
+- After assigning an actor in Casting Workspace, `syncActorsToScriptLines` runs automatically so the workspace table immediately shows the actor's name.
+
+**Translation post-processing**
+- `parseTranslationResponse` strips a leading `CHARACTER:` prefix from AI responses, so the translation column never shows the character name.
+
+**Actor recording progress panel**
+- Collapsible panel (closed by default) above the workspace table. Click to expand; select a pill to see a single actor's progress bar and line count.
+
+**Fixed-height table rows**
+- Removed `measureElement` from the virtualizer. All rows are `44px` tall with `overflow: hidden`. The `TranslationCell` is `h-8` and truncates with a tooltip on hover.
+
+**No-audio indicator**
+- Actor cards with no `voice_sample_url` show a Play icon with a red diagonal slash instead of nothing or a faint grey button.
 
 ---
 

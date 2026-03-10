@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md — Casting Database Web App
 > **מסמך זה הוא נקודת הכניסה לכל סוכן או מתכנת חדש.**  
-> עדכן אותו לאחר כל מיזוג משמעותי. תאריך עדכון אחרון: **מרץ 2026**
+> עדכן אותו לאחר כל מיזוג משמעותי. תאריך עדכון אחרון: **מרץ 2026 (v0 session — AI parser + performance)**
 
 ---
 
@@ -9,7 +9,7 @@
 **מערכת ניהול ליהוק לאולפן דיבוב** — Next.js 16 (App Router) + Supabase (PostgreSQL).
 
 **GitHub:** `https://github.com/amitbenga/v0-casting-database-web-app`  
-**Branch נוכחי (v0):** `v0/amit-2370-6dcf9fc8`  
+**Branch נוכחי (v0):** `v0/amit-2370-82e45604`  
 **Branch ראשי:** `main`
 
 **חזון:** האפליקציה תהפוך ממערכת ליהוק למנוע עבודה מלא לאולפן דיבוב — כולל ניהול תרגום, טיימקודים, וסטטוסי הקלטה.

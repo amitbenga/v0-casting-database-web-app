@@ -14,14 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -34,13 +26,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2 } from "lucide-react"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds } from "@/lib/actions/script-line-actions"
+import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
+import type { StructuredParseResult } from "@/lib/parser/structured-parser"
+import { AIModelSelector } from "@/components/ai-model-selector"
+import { DEFAULT_TRANSLATE_MODEL, type AIModelId } from "@/lib/ai-config"
 
 interface ScriptWorkspaceTabProps {
   projectId: string
@@ -78,7 +73,7 @@ const REC_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "לא הוקלט", label: "לא הוקלט" },
 ]
 
-// Inline translation cell
+// Inline translation cell — single-line display, h-8 to match fixed row height
 function TranslationCell({
   lineId,
   value,
@@ -87,15 +82,13 @@ function TranslationCell({
   lineId: string
   value: string | undefined
   onChange: (lineId: string, newValue: string) => void
-}) {
+}): React.ReactElement {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? "")
-  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   function startEdit() {
     setDraft(value ?? "")
     setEditing(true)
-    setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function commit() {
@@ -108,28 +101,31 @@ function TranslationCell({
   if (editing) {
     return (
       <textarea
-        ref={inputRef}
+        autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault()
-            commit()
-          }
-          if (e.key === "Escape") {
-            setEditing(false)
-          }
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit() }
+          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
         }}
-        className="w-full min-h-[60px] p-1 text-sm border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        className="w-full h-8 p-1 text-sm border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
         dir="rtl"
       />
     )
   }
 
   return (
-    <div onClick={startEdit} className="cursor-pointer min-h-[40px] p-1 text-sm hover:bg-muted/50 rounded transition-colors whitespace-pre-wrap" dir="rtl">
-      {value || <span className="text-muted-foreground italic">{"לחץ לעריכה..."}</span>}
+    <div
+      onClick={startEdit}
+      className="cursor-pointer h-8 flex items-center px-1 text-sm hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden"
+      dir="rtl"
+      title={value ?? ""}
+    >
+      {value
+        ? <span className="truncate">{value}</span>
+        : <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>
+      }
     </div>
   )
 }
@@ -251,6 +247,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null)
 
+  // Actor progress panel
+  const [progressOpen, setProgressOpen] = useState(false)
+  const [selectedProgressActor, setSelectedProgressActor] = useState<string | null>(null)
+
   // Load initial page of lines
   useEffect(() => {
     let cancelled = false
@@ -284,8 +284,14 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const [filterRole, setFilterRole] = useState<string>("__all__")
   const [filterStatus, setFilterStatus] = useState<string>("__all__")
   const [isImporting, setIsImporting] = useState(false)
-  const [excelResult, setExcelResult] = useState<ExcelParseResult | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [isTranslating, setIsTranslating] = useState(false)
+  const [aiTranslateModel, setAiTranslateModel] = useState<AIModelId>(DEFAULT_TRANSLATE_MODEL)
+  const [excelResults, setExcelResults] = useState<ExcelParseResult[] | null>(null)
+  const [structuredData, setStructuredData] = useState<StructuredParseResult[] | null>(null)
   const [showImportDialog, setShowImportDialog] = useState(false)
+  const [pendingAiFile, setPendingAiFile] = useState<File | null>(null)
+  const [isAiParsing, setIsAiParsing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Jump-to-line (Agent 6)
@@ -347,20 +353,22 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   }, [lines, filterRole, filterStatus, searchRole])
 
   // Virtualizer for the lines table
+  const ROW_HEIGHT = 44
   const rowVirtualizer = useVirtualizer({
     count: filteredLines.length,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 52,
-    measureElement:
-      typeof window !== "undefined"
-        ? (el) => el?.getBoundingClientRect().height ?? 52
-        : undefined,
-    overscan: 10,
+    estimateSize: () => ROW_HEIGHT,
+    // No measureElement — fixed row height prevents content from expanding rows
+    overscan: 12,
   })
 
   // Selection helpers
   const allFilteredSelected = filteredLines.length > 0 && filteredLines.every((l) => selectedIds.has(l.id))
   const someFilteredSelected = filteredLines.some((l) => selectedIds.has(l.id))
+  const lastSelectedIndexRef = useRef<number>(-1)
+
+  // Reset range anchor when filters change
+  useEffect(() => { lastSelectedIndexRef.current = -1 }, [filterRole, filterStatus, searchRole])
 
   useEffect(() => {
     if (selectAllCheckboxRef.current) {
@@ -368,13 +376,31 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }, [someFilteredSelected, allFilteredSelected])
 
-  function toggleRow(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  function toggleRow(id: string, shiftKey = false) {
+    const currentIndex = filteredLines.findIndex((l) => l.id === id)
+
+    if (shiftKey && lastSelectedIndexRef.current >= 0 && currentIndex >= 0) {
+      // Range selection: select all rows between last click and current click
+      const start = Math.min(lastSelectedIndexRef.current, currentIndex)
+      const end = Math.max(lastSelectedIndexRef.current, currentIndex)
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        for (let i = start; i <= end; i++) {
+          next.add(filteredLines[i].id)
+        }
+        return next
+      })
+    } else {
+      // Single toggle
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    }
+
+    if (currentIndex >= 0) lastSelectedIndexRef.current = currentIndex
   }
 
   function toggleAll() {
@@ -415,20 +441,155 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }
 
-  // File selection
+  // File selection — unified handler for Excel, PDF, DOCX, TXT
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const allFiles = Array.from(e.target.files ?? [])
     e.target.value = ""
+    if (allFiles.length === 0) return
 
-    try {
-      const result = await parseExcelFile(file)
-      if (result.sheets.length === 0) {
-        toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקובץ", variant: "destructive" })
+    // ── Excel files: parse each separately, pass as array to dialog (per-file tabs) ─
+    const excelFiles = allFiles.filter((f) => /\.(xlsx|xls)$/i.test(f.name))
+    if (excelFiles.length > 0) {
+      try {
+        const results = await Promise.all(excelFiles.map(parseExcelFile))
+        if (results.every((r) => r.sheets.length === 0)) {
+          toast({ title: "שגיאה", description: "לא נמצאו גיליונות בקבצים", variant: "destructive" })
+          return
+        }
+        setExcelResults(results)
+        setStructuredData(null)
+        setShowImportDialog(true)
+        return
+      } catch (err) {
+        toast({ title: "שגיאה בקריאת Excel", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
         return
       }
-      setExcelResult(result)
-      setShowImportDialog(true)
+    }
+
+    const file = allFiles[0]
+    const ext = file.name.split(".").pop()?.toLowerCase()
+
+    try {
+
+      // ── PDF files ───────────────────────────────────────────────────────
+      if (ext === "pdf") {
+        const {
+          extractTablesFromPDF,
+          extractTextFromPDF,
+          extractTextFromPDFRaw,
+        } = await import("@/lib/parser/text-extractor")
+        const { autoDetectColumns, parseScriptLinesFromStructuredData, extractDialogueLines } =
+          await import("@/lib/parser/structured-parser")
+
+        // 1. Try table extraction → auto-import directly (no dialog for non-Excel)
+        const tables = await extractTablesFromPDF(file)
+        if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
+          const allLines = tables.flatMap((table) => {
+            const mapping = autoDetectColumns(table.headers)
+            if (!mapping.roleNameColumn) return []
+            return parseScriptLinesFromStructuredData(table, {
+              ...mapping,
+              roleNameColumn: mapping.roleNameColumn,
+            })
+          })
+          if (allLines.length > 0) {
+            await handleImport(allLines)
+            return
+          }
+        }
+
+        // 2. Fallback: extract plain text → dialogue lines
+        let text = ""
+        try {
+          text = await extractTextFromPDF(file)
+        } catch {
+          // PDF.js failed — try raw binary extraction
+          try { text = await extractTextFromPDFRaw(file) } catch { /* ignore */ }
+        }
+        // If PDF.js returned empty but no exception, also try raw
+        if (text.trim().length < 50) {
+          try { text = await extractTextFromPDFRaw(file) } catch { /* ignore */ }
+        }
+
+        if (text.trim().length < 50) {
+          setPendingAiFile(file)
+          toast({
+            title: "לא הצלחנו לחלץ טקסט מה-PDF",
+            description: "הקובץ ייתכן שהוא סרוק. לחץ על \"עיבוד עם AI\" בסרגל.",
+          })
+          return
+        }
+        const dialogueLines = extractDialogueLines(text)
+        if (dialogueLines.length > 0) {
+          await handleImport(dialogueLines)
+        } else {
+          setPendingAiFile(file)
+          toast({
+            title: "לא נמצאו שורות דיאלוג ב-PDF",
+            description: "המבנה לא מוכר לעיבוד. לחץ על \"עיבוד עם AI\" בסרגל.",
+          })
+        }
+        return
+      }
+
+      // ── DOCX files ──────────────────────────────────────────────────────
+      if (ext === "docx") {
+        const { extractTablesFromDOCX, extractTextFromDOCX } = await import("@/lib/parser/text-extractor")
+        const { autoDetectColumns, parseScriptLinesFromStructuredData, extractDialogueLines } =
+          await import("@/lib/parser/structured-parser")
+
+        // 1. Try table extraction → auto-import
+        const tables = await extractTablesFromDOCX(file)
+        if (tables.length > 0 && tables.some((t) => t.rows.length >= 3)) {
+          const allLines = tables.flatMap((table) => {
+            const mapping = autoDetectColumns(table.headers)
+            if (!mapping.roleNameColumn) return []
+            return parseScriptLinesFromStructuredData(table, {
+              ...mapping,
+              roleNameColumn: mapping.roleNameColumn,
+            })
+          })
+          if (allLines.length > 0) {
+            await handleImport(allLines)
+            return
+          }
+        }
+
+        // 2. Fallback: plain text → dialogue lines
+        const text = await extractTextFromDOCX(file)
+        if (text.trim().length < 50) {
+          setPendingAiFile(file)
+          toast({ title: "לא ניתן לחלץ טקסט מה-DOCX", description: "לחץ על \"עיבוד עם AI\" בסרגל." })
+          return
+        }
+        const dialogueLines = extractDialogueLines(text)
+        if (dialogueLines.length > 0) {
+          await handleImport(dialogueLines)
+        } else {
+          setPendingAiFile(file)
+          toast({ title: "לא נמצאו שורות דיאלוג ב-DOCX", description: "לחץ על \"עיבוד עם AI\" בסרגל." })
+        }
+        return
+      }
+
+      // ── TXT files ───────────────────────────────────────────────────────
+      if (ext === "txt") {
+        const text = await file.text()
+        if (text.trim().length < 10) {
+          toast({ title: "שגיאה", description: "הקובץ ריק או לא מכיל טקסט מספיק", variant: "destructive" })
+          return
+        }
+        const { extractDialogueLines } = await import("@/lib/parser/structured-parser")
+        const dialogueLines = extractDialogueLines(text)
+        if (dialogueLines.length > 0) {
+          await handleImport(dialogueLines)
+        } else {
+          toast({ title: "שגיאה", description: "לא נמצאו שורות דיאלוג בקובץ הטקסט. ודא שהפורמט הוא NAME: dialogue או NAME ואחריו שורה מוזחת.", variant: "destructive" })
+        }
+        return
+      }
+
+      toast({ title: "שגיאה", description: `פורמט קובץ .${ext} אינו נתמך`, variant: "destructive" })
     } catch (err) {
       console.error(err)
       toast({ title: "שגיאה", description: "לא ניתן לקרוא את הקובץ", variant: "destructive" })
@@ -446,13 +607,21 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         if (!result.success) throw new Error(result.error)
 
         setShowImportDialog(false)
-        setExcelResult(null)
+        setExcelResults(null)
+
+        // Auto-sync actors from existing castings
+        const syncResult = await syncActorsToScriptLines(projectId)
+
         const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
         setLines(freshLines)
         setTotal(freshTotal)
+
+        const syncNote = syncResult.success && syncResult.synced > 0
+          ? ` (${syncResult.synced} שורות שובצו אוטומטית)`
+          : ""
         toast({
           title: "ייבוא הצליח",
-          description: `${result.linesCreated} שורות יובאו לסביבת העבודה`,
+          description: `${result.linesCreated} שורות יובאו לסביבת העבודה${syncNote}`,
         })
       } catch (err) {
         console.error(err)
@@ -464,38 +633,106 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [projectId, toast]
   )
 
+  // Sync actors from castings to script lines
+  const handleSyncActors = useCallback(
+    async () => {
+      setIsSyncing(true)
+      try {
+        const result = await syncActorsToScriptLines(projectId)
+        if (!result.success) throw new Error(result.error)
+
+        // Refresh lines to show updated actor assignments
+        const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+        setLines(freshLines)
+        setTotal(freshTotal)
+
+        toast({
+          title: "סנכרון הושלם",
+          description: `${result.synced} שורות עודכנו, ${result.cleared} שורות נוקו`,
+        })
+      } catch (err) {
+        console.error(err)
+        toast({ title: "שגיאת סנכרון", description: String(err), variant: "destructive" })
+      } finally {
+        setIsSyncing(false)
+      }
+    },
+    [projectId, toast]
+  )
+
+  // Auto-translate all lines without existing translation
+  const handleAutoTranslate = useCallback(
+    async () => {
+      setIsTranslating(true)
+      try {
+        const { translateScriptLines } = await import("@/lib/actions/translate-actions")
+        const result = await translateScriptLines(projectId, { model: aiTranslateModel })
+        if (!result.success) throw new Error(result.error)
+
+        if (result.translated === 0) {
+          toast({ title: "אין שורות לתרגום", description: "כל השורות כבר מתורגמות" })
+        } else {
+          // Refresh lines to show translations
+          const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+          setLines(freshLines)
+          setTotal(freshTotal)
+          toast({ title: "תרגום הושלם", description: `${result.translated} שורות תורגמו` })
+        }
+      } catch (err) {
+        console.error(err)
+        toast({ title: "שגיאת תרגום", description: String(err), variant: "destructive" })
+      } finally {
+        setIsTranslating(false)
+      }
+    },
+    [projectId, toast, aiTranslateModel]
+  )
+
   // Inline translation update
   const handleTranslationChange = useCallback(
     async (lineId: string, newTranslation: string) => {
-      setLines((prev) =>
-        prev.map((l) =>
+      // Capture original before optimistic update
+      let originalTranslation: string | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalTranslation = line?.translation
+        return prev.map((l) =>
           l.id === lineId ? { ...l, translation: newTranslation } : l
         )
-      )
+      })
       const result = await updateScriptLine(lineId, { translation: newTranslation })
       if (!result.success) {
         toast({ title: "שגיאה", description: "שגיאה בשמירת תרגום", variant: "destructive" })
+        // Revert to original
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, translation: originalTranslation } : l
+          )
+        )
       }
     },
     [toast]
   )
 
-  // Inline rec_status update (Agent 1)
+  // Inline rec_status update
   const handleRecStatusChange = useCallback(
     async (lineId: string, newStatus: RecStatus | null) => {
-      // Optimistic update
-      setLines((prev) =>
-        prev.map((l) =>
+      // Capture original before optimistic update
+      let originalStatus: RecStatus | null | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalStatus = line?.rec_status
+        return prev.map((l) =>
           l.id === lineId ? { ...l, rec_status: newStatus } : l
         )
-      )
+      })
       const result = await updateScriptLine(lineId, { rec_status: newStatus })
       if (!result.success) {
         toast({ title: "שגיאה", description: "שגיאה בשמירת סטטוס", variant: "destructive" })
-        // Revert
+        // Revert to original
         setLines((prev) =>
           prev.map((l) =>
-            l.id === lineId ? { ...l, rec_status: l.rec_status } : l
+            l.id === lineId ? { ...l, rec_status: originalStatus ?? null } : l
           )
         )
       }
@@ -575,22 +812,83 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }
 
+  // AI parsing fallback — called when PDF/DOCX extraction fails
+  async function handleAiParse() {
+    if (!pendingAiFile) return
+    setIsAiParsing(true)
+    try {
+      // Read file as base64 to pass to server action
+      const arrayBuffer = await pendingAiFile.arrayBuffer()
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      const { parseScriptWithAI } = await import("@/lib/actions/ai-parse-action")
+      const result = await parseScriptWithAI({
+        fileBase64: base64,
+        fileName: pendingAiFile.name,
+        mimeType: pendingAiFile.type || "application/pdf",
+      })
+      if (!result.success || !result.lines?.length) {
+        toast({
+          title: "עיבוד AI לא מצא שורות",
+          description: result.error ?? "נסה קובץ אחר או הכנס את הנתונים ידנית",
+          variant: "destructive",
+        })
+        return
+      }
+      await handleImport(result.lines)
+      setPendingAiFile(null)
+    } catch (err) {
+      toast({
+        title: "שגיאה בעיבוד AI",
+        description: err instanceof Error ? err.message : "שגיאה לא ידועה",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAiParsing(false)
+    }
+  }
+
   const hasLines = lines.length > 0
 
   return (
     <div className="space-y-4 w-full">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap" dir="rtl">
-        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileSelect} />
-        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
-          <Upload className="h-4 w-4" />
-          {"ייבא Excel"}
-        </Button>
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.pdf,.docx,.txt" multiple className="hidden" onChange={handleFileSelect} />
 
         {hasLines && (
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
             <Download className="h-4 w-4" />
             {"ייצא Excel"}
+          </Button>
+        )}
+
+        {hasLines && (
+          <Button variant="outline" size="sm" onClick={handleSyncActors} disabled={isSyncing} className="gap-1.5">
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "מסנכרן..." : "סנכרן שחקנים"}
+          </Button>
+        )}
+
+        {hasLines && (
+          <>
+            <Button variant="outline" size="sm" onClick={handleAutoTranslate} disabled={isTranslating} className="gap-1.5">
+              <Languages className="h-4 w-4" />
+              {isTranslating ? "מתרגם..." : "תרגם לעברית"}
+            </Button>
+            <AIModelSelector value={aiTranslateModel} onChange={setAiTranslateModel} disabled={isTranslating} />
+          </>
+        )}
+
+        {pendingAiFile && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAiParse}
+            disabled={isAiParsing}
+            className="gap-1.5 text-purple-700 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700"
+          >
+            <Sparkles className={`h-4 w-4 ${isAiParsing ? "animate-pulse" : ""}`} />
+            {isAiParsing ? "מעבד..." : `עיבוד עם AI — ${pendingAiFile.name}`}
           </Button>
         )}
 
@@ -627,6 +925,93 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           </Button>
         </div>
       )}
+
+      {/* Actor recording progress — collapsible */}
+      {!loading && hasLines && (() => {
+        const actorMap = new Map<string, { name: string; total: number; recorded: number }>()
+        for (const line of lines) {
+          if (!line.actor_name) continue
+          if (!actorMap.has(line.actor_name)) actorMap.set(line.actor_name, { name: line.actor_name, total: 0, recorded: 0 })
+          const entry = actorMap.get(line.actor_name)!
+          entry.total++
+          if (line.rec_status === "הוקלט") entry.recorded++
+        }
+        const actors = Array.from(actorMap.values()).sort((a, b) => b.total - a.total)
+        if (actors.length === 0) return null
+
+        const activeActor = selectedProgressActor
+          ? actors.find((a) => a.name === selectedProgressActor) ?? actors[0]
+          : null
+
+        return (
+          <div className="rounded-lg border bg-muted/20" dir="rtl">
+            {/* Header — always visible */}
+            <button
+              type="button"
+              onClick={() => setProgressOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-muted/30 transition-colors rounded-lg"
+            >
+              <span>התקדמות הקלטה לפי שחקן</span>
+              {progressOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </button>
+
+            {/* Expandable body */}
+            {progressOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t">
+                {/* Actor selector pills */}
+                <div className="flex flex-wrap gap-1.5 pt-3">
+                  {actors.map((a) => {
+                    const pct = a.total > 0 ? Math.round((a.recorded / a.total) * 100) : 0
+                    const isSelected = selectedProgressActor === a.name
+                    return (
+                      <button
+                        key={a.name}
+                        type="button"
+                        onClick={() => setSelectedProgressActor(isSelected ? null : a.name)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background border-muted hover:bg-muted/50"
+                        }`}
+                      >
+                        <span>{a.name}</span>
+                        <span className={`${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                          {pct}%
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Detail view for selected actor */}
+                {activeActor ? (() => {
+                  const pct = activeActor.total > 0 ? Math.round((activeActor.recorded / activeActor.total) * 100) : 0
+                  const isComplete = pct === 100
+                  return (
+                    <div className="space-y-2 p-3 rounded-lg bg-background border">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm">{activeActor.name}</span>
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${
+                          isComplete ? "bg-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                        }`}>{pct}%</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{activeActor.recorded} הוקלטו מתוך {activeActor.total} שורות</div>
+                      <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${isComplete ? "bg-green-500" : "bg-amber-400"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })() : (
+                  <p className="text-xs text-muted-foreground pb-1">בחר שחקן מעל כדי לראות פירוט</p>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Filters (Agent 5: combobox for role; Agent 6: jump-to-line) */}
       {!loading && hasLines && (
@@ -724,11 +1109,11 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
           <FileSpreadsheet className="h-12 w-12 text-muted-foreground" />
           <p className="text-lg font-medium">{"סביבת העבודה ריקה"}</p>
-          <p className="text-sm text-muted-foreground">{"ייבא קובץ Excel של תסריט הדיבוב כדי להתחיל"}</p>
-          <Button onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4 ml-2" />
-            {"ייבא Excel"}
-          </Button>
+          <p className="text-sm text-muted-foreground">
+            {"כדי להתחיל, העלה תסריט בכרטיסיית "}
+            <span className="font-medium text-foreground">{"תסריטים"}</span>
+            {" — השורות יופיעו כאן אוטומטית"}
+          </p>
         </div>
       )}
 
@@ -736,47 +1121,44 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       {!loading && hasLines && (
         <div
           ref={tableContainerRef}
-          className="border rounded-lg overflow-auto max-h-[calc(100vh-280px)] w-full"
+          className="border rounded-lg overflow-auto max-h-[calc(100vh-180px)] w-full"
           dir="rtl"
         >
-          <Table
-            className="w-full"
-            style={{ direction: "rtl", tableLayout: "fixed", minWidth: 900 }}
-          >
-            {/* Fixed column widths — required for table-layout: fixed with virtual rows */}
-            <colgroup>
-              <col style={{ width: 48 }} />   {/* # */}
-              <col style={{ width: 40 }} />   {/* checkbox */}
-              <col style={{ width: 96 }} />   {/* TC */}
-              <col style={{ width: 132 }} />  {/* role */}
-              <col style={{ width: 112 }} />  {/* actor */}
-              <col style={{ width: 116 }} />  {/* status */}
-              <col />                          {/* translation — fill */}
-              <col />                          {/* source — fill */}
-            </colgroup>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead className="text-right">{"#"}</TableHead>
-                <TableHead className="text-center">
-                  <input
-                    ref={selectAllCheckboxRef}
-                    type="checkbox"
-                    checked={allFilteredSelected}
-                    onChange={toggleAll}
-                    className="cursor-pointer accent-primary h-4 w-4"
-                    aria-label="בחר הכל"
-                  />
-                </TableHead>
-                <TableHead className="text-right">{"TC"}</TableHead>
-                <TableHead className="text-right">{"תפקיד"}</TableHead>
-                <TableHead className="text-right">{"שחקן"}</TableHead>
-                <TableHead className="text-right">{"סטטוס"}</TableHead>
-                <TableHead className="text-right">{"תרגום"}</TableHead>
-                <TableHead className="text-right" dir="ltr">{"טקסט מקור"}</TableHead>
-              </TableRow>
-            </TableHeader>
-            {/* Virtual body: position relative + explicit height so virtualizer can position rows */}
-            <TableBody
+          {/*
+            Grid-based virtual table — header + body share the same grid-template-columns
+            so columns always align even with absolutely-positioned virtual rows.
+            Fixed cols: 38+34+90+140+120+110 = 532px. Remaining space split 50/50 for translation + source.
+          */}
+          <div style={{ minWidth: 1100, direction: "rtl" }}>
+            {/* Header */}
+            <div
+              className="sticky top-0 bg-background z-10 border-b"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
+                minWidth: 1100,
+              }}
+            >
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">#</div>
+              <div className="px-1 text-center h-10 flex items-center justify-center">
+                <input
+                  ref={selectAllCheckboxRef}
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  onChange={toggleAll}
+                  className="cursor-pointer accent-primary h-4 w-4"
+                  aria-label="בחר הכל"
+                />
+              </div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">TC</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תפקיד</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">שחקן</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">סטטוס</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תרגום</div>
+              <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground" dir="ltr">טקסט מקור</div>
+            </div>
+            {/* Virtual body */}
+            <div
               ref={tableBodyRef}
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
@@ -786,35 +1168,43 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const line = filteredLines[virtualRow.index]
                 return (
-                  <TableRow
+                  <div
                     key={line.id}
                     data-index={virtualRow.index}
-                    ref={rowVirtualizer.measureElement}
                     style={{
                       position: "absolute",
                       top: 0,
                       left: 0,
                       width: "100%",
+                      height: ROW_HEIGHT,
+                      overflow: "hidden",
                       transform: `translateY(${virtualRow.start}px)`,
+                      display: "grid",
+                      gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
                     }}
-                    className={`hover:bg-muted/30 ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
+                    className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
-                    <TableCell className="text-right text-xs text-muted-foreground">
+                    {/* # */}
+                    <div className="text-right text-xs text-muted-foreground px-2 overflow-hidden whitespace-nowrap flex items-center">
                       {line.line_number ?? ""}
-                    </TableCell>
-                    <TableCell className="text-center">
+                    </div>
+                    {/* checkbox */}
+                    <div className="text-center px-1 flex items-center justify-center">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
-                        onChange={() => toggleRow(line.id)}
+                        onChange={() => {/* handled by onClick for shift-key support */}}
+                        onClick={(e) => toggleRow(line.id, e.shiftKey)}
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
-                    </TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground text-right">
+                    </div>
+                    {/* TC */}
+                    <div className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap flex items-center">
                       {line.timecode ?? "\u2014"}
-                    </TableCell>
-                    <TableCell>
+                    </div>
+                    {/* Role */}
+                    <div className="px-2 overflow-hidden flex items-center">
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -822,7 +1212,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                               variant="secondary"
                               className={`text-xs max-w-full truncate block cursor-pointer hover:opacity-75 transition-opacity ${getRoleColor(line.role_name, roleIndex)}`}
                               onClick={() => setFilterRole(filterRole === line.role_name ? "__all__" : line.role_name)}
-                              title={filterRole === line.role_name ? "בטל סינון" : `סנן לפי ${line.role_name}`}
                             >
                               {line.role_name}
                             </Badge>
@@ -830,15 +1219,17 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                           <TooltipContent side="bottom" dir="rtl">{line.role_name}</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                    </TableCell>
-                    <TableCell className="text-sm text-right">
+                    </div>
+                    {/* Actor */}
+                    <div className="px-2 overflow-hidden whitespace-nowrap flex items-center">
                       {line.actor_name ? (
-                        <span className="font-medium">{line.actor_name}</span>
+                        <span className="text-xs font-medium truncate block">{line.actor_name}</span>
                       ) : (
-                        <span className="text-muted-foreground text-xs italic">{"לא שובץ"}</span>
+                        <span className="text-muted-foreground text-xs">—</span>
                       )}
-                    </TableCell>
-                    <TableCell>
+                    </div>
+                    {/* Status */}
+                    <div className="px-1 overflow-hidden flex items-center">
                       <Select
                         value={line.rec_status ?? "__pending__"}
                         onValueChange={(v) =>
@@ -849,7 +1240,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         }
                       >
                         <SelectTrigger
-                          className={`h-7 w-28 text-xs border-0 shadow-none px-2 ${
+                          className={`h-7 w-full text-xs border-0 shadow-none px-1 ${
                             line.rec_status
                               ? REC_STATUS_CONFIG[line.rec_status].className
                               : "text-muted-foreground"
@@ -869,18 +1260,46 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                           ))}
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                    <TableCell>
-                      <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground whitespace-pre-wrap" dir="ltr">
-                      {line.source_text ?? ""}
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                    {/* Translation (Hebrew) */}
+                    <div className="px-2 overflow-hidden flex items-center min-w-0">
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="truncate whitespace-nowrap w-full">
+                              <TranslationCell lineId={line.id} value={line.translation} onChange={handleTranslationChange} />
+                            </div>
+                          </TooltipTrigger>
+                          {line.translation && (
+                            <TooltipContent side="top" dir="rtl" className="max-w-sm text-xs whitespace-pre-wrap text-right break-words">
+                              {line.translation}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    {/* Source text (English) */}
+                    <div className="px-2 overflow-hidden flex items-center min-w-0" dir="ltr">
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <p className="text-xs text-muted-foreground truncate whitespace-nowrap cursor-default">
+                              {line.source_text ?? ""}
+                            </p>
+                          </TooltipTrigger>
+                          {line.source_text && (
+                            <TooltipContent side="top" dir="ltr" className="max-w-sm text-xs whitespace-pre-wrap text-left break-words">
+                              {line.source_text}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
                 )
               })}
-            </TableBody>
-          </Table>
+            </div>
+          </div>
           {filteredLines.length === 0 && (
             <p className="text-center py-8 text-muted-foreground">{"לא נמצאו שורות התואמות לסינון"}</p>
           )}
@@ -930,16 +1349,18 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       </Dialog>
 
       {/* Import dialog */}
-      {excelResult && (
+      {(excelResults || structuredData) && (
         <ScriptLinesImportDialog
           open={showImportDialog}
           onOpenChange={(open) => {
             if (!open) {
               setShowImportDialog(false)
-              setExcelResult(null)
+              setExcelResults(null)
+              setStructuredData(null)
             }
           }}
-          excelResult={excelResult}
+          excelResults={excelResults ?? undefined}
+          structuredData={structuredData ?? undefined}
           onImport={handleImport}
           isImporting={isImporting}
         />

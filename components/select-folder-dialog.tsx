@@ -54,7 +54,7 @@ export function SelectFolderDialog({ open, onOpenChange, actorIds, actorNames, o
       setLoading(true)
       const supabase = createClient()
 
-      const { data, error } = await supabase.from("folders").select("*").order("created_at", { ascending: false })
+      const { data, error } = await supabase.from("folders").select("id, name, color, created_at").order("created_at", { ascending: false })
 
       if (error) throw error
 

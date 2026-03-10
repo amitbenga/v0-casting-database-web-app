@@ -4,7 +4,8 @@ import type React from "react"
 
 import { useState, useRef, useEffect, memo } from "react"
 import { Heart, Play, Pause, Bookmark, MoreVertical, Music, GraduationCap, User, Download } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,7 +39,6 @@ export const ActorCard = memo(function ActorCard({
   const [showOverlay, setShowOverlay] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const router = useRouter()
 
   // Cleanup audio on unmount to prevent memory leaks
   useEffect(() => {
@@ -53,9 +53,7 @@ export const ActorCard = memo(function ActorCard({
   const currentYear = new Date().getFullYear()
   const age = currentYear - (actor.birth_year ?? 0)
 
-  const handleNavigateToProfile = () => {
-    router.push(`/actors/${actor.id}`)
-  }
+  const actorProfileHref = `/actors/${actor.id}`
 
   const handlePlayAudio = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -84,20 +82,6 @@ export const ActorCard = memo(function ActorCard({
       })
       setIsPlaying(true)
     }
-  }
-
-  const handleBookmark = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (onAddToProject) {
-      onAddToProject(actor)
-    }
-  }
-
-  const handleViewDetails = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    router.push(`/actors/${actor.id}`)
   }
 
   const handleAddToProject = (e: React.MouseEvent) => {
@@ -145,7 +129,7 @@ export const ActorCard = memo(function ActorCard({
       onMouseEnter={() => setShowOverlay(true)}
       onMouseLeave={() => setShowOverlay(false)}
     >
-      <div className="relative aspect-[3/4] overflow-hidden bg-muted cursor-pointer" onClick={handleNavigateToProfile}>
+      <Link href={actorProfileHref} className="relative aspect-[3/4] overflow-hidden bg-muted cursor-pointer block">
         {actor.image_url ? (
           <img
             src={actor.image_url || "/placeholder.svg"}
@@ -224,7 +208,7 @@ export const ActorCard = memo(function ActorCard({
             </div>
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Card Footer */}
       <div className="p-2 md:p-3 space-y-2 md:space-y-3">
@@ -242,19 +226,44 @@ export const ActorCard = memo(function ActorCard({
           >
             <Heart className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isFavorited ? "fill-red-500 text-red-500" : ""}`} />
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200"
-            onClick={handlePlayAudio}
-            disabled={!actor.voice_sample_url}
-          >
-            {isPlaying ? (
-              <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            ) : (
-              <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            )}
-          </Button>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 md:h-8 md:w-8 hover:bg-accent hover:text-accent-foreground transition-all duration-200 relative"
+                  onClick={handlePlayAudio}
+                  disabled={!actor.voice_sample_url}
+                >
+                  {isPlaying ? (
+                    <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  ) : (
+                    <span className="relative inline-flex items-center justify-center">
+                      <Play className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                      {!actor.voice_sample_url && (
+                        <svg
+                          className="absolute inset-0 w-full h-full text-destructive/80 pointer-events-none"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        >
+                          <line x1="2" y1="2" x2="14" y2="14" />
+                        </svg>
+                      )}
+                    </span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {!actor.voice_sample_url && (
+                <TooltipContent side="top">
+                  <p>אין קובץ קול</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <Button
             size="icon"
             variant="ghost"
@@ -273,12 +282,12 @@ export const ActorCard = memo(function ActorCard({
             onClick={(e) => e.stopPropagation()}
             className="h-4 w-4"
           />
-          <span
+          <Link
+            href={actorProfileHref}
             className="font-medium text-xs md:text-sm flex-1 line-clamp-1 cursor-pointer hover:text-primary transition-colors"
-            onClick={handleNavigateToProfile}
           >
             {actor.full_name}
-          </span>
+          </Link>
           <DropdownMenu dir="rtl">
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
@@ -290,14 +299,8 @@ export const ActorCard = memo(function ActorCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  handleViewDetails(e as any)
-                }}
-                className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors"
-              >
-                פרטים מלאים
+              <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-colors">
+                <Link href={actorProfileHref}>פרטים מלאים</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={(e) => {

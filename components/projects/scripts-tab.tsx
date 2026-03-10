@@ -16,6 +16,9 @@ import {
   AlertCircle,
   ChevronRight,
   Eye,
+  Sparkles,
+  Bot,
+  CircleCheck,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,6 +41,9 @@ import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import { FileSpreadsheet } from "lucide-react"
 import { saveScriptLines, getScriptLines } from "@/lib/actions/script-line-actions"
 import type { ScriptLineInput } from "@/lib/types"
+import { createScriptImport, getScriptImports, applyScriptImport, type ScriptImport } from "@/lib/actions/ai-import-actions"
+import { AIModelSelector } from "@/components/ai-model-selector"
+import { DEFAULT_PARSE_MODEL, type AIModelId } from "@/lib/ai-config"
 import {
   Dialog,
   DialogContent,
@@ -90,6 +96,13 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [showStructuredImport, setShowStructuredImport] = useState(false)
   const [isImportingStructured, setIsImportingStructured] = useState(false)
 
+  // AI import flow
+  const aiFileInputRef = useRef<HTMLInputElement>(null)
+  const [aiImports, setAiImports] = useState<ScriptImport[]>([])
+  const [isAiParsing, setIsAiParsing] = useState(false)
+  const [isApplyingImport, setIsApplyingImport] = useState<string | null>(null)
+  const [aiParseModel, setAiParseModel] = useState<AIModelId>(DEFAULT_PARSE_MODEL)
+
   const loadScripts = useCallback(async () => {
     try {
       const supabase = createBrowserClient()
@@ -110,6 +123,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
 
   useEffect(() => {
     loadScripts()
+    getScriptImports(projectId).then(setAiImports)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
@@ -181,7 +195,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
       if (result.parseResult.characters.length > 0) {
         if (!result.structuredData?.length) {
           toast({
-            title: "הפרסור הושלם",
+            title: "העיבוד הושלם",
             description: `זוהו ${result.parseResult.characters.length} תפקידים מתוך ${result.files.filter(f => f.status === "success").length} קבצים`,
           })
         }
@@ -196,7 +210,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     } catch (error) {
       console.error("Parse error:", error)
       toast({
-        title: "שגיאה בפרסור",
+        title: "שגיאה בעיבוד",
         description: error instanceof Error ? error.message : "שגיאה לא ידועה",
         variant: "destructive",
       })
@@ -226,6 +240,81 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
         title: "שגיאה במחיקת התסריט",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleAiParseFile = async (file: File) => {
+    setIsAiParsing(true)
+    try {
+      // 1. Extract raw text client-side (reuse existing text extraction)
+      const { extractText } = await import("@/lib/parser/text-extractor")
+      const { text: rawText } = await extractText(file)
+
+      if (!rawText || rawText.trim().length < 50) {
+        toast({ title: "לא ניתן לחלץ טקסט מהקובץ", description: "נסה קובץ אחר או פורמט אחר", variant: "destructive" })
+        return
+      }
+
+      // 2. Create import record in DB
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "txt"
+      const sourceType = (["pdf", "docx", "txt", "excel"].includes(ext) ? ext : "raw_text") as ScriptImport["source_type"]
+      const createResult = await createScriptImport(projectId, file.name, sourceType, rawText)
+
+      if (!createResult.success || !createResult.importId) {
+        toast({ title: "שגיאה ביצירת רשומת ייבוא", variant: "destructive" })
+        return
+      }
+
+      const importId = createResult.importId
+
+      // 3. Trigger AI agent via API route
+      toast({ title: "הסוכן עובד...", description: "מנתח את התסריט עם AI — זה עשוי לקחת 20-60 שניות" })
+
+      const response = await fetch("/api/ai/parse-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ importId, model: aiParseModel }),
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        toast({ title: "הסוכן נכשל", description: result.error ?? "שגיאה לא ידועה", variant: "destructive" })
+      } else {
+        toast({
+          title: "הניתוח הושלם",
+          description: `זוהו ${result.summary.roles} תפקידים ו-${result.summary.lines} שורות`,
+        })
+      }
+
+      // 4. Reload imports list
+      const updated = await getScriptImports(projectId)
+      setAiImports(updated)
+    } catch (err) {
+      console.error("[handleAiParseFile]", err)
+      toast({ title: "שגיאה", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
+    } finally {
+      setIsAiParsing(false)
+      if (aiFileInputRef.current) aiFileInputRef.current.value = ""
+    }
+  }
+
+  const handleApplyImport = async (importId: string) => {
+    setIsApplyingImport(importId)
+    try {
+      const result = await applyScriptImport(importId)
+      if (result.success) {
+        toast({
+          title: "הוחל בהצלחה",
+          description: `${result.rolesCreated ?? 0} תפקידים ו-${result.linesCreated ?? 0} שורות נוספו לפרויקט`,
+        })
+        const updated = await getScriptImports(projectId)
+        setAiImports(updated)
+        onScriptApplied?.()
+      } else {
+        toast({ title: "שגיאה בהחלה", description: result.error, variant: "destructive" })
+      }
+    } finally {
+      setIsApplyingImport(null)
     }
   }
 
@@ -314,7 +403,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             העלאת תסריטים
           </CardTitle>
           <CardDescription>
-            העלה קבצי תסריט לפרסור אוטומטי. ניתן להעלות מספר קבצים יחד כתסריט אחד.
+            העלה קבצי תסריט לעיבוד אוטומטי. ניתן להעלות מספר קבצים יחד כתסריט אחד.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -347,14 +436,27 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               ref={excelInputRef}
               type="file"
               accept=".xlsx,.xls"
+              multiple
               onChange={async (e) => {
-                const file = e.target.files?.[0]
-                if (!file) return
+                const files = Array.from(e.target.files ?? [])
+                if (files.length === 0) return
                 try {
-                  const result = await parseExcelFile(file)
-                  setExcelResult(result)
+                  // Parse all selected Excel files and merge their sheets
+                  const results = await Promise.all(files.map(parseExcelFile))
+                  const merged: typeof results[0] = {
+                    sheets: results.flatMap((r, i) =>
+                      r.sheets.map((s) => ({
+                        ...s,
+                        // Prefix sheet name with file name when multiple files selected
+                        name: files.length > 1 ? `${files[i].name.replace(/\.[^.]+$/, "")} — ${s.name}` : s.name,
+                      }))
+                    ),
+                    fileName: files.length === 1 ? files[0].name : `${files.length} קבצים`,
+                    totalRows: results.reduce((sum, r) => sum + r.totalRows, 0),
+                  }
+                  setExcelResult(merged)
                   setShowExcelPreview(true)
-                  toast({ title: "קובץ Excel נקרא בהצלחה", description: `${result.totalRows} שורות נמצאו` })
+                  toast({ title: "קובץ Excel נקרא בהצלחה", description: `${merged.totalRows} שורות נמצאו מ-${merged.sheets.length} גיליונות` })
                 } catch (err) {
                   toast({ title: "שגיאה בקריאת קובץ Excel", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
                 }
@@ -378,7 +480,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
           {pendingFiles.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">קבצים לפרסור ({pendingFiles.length})</h4>
+                <h4 className="text-sm font-medium">קבצים לעיבוד ({pendingFiles.length})</h4>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -441,7 +543,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                   {isParsing ? (
                     <>
                       <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                      מפרסר...
+                      מעבד...
                     </>
                   ) : (
                     <>
@@ -471,7 +573,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                 <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-medium text-green-800 dark:text-green-200">
-                    הפרסור הושלם בהצלחה
+                    העיבוד הושלם בהצלחה
                   </p>
                   <div className="flex items-center gap-4 mt-2 text-sm text-green-700 dark:text-green-300">
                     <span className="flex items-center gap-1">
@@ -498,6 +600,111 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                   </Button>
                 </div>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI Parse Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-violet-500" />
+            עיבוד עם AI
+          </CardTitle>
+          <CardDescription>
+            כשהעיבוד הרגיל לא מצליח — שלח את הקובץ לסוכן AI שיזהה תפקידים ושורות.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <input
+            ref={aiFileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleAiParseFile(file)
+            }}
+          />
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => aiFileInputRef.current?.click()}
+              disabled={isAiParsing}
+              className="gap-2 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/30"
+            >
+              {isAiParsing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  הסוכן עובד...
+                </>
+              ) : (
+                <>
+                  <Bot className="h-4 w-4" />
+                  בחר קובץ לניתוח עם AI
+                </>
+              )}
+            </Button>
+            <AIModelSelector value={aiParseModel} onChange={setAiParseModel} disabled={isAiParsing} />
+          </div>
+
+          {/* AI Imports List */}
+          {aiImports.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">ייבואים קודמים</p>
+              {aiImports.map((imp) => (
+                <div
+                  key={imp.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{imp.source_filename}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {imp.status === "pending" && <Badge variant="outline" className="text-xs text-muted-foreground">ממתין</Badge>}
+                        {imp.status === "processing" && <Badge variant="outline" className="text-xs text-blue-600 border-blue-200 gap-1"><Loader2 className="h-3 w-3 animate-spin" />בעיבוד</Badge>}
+                        {imp.status === "draft_ready" && (
+                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 gap-1">
+                            <Bot className="h-3 w-3" />
+                            {(imp.draft_json?.roles?.length ?? 0)} תפקידים · {(imp.draft_json?.lines?.length ?? 0)} שורות
+                          </Badge>
+                        )}
+                        {imp.status === "applied" && (
+                          <Badge variant="outline" className="text-xs text-green-600 border-green-200 gap-1">
+                            <CircleCheck className="h-3 w-3" />
+                            הוחל
+                          </Badge>
+                        )}
+                        {imp.status === "failed" && (
+                          <Badge variant="outline" className="text-xs text-red-600 border-red-200 gap-1">
+                            <XCircle className="h-3 w-3" />
+                            נכשל
+                          </Badge>
+                        )}
+                        {imp.tokens_used && (
+                          <span className="text-xs text-muted-foreground">{imp.tokens_used.toLocaleString()} tokens</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {imp.status === "draft_ready" && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleApplyImport(imp.id)}
+                      disabled={isApplyingImport === imp.id}
+                      className="flex-shrink-0 mr-2"
+                    >
+                      {isApplyingImport === imp.id ? (
+                        <><Loader2 className="h-4 w-4 animate-spin ml-1" />מחיל...</>
+                      ) : (
+                        <><CheckCircle className="h-4 w-4 ml-1" />החל על הפרויקט</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

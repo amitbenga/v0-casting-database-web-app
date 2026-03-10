@@ -52,7 +52,6 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
   const [isAssigning, setIsAssigning] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const [inlineExpanded, setInlineExpanded] = useState(false)
 
   // Notes sheet — tracks which casting's notes are open
   const [notesSheetOpen, setNotesSheetOpen] = useState(false)
@@ -197,139 +196,118 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
       <div className="flex items-start justify-between gap-4">
         {/* Role Info — left */}
         <div className="min-w-0 flex-1">
-          {/* Clickable role name */}
-          <button
-            type="button"
-            onClick={() => setInlineExpanded((prev) => !prev)}
-            className="flex items-center gap-2 text-right cursor-pointer hover:opacity-70 transition-opacity"
-          >
+          {/* Role name */}
+          <div className="flex items-center gap-2">
             <h4 className="font-medium truncate">{role.role_name}</h4>
             {role.source === "script" && (
               <Badge variant="outline" className="text-xs">מתסריט</Badge>
             )}
-          </button>
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             {role.replicas_count} רפליקות
           </p>
 
-          {/* Default: show all assigned actor names */}
-          {!inlineExpanded && castings.length > 0 && (
+          {/* Show assigned actor names */}
+          {castings.length > 0 && (
             <p className="text-sm text-muted-foreground mt-1">
               {castings.map((c) => c.actor?.full_name || "שחקן").join(", ")}
             </p>
-          )}
-
-          {/* Inline expand — שבץ / מחק */}
-          {inlineExpanded && (
-            <div className="flex items-center gap-2 mt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => { setShowSearch(true); setInlineExpanded(false) }}
-                disabled={isAssigning}
-              >
-                שבץ
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs text-destructive hover:text-destructive"
-                onClick={() => { handleDeleteRole(); setInlineExpanded(false) }}
-                disabled={isUpdating || role.source !== "manual"}
-              >
-                מחק
-              </Button>
-            </div>
           )}
         </div>
 
         {/* Casting Section — right */}
         <div className="flex flex-col gap-2 flex-shrink-0 items-end">
-          {castings.length > 0 && (
-            <>
-              {castings.map((casting) => (
-                <div key={casting.id} className="flex items-center gap-2">
-                  {/* Actor chip */}
-                  <div className="flex items-center gap-2 p-1.5 bg-muted rounded-lg">
-                    <Avatar className="h-7 w-7">
-                      <AvatarImage src={casting.actor?.image_url} alt={casting.actor?.full_name} />
-                      <AvatarFallback className="text-xs">
-                        {(casting.actor?.full_name || "ש").charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-medium">{casting.actor?.full_name || "שחקן"}</span>
-                    {casting.actor?.voice_sample_url && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          const audio = new Audio(casting.actor!.voice_sample_url!)
-                          audio.play()
-                        }}
-                      >
-                        <Play className="h-3 w-3" />
-                      </Button>
-                    )}
+          {/* Assigned actors */}
+          {castings.map((casting) => (
+            <div key={casting.id} className="flex items-center gap-2">
+              {/* Actor chip */}
+              <div className="flex items-center gap-2 p-1.5 bg-muted rounded-lg">
+                <Avatar className="h-7 w-7">
+                  <AvatarImage src={casting.actor?.image_url} alt={casting.actor?.full_name} />
+                  <AvatarFallback className="text-xs">
+                    {(casting.actor?.full_name || "ש").charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">{casting.actor?.full_name || "שחקן"}</span>
+                {casting.actor?.voice_sample_url ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => {
+                      const audio = new Audio(casting.actor!.voice_sample_url!)
+                      audio.play()
+                    }}
+                  >
+                    <Play className="h-3 w-3" />
+                  </Button>
+                ) : (
+                  /* Play icon with red diagonal slash — no audio file. Single SVG renders both. */
+                  <div title="אין קובץ הקלטה" className="h-6 w-6 flex items-center justify-center">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                      {/* Play triangle */}
+                      <path d="M3 2.5L11 7L3 11.5V2.5Z" fill="currentColor" className="text-muted-foreground/40" />
+                      {/* Red slash */}
+                      <line x1="1" y1="1" x2="13" y2="13" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
                   </div>
+                )}
+              </div>
 
-                  {/* Status dropdown */}
-                  <Select
-                    value={casting.status}
-                    onValueChange={(v) => handleStatusChange(casting.actor_id, v as CastingStatus)}
-                    disabled={isUpdating}
-                  >
-                    <SelectTrigger className={`w-[110px] h-8 text-xs ${CASTING_STATUS_COLORS[casting.status] || ""}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CASTING_STATUS_LIST.map((status) => (
-                        <SelectItem key={status} value={status} className="text-xs">
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {/* Status dropdown */}
+              <Select
+                value={casting.status}
+                onValueChange={(v) => handleStatusChange(casting.actor_id, v as CastingStatus)}
+                disabled={isUpdating}
+              >
+                <SelectTrigger className={`w-[110px] h-8 text-xs ${CASTING_STATUS_COLORS[casting.status] || ""}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CASTING_STATUS_LIST.map((status) => (
+                    <SelectItem key={status} value={status} className="text-xs">
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-                  {/* Notes */}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className={`h-8 w-8 ${casting.notes ? "text-primary" : "text-muted-foreground"}`}
-                    onClick={() => openNotesSheet(casting)}
-                    title="הערות"
-                  >
-                    <FileText className="h-4 w-4" />
-                  </Button>
+              {/* Notes */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className={`h-8 w-8 ${casting.notes ? "text-primary" : "text-muted-foreground"}`}
+                onClick={() => openNotesSheet(casting)}
+                title="הערות"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
 
-                  {/* Unassign */}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => handleUnassignActor(casting.actor_id)}
-                    disabled={isUpdating}
-                    title="הסר שחקן"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              {/* Unassign */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={() => handleUnassignActor(casting.actor_id)}
+                disabled={isUpdating}
+                title="הסר שחקן"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
 
-              {/* Add another actor */}
-              {!showSearch && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs self-end text-muted-foreground"
-                  onClick={() => setShowSearch(true)}
-                >
-                  <UserPlus className="h-3 w-3 ml-1" />
-                  הוסף שחקן
-                </Button>
-              )}
-            </>
+          {/* Cast button — shown when no search is open */}
+          {!showSearch && (
+            <Button
+              size="sm"
+              variant={castings.length === 0 ? "outline" : "ghost"}
+              className={`h-7 text-xs ${castings.length === 0 ? "" : "self-end text-muted-foreground"}`}
+              onClick={() => setShowSearch(true)}
+            >
+              <UserPlus className="h-3 w-3 ml-1" />
+              {castings.length === 0 ? "שבץ שחקן" : "הוסף שחקן"}
+            </Button>
           )}
 
           {/* Actor search */}

@@ -34,7 +34,6 @@ import {
   Plus,
   UserPlus,
   X,
-  RefreshCw,
   Trash2,
   AlertTriangle,
   Users,
@@ -53,6 +52,7 @@ import {
   updateCastingStatus,
   deleteRole,
 } from "@/lib/actions/casting-actions"
+import { syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
 import type { ProjectRoleWithCasting, RoleConflict, CastingStatus } from "@/lib/types"
 import { CASTING_STATUS_LIST, CASTING_STATUS_COLORS } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
@@ -141,6 +141,9 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
   const [isAssigning, setIsAssigning] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
 
+  const castings = role.castings?.length ? role.castings : role.casting ? [role.casting] : []
+  const hasCastings = castings.length > 0
+
   const handleAssignActor = async (actor: { id: string; name: string; image_url?: string }) => {
     setIsAssigning(true)
     try {
@@ -163,10 +166,7 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
     }
   }
 
-  const handleUnassign = async () => {
-    const actorId = role.casting?.actor_id
-    if (!actorId) return
-
+  const handleUnassign = async (actorId: string) => {
     setIsUpdating(true)
     try {
       const result = await unassignActorFromRole(role.id, actorId)
@@ -179,39 +179,37 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
     }
   }
 
-  const handleStatusChange = async (newStatus: CastingStatus) => {
-    const actorId = role.casting?.actor_id
-    if (!actorId) return
-
+  const handleStatusChange = async (actorId: string, newStatus: CastingStatus) => {
     setIsUpdating(true)
     try {
       const result = await updateCastingStatus(role.id, actorId, newStatus)
       if (result.success) onUpdate()
+      else {
+        toast({ title: "שגיאה", description: result.error || "שגיאה בעדכון סטטוס", variant: "destructive" })
+      }
     } finally {
       setIsUpdating(false)
     }
   }
 
-  const isCasted = !!role.casting
-
   return (
     <div
       className={`
-        group flex items-center gap-3 px-4 py-2.5 
+        group flex items-start gap-3 px-4 py-2.5
         border-b border-border/50 last:border-b-0
         transition-colors
         ${isSelected ? "bg-primary/8 ring-1 ring-inset ring-primary/20" : "hover:bg-muted/40"}
-        ${isCasted ? "" : "bg-muted/10"}
+        ${hasCastings ? "" : "bg-muted/10"}
       `}
     >
       {/* Role name - clickable for selection */}
-      <div className="flex items-center gap-2 min-w-[180px] max-w-[260px]">
+      <div className="flex items-center gap-2 min-w-[180px] max-w-[260px] pt-0.5">
         <button
           type="button"
           className={`text-sm font-medium truncate text-right cursor-pointer transition-colors select-none ${
             isSelected
               ? "text-primary font-semibold"
-              : isCasted
+              : hasCastings
               ? "text-foreground hover:text-primary"
               : "text-muted-foreground hover:text-foreground"
           }`}
@@ -222,7 +220,7 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
       </div>
 
       {/* Replicas count */}
-      <div className="flex-shrink-0 w-16 text-center">
+      <div className="flex-shrink-0 w-16 text-center pt-0.5">
         <span className="text-xs text-muted-foreground">{role.replicas_count}</span>
       </div>
 
@@ -230,27 +228,27 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
       <ConflictTooltip roleId={role.id} roleConflicts={roleConflicts} roleLookup={roleLookup} />
 
       {/* Casting section */}
-      <div className="flex-1 flex items-center justify-end gap-2">
-        {role.casting ? (
-          <>
+      <div className="flex-1 flex flex-col items-end gap-1.5">
+        {castings.map((casting) => (
+          <div key={casting.id} className="flex items-center gap-2">
             <div className="flex items-center gap-2 px-2 py-1 bg-muted/60 rounded-md">
               <Avatar className="h-6 w-6">
-                <AvatarImage src={role.casting.actor?.image_url} alt={role.casting.actor?.full_name} />
+                <AvatarImage src={casting.actor?.image_url} alt={casting.actor?.full_name} />
                 <AvatarFallback className="text-[10px]">
-                  {(role.casting.actor?.full_name || "?").charAt(0)}
+                  {(casting.actor?.full_name || "?").charAt(0)}
                 </AvatarFallback>
               </Avatar>
               <span className="text-sm font-medium max-w-[140px] truncate">
-                {role.casting.actor?.full_name || "שחקן"}
+                {casting.actor?.full_name || "שחקן"}
               </span>
             </div>
 
             <Select
-              value={role.casting.status}
-              onValueChange={(v) => handleStatusChange(v as CastingStatus)}
+              value={casting.status}
+              onValueChange={(v) => handleStatusChange(casting.actor_id, v as CastingStatus)}
               disabled={isUpdating}
             >
-              <SelectTrigger className={`w-[100px] h-7 text-xs ${CASTING_STATUS_COLORS[role.casting.status] || ""}`}>
+              <SelectTrigger className={`w-[100px] h-7 text-xs ${CASTING_STATUS_COLORS[casting.status] || ""}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -262,16 +260,20 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSearch(true)} disabled={isUpdating} title="החלף שחקן">
-                <RefreshCw className="h-3.5 w-3.5" />
-              </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={handleUnassign} disabled={isUpdating} title="בטל שיבוץ">
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </>
-        ) : showSearch ? (
+            <Button
+              size="icon" variant="ghost"
+              className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => handleUnassign(casting.actor_id)}
+              disabled={isUpdating}
+              title="בטל שיבוץ"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+
+        {/* Add actor button / search */}
+        {showSearch ? (
           <div className="flex items-center gap-2 w-[280px]">
             <ActorSearchAutocomplete
               onSelect={handleAssignActor}
@@ -284,7 +286,15 @@ function RoleRow({ role, roleConflicts, roleLookup, isSelected, onRoleNameClick,
             </Button>
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground/60">לא משובץ</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setShowSearch(true)}
+          >
+            <UserPlus className="h-3 w-3 ml-1" />
+            {hasCastings ? "הוסף שחקן" : "שבץ"}
+          </Button>
         )}
       </div>
     </div>
@@ -344,20 +354,19 @@ export function CastingWorkspace({ projectId, onCastingChange }: CastingWorkspac
     }
   }, [projectId])
 
-  // Refresh after mutations — notifies parent via stable ref to avoid render loop
+  // Refresh after mutations — silent (no loading spinner), notifies parent via stable ref.
+  // Also syncs actor_id on script_lines so the workspace tab shows the correct actor name.
   const refreshRoles = useCallback(async () => {
     try {
-      setLoading(true)
-      setError(null)
-      const response = await getProjectRolesWithCasting(projectId)
+      const [response] = await Promise.all([
+        getProjectRolesWithCasting(projectId),
+        syncActorsToScriptLines(projectId),
+      ])
       setRoles(response.roles)
       setConflicts(response.conflicts)
       onCastingChangeRef.current?.()
     } catch (err) {
-      setError("שגיאה בטעינת תפקידים")
       console.error(err)
-    } finally {
-      setLoading(false)
     }
   }, [projectId])
 
