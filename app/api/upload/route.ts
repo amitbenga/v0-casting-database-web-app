@@ -52,16 +52,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log("[v0] [upload-api] Starting upload:", { key, fileSize: file.size, fileType: file.type })
+
     const buffer = Buffer.from(await file.arrayBuffer())
     const result = await uploadToR2(key, buffer, file.type || "application/octet-stream")
 
     if (!result.success) {
+      console.error("[v0] [upload-api] R2 upload failed:", result.error)
       return NextResponse.json({ error: result.error ?? "Upload failed" }, { status: 500 })
     }
 
+    console.log("[v0] [upload-api] Upload successful:", { key: result.key })
     return NextResponse.json({ key: result.key })
   } catch (err) {
-    console.error("[upload-api] Unhandled error:", err)
+    console.error("[v0] [upload-api] Unhandled error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

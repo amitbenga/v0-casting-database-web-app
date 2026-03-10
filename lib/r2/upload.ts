@@ -25,6 +25,8 @@ export async function uploadToR2(
     const client = getR2Client()
     const bucket = getR2BucketName()
 
+    console.log("[v0] [r2] uploadToR2 starting:", { bucket, key, contentType, bodyLength: body.length })
+
     await client.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -34,9 +36,10 @@ export async function uploadToR2(
       })
     )
 
+    console.log("[v0] [r2] uploadToR2 success:", { key })
     return { success: true, key }
   } catch (err) {
-    console.error("[r2] uploadToR2 failed:", key, err)
+    console.error("[v0] [r2] uploadToR2 failed:", key, err)
     return { success: false, error: String(err) }
   }
 }
