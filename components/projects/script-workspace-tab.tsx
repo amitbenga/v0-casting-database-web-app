@@ -130,6 +130,63 @@ function TranslationCell({
   )
 }
 
+function TimecodeCell({
+  lineId,
+  value,
+  onChange,
+}: {
+  lineId: string
+  value: string | undefined
+  onChange: (lineId: string, newValue: string) => void
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? "")
+
+  function startEdit() {
+    setDraft(value ?? "")
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value ?? "")) {
+      onChange(lineId, draft.trim())
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit() }
+          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
+        }}
+        placeholder="HH:MM:SS:FF"
+        className="w-full h-8 px-1 text-xs border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono text-center"
+        dir="ltr"
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={startEdit}
+      className="cursor-pointer w-full h-8 flex justify-center items-center px-1 text-xs font-mono text-muted-foreground hover:bg-muted/50 rounded transition-colors"
+      title="ערוך טיימקוד"
+    >
+      {value ? (
+        <span>{value}</span>
+      ) : (
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity">--:--</span>
+      )}
+    </div>
+  )
+}
+
 // Searchable role combobox (Agent 5)
 function RoleCombobox({
   value,
@@ -740,14 +797,46 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
-  // Excel export — RTL, bold headers, freeze pane, auto widths, filters (Agent 6)
+  // Inline timecode update
+  const handleTimecodeChange = useCallback(
+    async (lineId: string, newTimecode: string) => {
+      // Capture original before optimistic update
+      let originalTimecode: string | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalTimecode = line?.timecode
+        return prev.map((l) =>
+          l.id === lineId ? { ...l, timecode: newTimecode } : l
+        )
+      })
+      const result = await updateScriptLine(lineId, { timecode: newTimecode })
+      if (!result.success) {
+        toast({ title: "שגיאה", description: "שגיאה בשמירת טיימקוד", variant: "destructive" })
+        // Revert to original
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, timecode: originalTimecode } : l
+          )
+        )
+      }
+    },
+    [toast]
+  )
+
+  // Master Excel export — RTL, bold headers, multiple sheets (Agent 6)
   async function handleExport() {
     try {
       const XLSX = await import("xlsx")
+      const { getProjectRolesWithCasting } = await import("@/lib/actions/casting-actions")
 
+      const { roles, success } = await getProjectRolesWithCasting(projectId)
+      const rolesData = success && roles ? roles : []
+
+      // ---------------------------------------------------------
+      // Sheet 1: Script Workspace (סביבת עבודה)
+      // ---------------------------------------------------------
       const HEADERS = ["#", "TC", "תפקיד", "שחקן", "סטטוס הקלטה", "תרגום", "טקסט מקור", "הערות"]
 
-      // Build rows as arrays (preserves column order)
       const dataRows = lines.map((l) => [
         l.line_number ?? "",
         l.timecode ?? "",
@@ -762,7 +851,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       const allRows = [HEADERS, ...dataRows]
       const ws = XLSX.utils.aoa_to_sheet(allRows)
 
-      // Column widths (characters)
       ws["!cols"] = [
         { wch: 6 },   // #
         { wch: 14 },  // TC
@@ -774,14 +862,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         { wch: 24 },  // הערות
       ]
 
-      // Freeze first row (header)
       ws["!freeze"] = { xSplit: 0, ySplit: 1 }
-
-      // AutoFilter on header row
-      const lastCol = String.fromCharCode(65 + HEADERS.length - 1) // 'H'
+      const lastCol = String.fromCharCode(65 + HEADERS.length - 1)
       ws["!autofilter"] = { ref: `A1:${lastCol}1` }
 
-      // Bold header row + RTL alignment for all cells
       const boldStyle = { font: { bold: true }, alignment: { horizontal: "right", readingOrder: 2 } }
       const cellStyle = { alignment: { horizontal: "right", readingOrder: 2, wrapText: true } }
 
@@ -797,16 +881,68 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         }
       }
 
+      // ---------------------------------------------------------
+      // Sheet 2: Roles and Castings (צוות ותפקידים)
+      // ---------------------------------------------------------
+      const CASTING_HEADERS = ["תפקיד", "כמות רפליקות", "סטטוס ליהוק", "שחקן מלוהק", "סטטוס מס הכנסה", "הערות הקלטה"]
+
+      const castingRows = rolesData.map(r => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mainCasting: any = Array.isArray(r.castings) ? r.castings.find((c: any) => c.status === "מלוהק") || r.castings[0] : r.casting;
+
+        return [
+          r.role_name,
+          r.replicas_count || r.replicas_needed || 0,
+          mainCasting?.status || "לא מלוהק",
+          mainCasting?.name || "",
+          // Only if VAT exists on actor (it doesn't in the summarized role view natively without extra query, we will gracefully fallback to "")
+          "",
+          mainCasting?.notes || ""
+        ]
+      })
+
+      const castingWs = XLSX.utils.aoa_to_sheet([CASTING_HEADERS, ...castingRows])
+      castingWs["!cols"] = [
+        { wch: 22 },  // תפקיד
+        { wch: 15 },  // כמות
+        { wch: 15 },  // סטטוס
+        { wch: 25 },  // שחקן
+        { wch: 15 },  // VAT (Empty initially)
+        { wch: 40 },  // הערות
+      ]
+
+      castingWs["!freeze"] = { xSplit: 0, ySplit: 1 }
+      const cLastCol = String.fromCharCode(65 + CASTING_HEADERS.length - 1)
+      castingWs["!autofilter"] = { ref: `A1:${cLastCol}1` }
+
+      for (let c = 0; c < CASTING_HEADERS.length; c++) {
+        const headerAddr = XLSX.utils.encode_cell({ r: 0, c })
+        if (!castingWs[headerAddr]) castingWs[headerAddr] = { v: CASTING_HEADERS[c], t: "s" }
+        castingWs[headerAddr].s = boldStyle
+      }
+      for (let r = 1; r <= castingRows.length; r++) {
+        for (let c = 0; c < CASTING_HEADERS.length; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c })
+          if (castingWs[addr]) castingWs[addr].s = cellStyle
+        }
+      }
+
+      // ---------------------------------------------------------
+      // Produce workbook
+      // ---------------------------------------------------------
       const wb = XLSX.utils.book_new()
-      // RTL sheet direction
       XLSX.utils.book_append_sheet(wb, ws, "סביבת עבודה")
+      XLSX.utils.book_append_sheet(wb, castingWs, "צוות ותפקידים")
+
       wb.Workbook = wb.Workbook ?? { Views: [], Sheets: [] }
       wb.Workbook.Sheets = wb.Workbook.Sheets ?? []
-      wb.Workbook.Sheets[0] = wb.Workbook.Sheets[0] ?? {};
-      (wb.Workbook.Sheets[0] as Record<string, unknown>).RTL = true
+      if (!wb.Workbook.Sheets[0]) wb.Workbook.Sheets[0] = {}
+      if (!wb.Workbook.Sheets[1]) wb.Workbook.Sheets[1] = {}
+        ; (wb.Workbook.Sheets[0] as Record<string, unknown>).RTL = true
+        ; (wb.Workbook.Sheets[1] as Record<string, unknown>).RTL = true
 
-      XLSX.writeFile(wb, `workspace-${projectId}.xlsx`)
-      toast({ title: "ייצוא הצליח", description: `${lines.length.toLocaleString()} שורות יוצאו` })
+      XLSX.writeFile(wb, `Master-Project-${projectId}.xlsx`)
+      toast({ title: "ייצוא פרוייקט שלם הצליח", description: `${lines.length.toLocaleString()} שורות ו-${rolesData.length} תפקידים מלוהקים יוצאו לקובץ Excel מרוכז.` })
     } catch {
       toast({ title: "שגיאה בייצוא", variant: "destructive" })
     }
@@ -968,11 +1104,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         key={a.name}
                         type="button"
                         onClick={() => setSelectedProgressActor(isSelected ? null : a.name)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background border-muted hover:bg-muted/50"
-                        }`}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${isSelected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-muted hover:bg-muted/50"
+                          }`}
                       >
                         <span>{a.name}</span>
                         <span className={`${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
@@ -991,9 +1126,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     <div className="space-y-2 p-3 rounded-lg bg-background border">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-sm">{activeActor.name}</span>
-                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${
-                          isComplete ? "bg-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                        }`}>{pct}%</span>
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${isComplete ? "bg-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                          }`}>{pct}%</span>
                       </div>
                       <div className="text-xs text-muted-foreground">{activeActor.recorded} הוקלטו מתוך {activeActor.total} שורות</div>
                       <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
@@ -1193,15 +1327,15 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
-                        onChange={() => {/* handled by onClick for shift-key support */}}
+                        onChange={() => {/* handled by onClick for shift-key support */ }}
                         onClick={(e) => toggleRow(line.id, e.shiftKey)}
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
                     </div>
                     {/* TC */}
-                    <div className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap flex items-center">
-                      {line.timecode ?? "\u2014"}
+                    <div className="group text-right px-2 overflow-hidden whitespace-nowrap flex items-center min-w-0 pointer-events-auto z-10">
+                      <TimecodeCell lineId={line.id} value={line.timecode} onChange={handleTimecodeChange} />
                     </div>
                     {/* Role */}
                     <div className="px-2 overflow-hidden flex items-center">
@@ -1240,11 +1374,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         }
                       >
                         <SelectTrigger
-                          className={`h-7 w-full text-xs border-0 shadow-none px-1 ${
-                            line.rec_status
-                              ? REC_STATUS_CONFIG[line.rec_status].className
-                              : "text-muted-foreground"
-                          }`}
+                          className={`h-7 w-full text-xs border-0 shadow-none px-1 ${line.rec_status
+                            ? REC_STATUS_CONFIG[line.rec_status].className
+                            : "text-muted-foreground"
+                            }`}
                           dir="rtl"
                         >
                           <SelectValue />
