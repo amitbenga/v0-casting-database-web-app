@@ -199,9 +199,6 @@ export function RoleCastingCard({ role, conflicts = [], isChild = false, onUpdat
           {/* Role name */}
           <div className="flex items-center gap-2">
             <h4 className="font-medium truncate">{role.role_name}</h4>
-            {role.source === "script" && (
-              <Badge variant="outline" className="text-xs">מתסריט</Badge>
-            )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             {role.replicas_count} רפליקות

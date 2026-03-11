@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { PROJECT_STATUS_LIST, PROJECT_STATUS_LABELS, type ProjectStatus } from "@/lib/types"
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -25,7 +26,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
     casting_director: "",
     project_date: "",
     notes: "",
-    status: "not_started",
+    status: "not_started" as ProjectStatus,
   })
   const [submitting, setSubmitting] = useState(false)
 
@@ -56,7 +57,7 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
       console.log("[v0] Project created successfully")
       onOpenChange(false)
-      setFormData({ name: "", director: "", casting_director: "", project_date: "", notes: "", status: "not_started" })
+      setFormData({ name: "", director: "", casting_director: "", project_date: "", notes: "", status: "not_started" as ProjectStatus })
 
       if (onProjectCreated) {
         onProjectCreated()
@@ -126,17 +127,16 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
           <div className="space-y-2">
             <Label htmlFor="status">סטטוס</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as ProjectStatus })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="not_started">לא התחיל</SelectItem>
-                <SelectItem value="casting">בליהוק</SelectItem>
-                <SelectItem value="voice_testing">בדיקת קולות</SelectItem>
-                <SelectItem value="casted">ליהוק הושלם</SelectItem>
-                <SelectItem value="recording">בהקלטה</SelectItem>
-                <SelectItem value="completed">הושלם</SelectItem>
+                {PROJECT_STATUS_LIST.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {PROJECT_STATUS_LABELS[status]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

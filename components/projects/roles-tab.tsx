@@ -10,9 +10,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2, Plus } from "lucide-react"
+import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2, Plus, Trash2 } from "lucide-react"
 import { RoleCastingCard } from "./role-casting-card"
-import { getProjectRolesWithCasting, createManualRole } from "@/lib/actions/casting-actions"
+import { getProjectRolesWithCasting, createManualRole, deleteRole } from "@/lib/actions/casting-actions"
 import type { ProjectRoleWithCasting, RoleConflict } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
@@ -38,6 +38,8 @@ export function RolesTab({ projectId }: RolesTabProps) {
   const [newRoleName, setNewRoleName] = useState("")
   const [newRoleReplicas, setNewRoleReplicas] = useState(0)
   const [isCreatingRole, setIsCreatingRole] = useState(false)
+  const [selectedRoleIds, setSelectedRoleIds] = useState<Set<string>>(new Set())
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false)
   const [filters, setFilters] = useState<RolesFilterState>({
     search: "",
     showOnlyUnassigned: false,
@@ -70,6 +72,18 @@ export function RolesTab({ projectId }: RolesTabProps) {
   }
 
   const refreshRoles = () => loadRoles(true)
+
+  const toggleSelectRole = (roleId: string) => {
+    setSelectedRoleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(roleId)) {
+        next.delete(roleId)
+      } else {
+        next.add(roleId)
+      }
+      return next
+    })
+  }
 
   const handleCreateRole = async () => {
     if (!newRoleName.trim()) return
@@ -151,6 +165,51 @@ export function RolesTab({ projectId }: RolesTabProps) {
     return result
   }, [roles, filters])
 
+  // Collect all role IDs (including children) from filtered list
+  const allFilteredRoleIds = useMemo(() => {
+    const ids: string[] = []
+    for (const role of filteredRoles) {
+      ids.push(role.id)
+      if (role.children) {
+        for (const child of role.children) {
+          ids.push(child.id)
+        }
+      }
+    }
+    return ids
+  }, [filteredRoles])
+
+  const allSelected = allFilteredRoleIds.length > 0 && allFilteredRoleIds.every((id) => selectedRoleIds.has(id))
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedRoleIds(new Set())
+    } else {
+      setSelectedRoleIds(new Set(allFilteredRoleIds))
+    }
+  }
+
+  const handleBulkDeleteRoles = async () => {
+    if (selectedRoleIds.size === 0) return
+    if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedRoleIds.size} תפקידים?`)) return
+
+    setIsDeletingBulk(true)
+    try {
+      const ids = [...selectedRoleIds] as string[]
+      for (const id of ids) {
+        await deleteRole(id)
+      }
+      toast({ title: "הצלחה", description: `${ids.length} תפקידים נמחקו` })
+      setSelectedRoleIds(new Set())
+      refreshRoles()
+    } catch (err) {
+      console.error("Error bulk deleting roles:", err)
+      toast({ title: "שגיאה", description: "שגיאה במחיקת תפקידים", variant: "destructive" })
+    } finally {
+      setIsDeletingBulk(false)
+    }
+  }
+
   // Stats
   const stats = useMemo(() => {
     let totalRoles = 0
@@ -223,6 +282,30 @@ export function RolesTab({ projectId }: RolesTabProps) {
 
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="select-all-roles"
+            checked={allSelected}
+            onCheckedChange={toggleSelectAll}
+          />
+          <Label htmlFor="select-all-roles" className="text-sm cursor-pointer">
+            בחר הכל
+          </Label>
+        </div>
+
+        {selectedRoleIds.size > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive hover:bg-destructive/10"
+            disabled={isDeletingBulk}
+            onClick={handleBulkDeleteRoles}
+          >
+            <Trash2 className="h-4 w-4 ml-1" />
+            מחק נבחרים ({selectedRoleIds.size})
+          </Button>
+        )}
+
         <div className="relative flex-1 min-w-[200px] max-w-[300px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -333,35 +416,52 @@ export function RolesTab({ projectId }: RolesTabProps) {
                   onOpenChange={() => toggleExpanded(role.id)}
                 >
                   <div className="space-y-2">
-                    <CollapsibleTrigger asChild>
-                      <div className="flex items-center gap-2 cursor-pointer hover:bg-muted p-2 rounded-lg transition-colors">
-                        {isExpanded ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronLeft className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        <span className="font-semibold">{role.role_name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          ({role.children!.length} וריאנטים, {role.replicas_count} רפליקות)
-                        </span>
-                      </div>
-                    </CollapsibleTrigger>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectedRoleIds.has(role.id)}
+                        onCheckedChange={() => toggleSelectRole(role.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center gap-2 cursor-pointer hover:bg-muted p-2 rounded-lg transition-colors flex-1">
+                          {isExpanded ? (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <span className="font-semibold">{role.role_name}</span>
+                          <span className="text-sm text-muted-foreground">
+                            ({role.children!.length} וריאנטים, {role.replicas_count} רפליקות)
+                          </span>
+                        </div>
+                      </CollapsibleTrigger>
+                    </div>
 
                     <CollapsibleContent className="space-y-2">
                       {/* Parent role card if it has its own casting */}
                       {role.casting && (
-                        <RoleCastingCard role={role} conflicts={conflicts} onUpdate={refreshRoles} />
+                        <div className="flex items-start gap-2">
+                          <RoleCastingCard role={role} conflicts={conflicts} onUpdate={refreshRoles} />
+                        </div>
                       )}
-                      
+
                       {/* Child roles */}
                       {role.children?.map((child) => (
-                        <RoleCastingCard
-                          key={child.id}
-                          role={child}
-                          conflicts={conflicts}
-                          isChild
-                          onUpdate={refreshRoles}
-                        />
+                        <div key={child.id} className="flex items-start gap-2">
+                          <Checkbox
+                            checked={selectedRoleIds.has(child.id)}
+                            onCheckedChange={() => toggleSelectRole(child.id)}
+                            className="mt-5"
+                          />
+                          <div className="flex-1">
+                            <RoleCastingCard
+                              role={child}
+                              conflicts={conflicts}
+                              isChild
+                              onUpdate={refreshRoles}
+                            />
+                          </div>
+                        </div>
                       ))}
                     </CollapsibleContent>
                   </div>
@@ -371,7 +471,16 @@ export function RolesTab({ projectId }: RolesTabProps) {
 
             // Regular role without children
             return (
-              <RoleCastingCard key={role.id} role={role} conflicts={conflicts} onUpdate={refreshRoles} />
+              <div key={role.id} className="flex items-start gap-2">
+                <Checkbox
+                  checked={selectedRoleIds.has(role.id)}
+                  onCheckedChange={() => toggleSelectRole(role.id)}
+                  className="mt-5"
+                />
+                <div className="flex-1">
+                  <RoleCastingCard role={role} conflicts={conflicts} onUpdate={refreshRoles} />
+                </div>
+              </div>
             )
           })}
         </div>
