@@ -257,39 +257,33 @@ created_at    TIMESTAMPTZ DEFAULT NOW()
 
 ---
 
-## 🐛 באגים ידועים
+### תיקוני UX ו-UI של שלב Go-Live
+**הושלמו ומוזגו ל-main — מבוסס על הסוכנים המקבילים**
 
-### עדיין פתוח — גבוה
-| ID | מיקום | תיאור |
-|----|--------|-------|
-| ADMIN-2 | `lib/actions/submission-actions.ts` | מיזוג שחקן קיים — לא מוגדר, צריך החלטת עיצוב |
+| ID | מיקום | תיאור | סטטוס |
+|----|--------|-------|-------|
+| ADMIN-2 | `lib/actions/submission-actions.ts` | מיזוג שחקן קיים עם טופס | ✅ בוצע |
+| ACTORS-3 | `app/page.tsx` | בחירה מרובה — הסר "הוסף לפרויקט" | ✅ בוצע |
+| ADMIN-3 | `app/admin/page.tsx` | בקשות דחויות: "נקה הכל" | ✅ בוצע |
+| PROJECTS-5 | יצירה + רשימה | סטטוסי פרויקט אחידים | ✅ בוצע |
+| ROLES-1/2 | `components/projects/roles-tab.tsx` | בחירה מרובה ותצוגה | ✅ בוצע |
+| EXCEL-1 | `components/projects/script-workspace-tab.tsx` | ייצוא פרויקט מלא וסביבת תסריט | ✅ בוצע |
 
-### עדיין פתוח — בינוני (UX)
-| ID | מיקום | תיאור |
-|----|--------|-------|
-| ACTORS-3 | `app/page.tsx` | בחירה מרובה — הסר "הוסף לפרויקט" |
-| ACTORS-4 | `components/actor-edit-form.tsx` | שדות חייבים להתאים לטופס הציבורי (scprodub) |
-| ADMIN-3 | `app/admin/page.tsx` | בקשות דחויות: "נקה הכל" + בחירה סלקטיבית |
-| PROJECTS-4 | תאריכים | calendar picker עם ניווט שנים (קומפוננטת dd/mm/yyyy קיימת) |
-| PROJECTS-5 | יצירה + רשימה | סטטוסי פרויקט לא אחידים |
-| ROLES-1 | `components/projects/roles-tab.tsx` | הסר אינדיקטור מקור תפקיד — מיותר |
-| ROLES-2 | `components/projects/roles-tab.tsx` | הוסף "בחר הכל" לבחירה מרובה |
+> ⚠️ **לסוכנים:** האפליקציה כרגע במצב יציב מבחינת UI. יש להתמקד באופטימיזציית DB ו-Deployments.
 
 > ⚠️ **לסוכנים:** אל תיגעו בבאגים הפתוחים בלי תיאום עם הצוות.
 
 ---
 
-## 🚀 המשך עבודה — מה הבא
+### בראנץ' הבא (אופטימיזציית DB + ייצור)
+- **DB Indexes**: הרצת חבילת האינדקסים מתוך ה-ROADMAP (Migration 005)
+- **RLS Policies**: הפעלת רמת בטיחות מינימלית
+- **צמצום Select("*")**: שיפור בחירת נתונים ב-14 מיקומים
+- **פריסה (Deployment)**: הגדרת Next.js Vercel ENV
 
-### בראנץ' ב (טרם התחיל): `claude/fix-ux-consistency`
-- תיקוני UX הפתוחים מהרשימה למעלה (ACTORS-3, ADMIN-3, PROJECTS-4/5, ROLES-1/2)
-- אחידות בסטטוסי פרויקט
-- calendar picker לתאריכים
-
-### שיפורי Parser (חלקי — לפיתוח עתידי):
-- עריכת timecode inline בסביבת העבודה
-- תמיכה מלאה ב-PDF/DOCX לייבוא שורות (extraction קיים, UI עדיין Excel-only)
-- PDFs סרוקים — יצריך OCR
+### שיפורים עתידיים ל-UI ולפאסר (נמוך עדיפות):
+- סטטוסי פרויקט משתנים בצורה אוטומטית מלאה
+- OCR ל-PDF סרוק (חסר כרגע)
 
 ### חסר מה-UI (נמוך עדיפות):
 - Auth אמיתי דרך Supabase Auth (כרגע הכל `anon` + AuthContext)
