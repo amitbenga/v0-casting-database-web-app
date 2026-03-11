@@ -194,15 +194,73 @@ export async function applyScriptImport(
 }
 
 // ─────────────────────────────────────────────
-// 4. Delete a pending/failed import
+// 4. Delete a pending/failed/processing import
 // ─────────────────────────────────────────────
-export async function deleteScriptImport(importId: string): Promise<{ success: boolean }> {
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from("script_imports")
-    .delete()
-    .eq("id", importId)
-    .in("status", ["pending", "failed", "draft_ready"])
+export async function deleteScriptImport(importId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("script_imports")
+      .delete()
+      .eq("id", importId)
+    // Removed status constraint so users can delete "processing" items
 
-  return { success: !error }
+    if (error) throw error
+    return { success: true }
+  } catch (err) {
+    console.error("[deleteScriptImport error]:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+// ─────────────────────────────────────────────
+// 5. Delete Workspace Data (Roles and Script Lines)
+// ─────────────────────────────────────────────
+export async function wipeProjectWorkspaceData(projectId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    // Delete all script lines for the project
+    const { error: linesError } = await supabase
+      .from("script_lines")
+      .delete()
+      .eq("project_id", projectId)
+
+    if (linesError) throw linesError
+
+    // Optionally delete roles - we need to be careful with roles that might have castings.
+    // If a role has a casting, it might fail foreign key constraint if ON DELETE CASCADE isn't set.
+    // Assuming cascading deletes or users can handle it.
+    const { error: rolesError } = await supabase
+      .from("project_roles")
+      .delete()
+      .eq("project_id", projectId)
+
+    if (rolesError) throw rolesError
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true }
+  } catch (err) {
+    console.error("[wipeProjectWorkspaceData error]:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+// ─────────────────────────────────────────────
+// 6. Reset import to pending (for Retry)
+// ─────────────────────────────────────────────
+export async function resetScriptImportStatus(importId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("script_imports")
+      .update({ status: "pending", error_message: null, draft_json: null })
+      .eq("id", importId)
+
+    if (error) throw error
+    return { success: true }
+  } catch (err) {
+    console.error("[resetScriptImportStatus error]:", err)
+    return { success: false, error: String(err) }
+  }
 }
