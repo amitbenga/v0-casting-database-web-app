@@ -26,10 +26,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp } from "lucide-react"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
+import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines, addScriptLine } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
@@ -120,6 +120,62 @@ function TranslationCell({
       onClick={startEdit}
       className="cursor-pointer h-8 flex items-center px-1 text-sm hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden"
       dir="rtl"
+      title={value ?? ""}
+    >
+      {value
+        ? <span className="truncate">{value}</span>
+        : <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>
+      }
+    </div>
+  )
+}
+
+function SourceTextCell({
+  lineId,
+  value,
+  onChange,
+}: {
+  lineId: string
+  value: string | undefined
+  onChange: (lineId: string, newValue: string) => void
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? "")
+
+  function startEdit() {
+    setDraft(value ?? "")
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value ?? "")) {
+      onChange(lineId, draft)
+    }
+  }
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit() }
+          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
+        }}
+        className="w-full h-8 p-1 text-xs border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        dir="ltr"
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={startEdit}
+      className="cursor-pointer h-8 flex items-center px-1 text-xs hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden text-muted-foreground"
+      dir="ltr"
       title={value ?? ""}
     >
       {value
@@ -771,6 +827,32 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
+  // Inline source text update
+  const handleSourceTextChange = useCallback(
+    async (lineId: string, newSourceText: string) => {
+      // Capture original before optimistic update
+      let originalSourceText: string | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalSourceText = line?.source_text
+        return prev.map((l) =>
+          l.id === lineId ? { ...l, source_text: newSourceText } : l
+        )
+      })
+      const result = await updateScriptLine(lineId, { source_text: newSourceText })
+      if (!result.success) {
+        toast({ title: "שגיאה", description: "שגיאה בשמירת טקסט מקור", variant: "destructive" })
+        // Revert to original
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, source_text: originalSourceText } : l
+          )
+        )
+      }
+    },
+    [toast]
+  )
+
   // Inline rec_status update
   const handleRecStatusChange = useCallback(
     async (lineId: string, newStatus: RecStatus | null) => {
@@ -997,6 +1079,28 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
             {"ייצא Excel"}
           </Button>
         )}
+
+        <Button variant="outline" size="sm" onClick={async () => {
+          const maxLine = lines.reduce((max, l) => Math.max(max, l.line_number ?? 0), 0)
+          const newLine: ScriptLineInput = {
+            line_number: maxLine + 1,
+            role_name: "דמות חדשה",
+            source_text: "",
+            translation: "",
+            rec_status: null
+          }
+          const result = await addScriptLine(projectId, newLine)
+          if (result.success && result.line) {
+            setLines(prev => [...prev, result.line as ScriptLine])
+            setTotal(t => t + 1)
+            toast({ title: "שורה נוספה", description: `שורה # ${result.line.line_number} נוספה ומוכנה לעריכה.` })
+          } else {
+            toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
+          }
+        }} className="gap-1.5">
+          <Plus className="h-4 w-4" />
+          {"הוסף שורה חדשה"}
+        </Button>
 
         {hasLines && (
           <Button variant="outline" size="sm" onClick={handleSyncActors} disabled={isSyncing} className="gap-1.5">
@@ -1416,9 +1520,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <p className="text-xs text-muted-foreground truncate whitespace-nowrap cursor-default">
-                              {line.source_text ?? ""}
-                            </p>
+                            <div className="truncate whitespace-nowrap w-full">
+                              <SourceTextCell lineId={line.id} value={line.source_text} onChange={handleSourceTextChange} />
+                            </div>
                           </TooltipTrigger>
                           {line.source_text && (
                             <TooltipContent side="top" dir="ltr" className="max-w-sm text-xs whitespace-pre-wrap text-left break-words">

@@ -200,7 +200,7 @@ export async function getScriptLines(
  */
 export async function updateScriptLine(
   lineId: string,
-  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode">>
+  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode" | "source_text">>
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
@@ -214,6 +214,42 @@ export async function updateScriptLine(
     return { success: true }
   } catch (err) {
     console.error("updateScriptLine error:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+/**
+ * Add a single new script line manually.
+ */
+export async function addScriptLine(
+  projectId: string,
+  line: ScriptLineInput
+): Promise<ActionResult & { line?: ScriptLine }> {
+  const supabase = await createClient()
+
+  try {
+    const { data, error } = await supabase
+      .from("script_lines")
+      .insert({
+        project_id: projectId,
+        line_number: line.line_number,
+        timecode: line.timecode ?? null,
+        role_name: line.role_name,
+        actor_id: line.actor_id ?? null,
+        source_text: line.source_text ?? null,
+        translation: line.translation ?? null,
+        rec_status: line.rec_status ?? null,
+        notes: line.notes ?? null,
+      })
+      .select("*")
+      .single()
+
+    if (error) throw error
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true, line: data as unknown as ScriptLine }
+  } catch (err) {
+    console.error("addScriptLine error:", err)
     return { success: false, error: String(err) }
   }
 }
