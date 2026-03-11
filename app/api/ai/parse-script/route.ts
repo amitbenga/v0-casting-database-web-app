@@ -6,7 +6,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { AI_PARSE_MODEL, AI_MODELS, type AIModelId } from "@/lib/ai-config"
 
-export const maxDuration = 120 // seconds — agent with multiple tool calls needs headroom
+export const maxDuration = 300 // 5 minutes max on Vercel Pro
 
 const MAX_TEXT_LENGTH = 80_000
 
@@ -201,10 +201,17 @@ Workflow:
             content: `Parse this script:\n\n${scriptText}`,
           },
         ],
+        abortSignal: req.signal,
       })
       // Extract token usage if available
       tokensUsed = result?.usage?.totalTokens ?? 0
-    } catch (agentError) {
+    } catch (agentError: any) {
+      // Return early if it's an abort
+      if (agentError.name === "AbortError") {
+        console.log(`[parse-script] Request aborted by client for importId: ${importId}`)
+        return Response.json({ error: "Aborted" }, { status: 499 })
+      }
+
       // Agent failed — save failure status
       const errorMsg = agentError instanceof Error ? agentError.message : String(agentError)
       try {

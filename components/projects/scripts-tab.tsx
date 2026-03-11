@@ -41,7 +41,7 @@ import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import { FileSpreadsheet } from "lucide-react"
 import { saveScriptLines, getScriptLines } from "@/lib/actions/script-line-actions"
 import type { ScriptLineInput } from "@/lib/types"
-import { createScriptImport, getScriptImports, applyScriptImport, type ScriptImport } from "@/lib/actions/ai-import-actions"
+import { createScriptImport, getScriptImports, applyScriptImport, deleteScriptImport, wipeProjectWorkspaceData, resetScriptImportStatus, type ScriptImport } from "@/lib/actions/ai-import-actions"
 import { AIModelSelector } from "@/components/ai-model-selector"
 import { DEFAULT_PARSE_MODEL, type AIModelId } from "@/lib/ai-config"
 import {
@@ -102,6 +102,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [isAiParsing, setIsAiParsing] = useState(false)
   const [isApplyingImport, setIsApplyingImport] = useState<string | null>(null)
   const [aiParseModel, setAiParseModel] = useState<AIModelId>(DEFAULT_PARSE_MODEL)
+  const [confirmWipe, setConfirmWipe] = useState(false)
+  const [isWiping, setIsWiping] = useState(false)
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
   const loadScripts = useCallback(async () => {
     try {
@@ -243,6 +246,55 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     }
   }
 
+  const performAiParseFetch = async (importId: string) => {
+    toast({ title: "הסוכן עובד...", description: "מנתח את התסריט עם AI — זה עשוי לקחת עד 5 דקות" })
+
+    // Check if there is an existing controller for this request and abort it
+    if (abortControllersRef.current.has(importId)) {
+      abortControllersRef.current.get(importId)?.abort()
+    }
+
+    const controller = new AbortController()
+    abortControllersRef.current.set(importId, controller)
+    setIsAiParsing(true)
+
+    try {
+      const response = await fetch("/api/ai/parse-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ importId, model: aiParseModel }),
+        signal: controller.signal
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        if (response.status === 499 || result.error === "Aborted") {
+          toast({ title: "העיבוד בוטל", description: "הפעולה הופסקה על ידי המשתמש." })
+        } else {
+          toast({ title: "הסוכן נכשל", description: result.error ?? "שגיאה לא ידועה", variant: "destructive" })
+        }
+      } else {
+        toast({
+          title: "הניתוח הושלם",
+          description: `זוהו ${result.summary.roles} תפקידים ו-${result.summary.lines} שורות`,
+        })
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        toast({ title: "העיבוד בוטל", description: "המשתמש הפסיק את התהליך." })
+      } else {
+        console.error("[handleAiParseFile fetch override]", err)
+        toast({ title: "שגיאה", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
+      }
+    } finally {
+      setIsAiParsing(false)
+      abortControllersRef.current.delete(importId)
+      // Update ui
+      const updated = await getScriptImports(projectId)
+      setAiImports(updated)
+    }
+  }
+
   const handleAiParseFile = async (file: File) => {
     setIsAiParsing(true)
     try {
@@ -267,28 +319,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
 
       const importId = createResult.importId
 
-      // 3. Trigger AI agent via API route
-      toast({ title: "הסוכן עובד...", description: "מנתח את התסריט עם AI — זה עשוי לקחת 20-60 שניות" })
+      // 3. Trigger API route fetch abstracted into reuseable function
+      await performAiParseFetch(importId)
 
-      const response = await fetch("/api/ai/parse-script", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ importId, model: aiParseModel }),
-      })
-      const result = await response.json()
-
-      if (!response.ok || !result.success) {
-        toast({ title: "הסוכן נכשל", description: result.error ?? "שגיאה לא ידועה", variant: "destructive" })
-      } else {
-        toast({
-          title: "הניתוח הושלם",
-          description: `זוהו ${result.summary.roles} תפקידים ו-${result.summary.lines} שורות`,
-        })
-      }
-
-      // 4. Reload imports list
-      const updated = await getScriptImports(projectId)
-      setAiImports(updated)
     } catch (err) {
       console.error("[handleAiParseFile]", err)
       toast({ title: "שגיאה", description: err instanceof Error ? err.message : "שגיאה לא ידועה", variant: "destructive" })
@@ -318,6 +351,59 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
     }
   }
 
+  const handleDeleteImport = async (importId: string) => {
+    try {
+      if (abortControllersRef.current.has(importId)) {
+        abortControllersRef.current.get(importId)?.abort()
+      }
+
+      const { success, error } = await deleteScriptImport(importId)
+      if (success) {
+        toast({ title: "נמחק בהצלחה", description: "קובץ העיבוד נמחק מההיסטוריה" })
+        const updated = await getScriptImports(projectId)
+        setAiImports(updated)
+      } else {
+        toast({ title: "שגיאה", description: error, variant: "destructive" })
+      }
+    } catch (err) {
+      console.error("handleDeleteImport error", err)
+    }
+  }
+
+  const handleRetryImport = async (importId: string) => {
+    try {
+      const { success, error } = await resetScriptImportStatus(importId)
+      if (success) {
+        toast({ title: "מפעיל מחדש..." })
+        const updated = await getScriptImports(projectId)
+        setAiImports(updated)
+        await performAiParseFetch(importId)
+      } else {
+        toast({ title: "שגיאה בהפעלה מחודשת", description: error, variant: "destructive" })
+      }
+    } catch (err) {
+      console.error("handleRetryImport error", err)
+    }
+  }
+
+  const handleWipeWorkspace = async () => {
+    try {
+      setIsWiping(true)
+      const { success, error } = await wipeProjectWorkspaceData(projectId)
+      if (success) {
+        toast({ title: "מחיקה הושלמה", description: "סביבת העבודה נוקתה (כל התפקידים והשורות נמחקו)." })
+        onScriptApplied?.()
+      } else {
+        toast({ title: "שגיאה במהלך המחיקה", description: error, variant: "destructive" })
+      }
+    } catch (err) {
+      console.error("handleWipeWorkspace error", err)
+    } finally {
+      setIsWiping(false)
+      setConfirmWipe(false)
+    }
+  }
+
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return "-"
     if (bytes < 1024) return `${bytes} B`
@@ -334,7 +420,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
         </Badge>
       )
     }
-    
+
     switch (status) {
       case "uploaded":
         return (
@@ -552,7 +638,7 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                     </>
                   )}
                 </Button>
-                
+
                 {parseResult && (
                   <Button
                     variant="outline"
@@ -649,6 +735,13 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
             <AIModelSelector value={aiParseModel} onChange={setAiParseModel} disabled={isAiParsing} />
           </div>
 
+          <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/20 px-3 py-2 rounded border border-amber-200 dark:border-amber-800/40">
+            <span className="text-xs text-amber-800 dark:text-amber-400 font-medium">כדי למחוק ולנקות לחלוטין שורות ונתוני תסריט מהמערכת:</span>
+            <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-destructive/10 h-7 text-xs" onClick={() => setConfirmWipe(true)}>
+              מחק את כל התסריטים וסביבת העבודה (Clear Workspace)
+            </Button>
+          </div>
+
           {/* AI Imports List */}
           {aiImports.length > 0 && (
             <div className="space-y-2">
@@ -689,20 +782,38 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
                       </div>
                     </div>
                   </div>
-                  {imp.status === "draft_ready" && (
+                  <div className="flex items-center gap-1 min-w-max ml-1 pl-2 border-r border-border/50">
+                    {imp.status === "processing" ? (
+                      <Button size="sm" variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 h-8 px-2" onClick={() => handleDeleteImport(imp.id)}>
+                        <XCircle className="h-4 w-4 ml-1.5" />בטל
+                      </Button>
+                    ) : imp.status === "failed" ? (
+                      <Button size="sm" variant="default" className="h-8 px-2" onClick={() => handleRetryImport(imp.id)}>
+                        <Play className="h-4 w-4 ml-1.5" />נסה שוב
+                      </Button>
+                    ) : imp.status === "draft_ready" ? (
+                      <Button size="sm" onClick={() => handleApplyImport(imp.id)} disabled={isApplyingImport === imp.id} className="h-8 px-2">
+                        {isApplyingImport === imp.id ? (
+                          <><Loader2 className="h-4 w-4 animate-spin ml-1" />מחיל...</>
+                        ) : (
+                          <><CheckCircle className="h-4 w-4 ml-1" />החל על הפרויקט</>
+                        )}
+                      </Button>
+                    ) : null}
+
                     <Button
-                      size="sm"
-                      onClick={() => handleApplyImport(imp.id)}
-                      disabled={isApplyingImport === imp.id}
-                      className="flex-shrink-0 mr-2"
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive h-8 w-8"
+                      onClick={() => {
+                        if (confirm("בטוח שברצונך למחוק את הרשומה הזו? הקובץ המקורי לא ימחק מסביבת העבודה אם כבר יובא.")) {
+                          handleDeleteImport(imp.id)
+                        }
+                      }}
                     >
-                      {isApplyingImport === imp.id ? (
-                        <><Loader2 className="h-4 w-4 animate-spin ml-1" />מחיל...</>
-                      ) : (
-                        <><CheckCircle className="h-4 w-4 ml-1" />החל על הפרויקט</>
-                      )}
+                      <Trash2 className="h-4 w-4" />
                     </Button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -971,6 +1082,40 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               }}
             >
               החלף שורות
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation dialog for WIPING the workspace */}
+      <Dialog open={confirmWipe} onOpenChange={(open) => { if (!open) setConfirmWipe(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              מחיקת סביבת הליהוק והעבודה
+            </DialogTitle>
+            <DialogDescription className="space-y-3">
+              <p>
+                פעולה זו תמחק לחלוטין את <b>כל התפקידים והשורות (רפליקות)</b> מהפרויקט הנוכחי.
+              </p>
+              <p>
+                דברים שימחקו: התפקידים שהוכנסו, השחקנים ששוריינו אליהם (castings), ושורות התסריט שקובצו.
+                מתי זה כדאי? אם העלית בטעות קובץ לא נכון ואתה רוצה להתחיל מאפס בלי זנבות של שורות תקועות.
+              </p>
+              <p className="font-semibold mt-4">האם להמשיך?</p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button variant="outline" onClick={() => setConfirmWipe(false)} disabled={isWiping}>
+              ביטול
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isWiping}
+              onClick={handleWipeWorkspace}
+            >
+              {isWiping ? <><Loader2 className="h-4 w-4 animate-spin ml-2" /> מנקה...</> : "כן, מחק לחלוטין"}
             </Button>
           </DialogFooter>
         </DialogContent>
