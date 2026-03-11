@@ -10,6 +10,8 @@
     "migrate": "node scripts/run_migrations.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1006.0",
+    "@aws-sdk/s3-request-presigner": "^3.1006.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
@@ -68,6 +70,7 @@
     "swr": "2.3.8",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^13.0.0",
     "vaul": "^1.1.2",
     "xlsx": "^0.18.5",
     "zod": "3.25.76"
@@ -77,6 +80,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^11.0.0",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
     "fast-check": "^4.5.3",

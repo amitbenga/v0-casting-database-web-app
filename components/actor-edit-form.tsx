@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SKILLS_LIST, LANGUAGES_LIST, VAT_STATUS_LABELS, SINGING_STYLE_LEVEL_LABELS, SINGING_STYLES_LIST, type Actor, type SingingStyleLevel, type SingingStyle, type SingingStyleOther, type SingingStyleWithLevel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { uploadFileToR2 } from "@/lib/file-upload"
 
 interface ActorEditFormProps {
   actor: Actor
@@ -25,6 +26,9 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
   const { toast } = useToast()
   const [formData, setFormData] = useState(actor)
   const [imagePreview, setImagePreview] = useState(actor.image_url)
+  const [voicePreview, setVoicePreview] = useState(actor.voice_sample_url)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [voiceFile, setVoiceFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const voiceInputRef = useRef<HTMLInputElement>(null)
@@ -34,6 +38,29 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
     setSaving(true)
 
     try {
+      let finalImageUrl = formData.image_url;
+      let finalVoiceUrl = formData.voice_sample_url;
+
+      if (imageFile) {
+        const { objectKey, error } = await uploadFileToR2(imageFile, "photos", actor.id);
+        if (error || !objectKey) {
+          toast({ title: "שגיאת שרת", description: error || "העלאת תמונה נכשלה.", variant: "destructive" });
+          setSaving(false);
+          return;
+        }
+        finalImageUrl = objectKey;
+      }
+
+      if (voiceFile) {
+        const { objectKey, error } = await uploadFileToR2(voiceFile, "voice-samples", actor.id);
+        if (error || !objectKey) {
+          toast({ title: "שגיאת שרת", description: error || "העלאת קול נכשלה.", variant: "destructive" });
+          setSaving(false);
+          return;
+        }
+        finalVoiceUrl = objectKey;
+      }
+
       const supabase = createClient()
       const { error } = await supabase
         .from("actors")
@@ -47,8 +74,8 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
           is_singer: formData.is_singer,
           is_course_grad: formData.is_course_grad,
           vat_status: formData.vat_status,
-          image_url: formData.image_url,
-          voice_sample_url: formData.voice_sample_url,
+          image_url: finalImageUrl,
+          voice_sample_url: finalVoiceUrl,
           notes: formData.notes,
           skills: formData.skills,
           languages: formData.languages,
@@ -86,18 +113,14 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result as string
-        setImagePreview(result)
-        handleChange("image_url", result)
-      }
-      reader.readAsDataURL(file)
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
     }
   }
 
   const handleRemoveImage = () => {
     setImagePreview("")
+    setImageFile(null)
     handleChange("image_url", "")
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -107,16 +130,14 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
   const handleVoiceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result as string
-        handleChange("voice_sample_url", result)
-      }
-      reader.readAsDataURL(file)
+      setVoiceFile(file)
+      setVoicePreview(URL.createObjectURL(file))
     }
   }
 
   const handleRemoveVoice = () => {
+    setVoicePreview("")
+    setVoiceFile(null)
     handleChange("voice_sample_url", "")
     if (voiceInputRef.current) {
       voiceInputRef.current.value = ""
@@ -222,7 +243,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
             <Separator />
 
             <div className="space-y-4">
-              {formData.voice_sample_url && (
+              {voicePreview && (
                 <div className="p-4 bg-muted rounded-lg space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -233,8 +254,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                  <audio controls className="w-full">
-                    <source src={formData.voice_sample_url} />
+                  <audio controls className="w-full" src={voicePreview}>
                     הדפדפן שלך לא תומך בהשמעת קבצי שמע.
                   </audio>
                 </div>
@@ -257,7 +277,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                   className="w-full md:w-auto"
                 >
                   <Upload className="h-4 w-4 ml-2" />
-                  {formData.voice_sample_url ? "החלף קובץ קול" : "העלה קובץ קול"}
+                  {voicePreview ? "החלף קובץ קול" : "העלה קובץ קול"}
                 </Button>
                 <p className="text-xs text-muted-foreground">פורמטים נתמכים: MP3, WAV, M4A</p>
               </div>
@@ -417,7 +437,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
 
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">בחר סגנונות שירה והגדר רמה לכל סגנון</p>
-              
+
               <div className="space-y-3">
                 {SINGING_STYLES_LIST.filter(style => style.key !== "other").map((style) => {
                   const currentStyles = (formData.singing_styles || []) as unknown as SingingStyleWithLevel[]
@@ -484,7 +504,7 @@ export function ActorEditForm({ actor, onSave, onCancel }: ActorEditFormProps) {
                     הוסף
                   </Button>
                 </div>
-                
+
                 {(formData.singing_styles_other || []).map((item: SingingStyleOther, index: number) => (
                   <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                     <Input

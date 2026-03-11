@@ -17,6 +17,7 @@ import { normalizeEmail, normalizePhone } from "@/lib/normalizers"
 import { useToast } from "@/hooks/use-toast"
 import { SKILLS_LIST, LANGUAGES_LIST } from "@/lib/types"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { uploadFileToR2 } from "@/lib/file-upload"
 
 // Derived from the canonical SKILLS_LIST — single source of truth (task 4A/4B)
 const SKILLS_OPTIONS = SKILLS_LIST.map((s) => s.label)
@@ -28,9 +29,12 @@ function ActorIntakePageContent() {
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [uploadedPhoto, setUploadedPhoto] = useState<string>("")
-  const [uploadedAudio, setUploadedAudio] = useState<string>("")
-  const [uploadedSinging, setUploadedSinging] = useState<string>("")
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string>("")
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioPreview, setAudioPreview] = useState<string>("")
+  const [singingFile, setSingingFile] = useState<File | null>(null)
+  const [singingPreview, setSingingPreview] = useState<string>("")
   const [skills, setSkills] = useState<string[]>([])
   const [languages, setLanguages] = useState<string[]>([])
   const [skillsOther, setSkillsOther] = useState<string>("")
@@ -53,33 +57,24 @@ function ActorIntakePageContent() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setUploadedPhoto(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      setPhotoFile(file)
+      setPhotoPreview(URL.createObjectURL(file))
     }
   }
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setUploadedAudio(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      setAudioFile(file)
+      setAudioPreview(URL.createObjectURL(file))
     }
   }
 
   const handleSingingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setUploadedSinging(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      setSingingFile(file)
+      setSingingPreview(URL.createObjectURL(file))
     }
   }
 
@@ -97,8 +92,44 @@ function ActorIntakePageContent() {
 
     try {
       const supabase = createBrowserClient()
+      const submissionId = crypto.randomUUID()
+
+      let finalPhotoUrl = null;
+      let finalAudioUrl = null;
+      let finalSingingUrl = null;
+
+      if (photoFile) {
+        const { objectKey, error } = await uploadFileToR2(photoFile, "photos", submissionId);
+        if (error || !objectKey) {
+          toast({ title: "שגיאת העלאה", description: "תמונה: " + error, variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+        finalPhotoUrl = objectKey;
+      }
+
+      if (audioFile) {
+        const { objectKey, error } = await uploadFileToR2(audioFile, "voice-samples", submissionId);
+        if (error || !objectKey) {
+          toast({ title: "שגיאת העלאה", description: "קול: " + error, variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+        finalAudioUrl = objectKey;
+      }
+
+      if (singingFile) {
+        const { objectKey, error } = await uploadFileToR2(singingFile, "singing-samples", submissionId);
+        if (error || !objectKey) {
+          toast({ title: "שגיאת העלאה", description: "שירה: " + error, variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+        finalSingingUrl = objectKey;
+      }
 
       const submissionData = {
+        id: submissionId,
         full_name: formData.full_name.trim(),
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
@@ -114,9 +145,9 @@ function ActorIntakePageContent() {
         skills_other: skillsOther || null,
         languages: languages.length > 0 ? languages : null,
         languages_other: languagesOther || null,
-        image_url: uploadedPhoto || null,
-        voice_sample_url: uploadedAudio || null,
-        singing_sample_url: uploadedSinging || null,
+        image_url: finalPhotoUrl,
+        voice_sample_url: finalAudioUrl,
+        singing_sample_url: finalSingingUrl,
         review_status: "pending",
         match_status: "pending",
         matched_actor_id: null,
@@ -160,8 +191,27 @@ function ActorIntakePageContent() {
     setLoading(true)
     try {
       const supabase = createBrowserClient()
+      const draftId = crypto.randomUUID()
+
+      let finalPhotoUrl = null;
+      let finalAudioUrl = null;
+      let finalSingingUrl = null;
+
+      if (photoFile) {
+        const { objectKey } = await uploadFileToR2(photoFile, "photos", draftId);
+        finalPhotoUrl = objectKey;
+      }
+      if (audioFile) {
+        const { objectKey } = await uploadFileToR2(audioFile, "voice-samples", draftId);
+        finalAudioUrl = objectKey;
+      }
+      if (singingFile) {
+        const { objectKey } = await uploadFileToR2(singingFile, "singing-samples", draftId);
+        finalSingingUrl = objectKey;
+      }
 
       const draftData: Record<string, any> = {
+        id: draftId,
         full_name: formData.full_name.trim(),
         gender: formData.gender || "male",
         birth_year: formData.birth_year ? Number.parseInt(formData.birth_year) : 2000,
@@ -171,9 +221,9 @@ function ActorIntakePageContent() {
         is_singer: formData.is_singer,
         is_course_grad: formData.is_course_graduate,
         vat_status: formData.vat_status || "ptor",
-        image_url: uploadedPhoto || "",
-        voice_sample_url: uploadedAudio || "",
-        singing_sample_url: uploadedSinging || "",
+        image_url: finalPhotoUrl || "",
+        voice_sample_url: finalAudioUrl || "",
+        singing_sample_url: finalSingingUrl || "",
         skills: skills.map(s => ({ key: s, label: s })),
         languages: languages.map(l => ({ key: l, label: l })),
         is_draft: true,
@@ -237,11 +287,10 @@ function ActorIntakePageContent() {
                 <div key={step.num} className="flex items-center flex-1">
                   <div className="flex flex-col items-center">
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        step.num <= currentStep
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step.num <= currentStep
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                        }`}
                     >
                       {step.num}
                     </div>
@@ -473,10 +522,10 @@ function ActorIntakePageContent() {
                   {/* Photo */}
                   <div className="space-y-3">
                     <Label>תמונת פרופיל</Label>
-                    {uploadedPhoto ? (
+                    {photoPreview ? (
                       <div className="relative w-48 h-48 mx-auto">
                         <img
-                          src={uploadedPhoto || "/placeholder.svg"}
+                          src={photoPreview || "/placeholder.svg"}
                           alt="תצוגה מקדימה"
                           className="w-full h-full object-cover rounded-lg"
                         />
@@ -485,7 +534,10 @@ function ActorIntakePageContent() {
                           variant="destructive"
                           size="icon"
                           className="absolute top-2 right-2"
-                          onClick={() => setUploadedPhoto("")}
+                          onClick={() => {
+                            setPhotoPreview("")
+                            setPhotoFile(null)
+                          }}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -513,12 +565,15 @@ function ActorIntakePageContent() {
                   {/* Singing Sample */}
                   <div className="space-y-3">
                     <Label>דוגמת שירה (אופציונלי)</Label>
-                    {uploadedSinging ? (
+                    {singingPreview ? (
                       <div className="space-y-3">
                         <audio controls className="w-full" dir="ltr">
-                          <source src={uploadedSinging} />
+                          <source src={singingPreview} />
                         </audio>
-                        <Button type="button" variant="outline" size="sm" onClick={() => setUploadedSinging("")}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => {
+                          setSingingPreview("")
+                          setSingingFile(null)
+                        }}>
                           <X className="h-4 w-4 ml-2" />
                           הסר קובץ שירה
                         </Button>
@@ -545,12 +600,15 @@ function ActorIntakePageContent() {
                   {/* Audio */}
                   <div className="space-y-3">
                     <Label>קובץ קול</Label>
-                    {uploadedAudio ? (
+                    {audioPreview ? (
                       <div className="space-y-3">
                         <audio controls className="w-full" dir="ltr">
-                          <source src={uploadedAudio} />
+                          <source src={audioPreview} />
                         </audio>
-                        <Button type="button" variant="outline" size="sm" onClick={() => setUploadedAudio("")}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => {
+                          setAudioPreview("")
+                          setAudioFile(null)
+                        }}>
                           <X className="h-4 w-4 ml-2" />
                           הסר קובץ
                         </Button>

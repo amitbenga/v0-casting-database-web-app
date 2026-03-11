@@ -71,6 +71,14 @@ scprodub form → actor_submissions (Hebrew strings, raw_payload JSON)
 **הטופס הציבורי (scprodub) = Source of Truth לשדות השחקן.**
 כל שינוי בשדות עריכת שחקן חייב להיות תואם לאפשרויות בטופס.
 
+**העלאת קבצים (R2 Direct Uploads):**
+```
+Client (scprodub/v0) → /api/upload (Vercel) → Client gets Presigned URL
+Client → PUT request (Direct to R2) → R2 Server
+Client → Supabase DB (Saves objectKey only)
+```
+העלאת קבצים (תמונות, סאונד) מבוצעת באמצעות Presigned URLs מול Cloudflare R2 כדי לעקוף את מגבלות ה-Payload של Vercel. הקבצים נשלחים ישירות מהדפדפן של הלקוח ל-R2, וב-Supabase נשמר רק ה-`objectKey`.
+
 ---
 
 ## 5. קבצים מפתח
