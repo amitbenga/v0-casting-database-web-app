@@ -200,7 +200,7 @@ export async function getScriptLines(
  */
 export async function updateScriptLine(
   lineId: string,
-  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes">>
+  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode">>
 ): Promise<ActionResult> {
   const supabase = await createClient()
 

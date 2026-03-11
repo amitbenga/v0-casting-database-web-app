@@ -130,6 +130,63 @@ function TranslationCell({
   )
 }
 
+function TimecodeCell({
+  lineId,
+  value,
+  onChange,
+}: {
+  lineId: string
+  value: string | undefined
+  onChange: (lineId: string, newValue: string) => void
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? "")
+
+  function startEdit() {
+    setDraft(value ?? "")
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value ?? "")) {
+      onChange(lineId, draft.trim())
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit() }
+          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
+        }}
+        placeholder="HH:MM:SS:FF"
+        className="w-full h-8 px-1 text-xs border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono text-center"
+        dir="ltr"
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={startEdit}
+      className="cursor-pointer w-full h-8 flex justify-center items-center px-1 text-xs font-mono text-muted-foreground hover:bg-muted/50 rounded transition-colors"
+      title="ערוך טיימקוד"
+    >
+      {value ? (
+        <span>{value}</span>
+      ) : (
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity">--:--</span>
+      )}
+    </div>
+  )
+}
+
 // Searchable role combobox (Agent 5)
 function RoleCombobox({
   value,
@@ -740,6 +797,32 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
+  // Inline timecode update
+  const handleTimecodeChange = useCallback(
+    async (lineId: string, newTimecode: string) => {
+      // Capture original before optimistic update
+      let originalTimecode: string | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalTimecode = line?.timecode
+        return prev.map((l) =>
+          l.id === lineId ? { ...l, timecode: newTimecode } : l
+        )
+      })
+      const result = await updateScriptLine(lineId, { timecode: newTimecode })
+      if (!result.success) {
+        toast({ title: "שגיאה", description: "שגיאה בשמירת טיימקוד", variant: "destructive" })
+        // Revert to original
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, timecode: originalTimecode } : l
+          )
+        )
+      }
+    },
+    [toast]
+  )
+
   // Excel export — RTL, bold headers, freeze pane, auto widths, filters (Agent 6)
   async function handleExport() {
     try {
@@ -968,11 +1051,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         key={a.name}
                         type="button"
                         onClick={() => setSelectedProgressActor(isSelected ? null : a.name)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          isSelected
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${isSelected
                             ? "bg-primary text-primary-foreground border-primary"
                             : "bg-background border-muted hover:bg-muted/50"
-                        }`}
+                          }`}
                       >
                         <span>{a.name}</span>
                         <span className={`${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
@@ -991,9 +1073,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                     <div className="space-y-2 p-3 rounded-lg bg-background border">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-sm">{activeActor.name}</span>
-                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${
-                          isComplete ? "bg-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                        }`}>{pct}%</span>
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${isComplete ? "bg-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                          }`}>{pct}%</span>
                       </div>
                       <div className="text-xs text-muted-foreground">{activeActor.recorded} הוקלטו מתוך {activeActor.total} שורות</div>
                       <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
@@ -1193,15 +1274,15 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <input
                         type="checkbox"
                         checked={selectedIds.has(line.id)}
-                        onChange={() => {/* handled by onClick for shift-key support */}}
+                        onChange={() => {/* handled by onClick for shift-key support */ }}
                         onClick={(e) => toggleRow(line.id, e.shiftKey)}
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
                       />
                     </div>
                     {/* TC */}
-                    <div className="text-xs font-mono text-muted-foreground text-right px-2 overflow-hidden whitespace-nowrap flex items-center">
-                      {line.timecode ?? "\u2014"}
+                    <div className="group text-right px-2 overflow-hidden whitespace-nowrap flex items-center min-w-0 pointer-events-auto z-10">
+                      <TimecodeCell lineId={line.id} value={line.timecode} onChange={handleTimecodeChange} />
                     </div>
                     {/* Role */}
                     <div className="px-2 overflow-hidden flex items-center">
@@ -1240,11 +1321,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         }
                       >
                         <SelectTrigger
-                          className={`h-7 w-full text-xs border-0 shadow-none px-1 ${
-                            line.rec_status
+                          className={`h-7 w-full text-xs border-0 shadow-none px-1 ${line.rec_status
                               ? REC_STATUS_CONFIG[line.rec_status].className
                               : "text-muted-foreground"
-                          }`}
+                            }`}
                           dir="rtl"
                         >
                           <SelectValue />
