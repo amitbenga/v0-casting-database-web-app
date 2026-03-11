@@ -20,6 +20,7 @@ import {
   Link2,
   ExternalLink,
   Trash2,
+  ArrowLeftRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -30,6 +31,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { deleteSubmissions, clearSubmissionsByStatus } from "@/lib/actions/submission-actions"
+import { MergeActorDialog } from "@/components/admin/merge-actor-dialog"
 
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 
@@ -110,6 +112,9 @@ function AdminPageContent() {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isClearing, setIsClearing] = useState(false)
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false)
+  const [mergeSubmission, setMergeSubmission] = useState<ActorSubmission | null>(null)
+  const [mergeDuplicates, setMergeDuplicates] = useState<DuplicateMatch[]>([])
 
   useEffect(() => {
     loadSubmissions()
@@ -495,6 +500,11 @@ function AdminPageContent() {
                     setReviewAction(action)
                     setIsReviewDialogOpen(true)
                   }}
+                  onMerge={(sub, dups) => {
+                    setMergeSubmission(sub)
+                    setMergeDuplicates(dups)
+                    setMergeDialogOpen(true)
+                  }}
                   onPlayAudio={handlePlayAudio}
                   isPlaying={isPlaying === submission.id}
                 />
@@ -622,6 +632,21 @@ function AdminPageContent() {
         </Tabs>
       </main>
 
+      {/* Merge Actor Dialog */}
+      {mergeSubmission && (
+        <MergeActorDialog
+          open={mergeDialogOpen}
+          onOpenChange={setMergeDialogOpen}
+          submission={mergeSubmission}
+          duplicates={mergeDuplicates}
+          onMergeComplete={() => {
+            setMergeSubmission(null)
+            setMergeDuplicates([])
+            loadSubmissions()
+          }}
+        />
+      )}
+
       {/* Review Dialog */}
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
         <DialogContent className="sm:max-w-[500px]" dir="rtl">
@@ -665,12 +690,14 @@ function SubmissionCard({
   submission,
   duplicates,
   onReview,
+  onMerge,
   onPlayAudio,
   isPlaying,
 }: {
   submission: ActorSubmission
   duplicates?: DuplicateMatch[]
   onReview?: (action: "approve" | "reject") => void
+  onMerge?: (submission: ActorSubmission, duplicates: DuplicateMatch[]) => void
   onPlayAudio: (url: string, id: string, e: React.MouseEvent) => void
   isPlaying: boolean
 }) {
@@ -836,6 +863,17 @@ function SubmissionCard({
                       </a>
                     </div>
                   ))}
+                  {onMerge && submission.review_status === "pending" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950"
+                      onClick={() => onMerge(submission, duplicates)}
+                    >
+                      <ArrowLeftRight className="h-4 w-4 ml-2" />
+                      מזג עם שחקן קיים
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

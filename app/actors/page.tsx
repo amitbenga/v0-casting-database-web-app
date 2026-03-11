@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import useSWRInfinite from "swr/infinite"
 import { ActorCard } from "@/components/actor-card"
 import { FilterPanel } from "@/components/filter-panel"
-import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Film, Heart, Trash2, X, Download, Loader2 } from "lucide-react"
+import { Search, SlidersHorizontal, UserPlus, MoreVertical, FolderPlus, Heart, Trash2, X, Download, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -320,11 +320,6 @@ function ActorsDatabaseContent() {
     setBulkFolderDialogOpen(true)
   }
 
-  const handleBulkAddToProject = () => {
-    toast({ title: "בקרוב", description: `הוספת ${selectedActors.length} שחקנים לפרויקט תהיה זמינה בקרוב.` })
-    setSelectedActors([])
-  }
-
   const handleBulkDelete = async () => {
     if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedActors.length} שחקנים?`)) {
       return
@@ -565,16 +560,6 @@ function ActorsDatabaseContent() {
                     >
                       <Heart className="h-4 w-4 ml-2" />
                       הוסף למועדפים
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={(e) => {
-                        e.preventDefault()
-                        handleBulkAddToProject()
-                      }}
-                      className="cursor-pointer hover:bg-accent"
-                    >
-                      <Film className="h-4 w-4 ml-2" />
-                      הוסף לפרויקט
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={(e) => {

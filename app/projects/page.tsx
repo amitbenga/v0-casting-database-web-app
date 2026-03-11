@@ -17,31 +17,19 @@ import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
 import { swrKeys } from "@/lib/swr-keys"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
-
-const STATUS_COLORS: Record<string, string> = {
-  not_started: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-  casting: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  voice_testing: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
-  casted: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-  recording: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-  completed: "bg-green-500/10 text-green-500 border-green-500/20",
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  not_started: "לא התחיל",
-  casting: "בליהוק",
-  voice_testing: "בדיקת קולות",
-  casted: "ליהוק הושלם",
-  recording: "בהקלטה",
-  completed: "הושלם",
-}
+import {
+  PROJECT_STATUS_LIST,
+  PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_COLORS,
+  type ProjectStatus,
+} from "@/lib/types"
 
 function getStatusColor(status: string) {
-  return STATUS_COLORS[status] ?? "bg-gray-500/10 text-gray-500 border-gray-500/20"
+  return PROJECT_STATUS_COLORS[status as ProjectStatus] ?? "bg-gray-500/10 text-gray-500 border-gray-500/20"
 }
 
 function getStatusLabel(status: string) {
-  return STATUS_LABELS[status] ?? status
+  return PROJECT_STATUS_LABELS[status as ProjectStatus] ?? status
 }
 
 async function fetchProjects() {
@@ -187,54 +175,17 @@ function ProjectsPageContent() {
               >
                 הכל
               </Button>
-              <Button
-                variant={statusFilter === "not_started" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("not_started")}
-                className="text-xs md:text-sm"
-              >
-                לא התחיל
-              </Button>
-              <Button
-                variant={statusFilter === "casting" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("casting")}
-                className="text-xs md:text-sm"
-              >
-                בליהוק
-              </Button>
-              <Button
-                variant={statusFilter === "voice_testing" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("voice_testing")}
-                className="text-xs md:text-sm"
-              >
-                בדיקת קולות
-              </Button>
-              <Button
-                variant={statusFilter === "casted" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("casted")}
-                className="text-xs md:text-sm"
-              >
-                ליהוק הושלם
-              </Button>
-              <Button
-                variant={statusFilter === "recording" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("recording")}
-                className="text-xs md:text-sm"
-              >
-                בהקלטה
-              </Button>
-              <Button
-                variant={statusFilter === "completed" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setStatusFilter("completed")}
-                className="text-xs md:text-sm"
-              >
-                הושלם
-              </Button>
+              {PROJECT_STATUS_LIST.map((status) => (
+                <Button
+                  key={status}
+                  variant={statusFilter === status ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setStatusFilter(status)}
+                  className="text-xs md:text-sm"
+                >
+                  {PROJECT_STATUS_LABELS[status]}
+                </Button>
+              ))}
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
