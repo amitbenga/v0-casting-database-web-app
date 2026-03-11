@@ -823,14 +823,20 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
-  // Excel export — RTL, bold headers, freeze pane, auto widths, filters (Agent 6)
+  // Master Excel export — RTL, bold headers, multiple sheets (Agent 6)
   async function handleExport() {
     try {
       const XLSX = await import("xlsx")
+      const { getProjectRolesWithCasting } = await import("@/lib/actions/casting-actions")
 
+      const { roles, success } = await getProjectRolesWithCasting(projectId)
+      const rolesData = success && roles ? roles : []
+
+      // ---------------------------------------------------------
+      // Sheet 1: Script Workspace (סביבת עבודה)
+      // ---------------------------------------------------------
       const HEADERS = ["#", "TC", "תפקיד", "שחקן", "סטטוס הקלטה", "תרגום", "טקסט מקור", "הערות"]
 
-      // Build rows as arrays (preserves column order)
       const dataRows = lines.map((l) => [
         l.line_number ?? "",
         l.timecode ?? "",
@@ -845,7 +851,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       const allRows = [HEADERS, ...dataRows]
       const ws = XLSX.utils.aoa_to_sheet(allRows)
 
-      // Column widths (characters)
       ws["!cols"] = [
         { wch: 6 },   // #
         { wch: 14 },  // TC
@@ -857,14 +862,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         { wch: 24 },  // הערות
       ]
 
-      // Freeze first row (header)
       ws["!freeze"] = { xSplit: 0, ySplit: 1 }
-
-      // AutoFilter on header row
-      const lastCol = String.fromCharCode(65 + HEADERS.length - 1) // 'H'
+      const lastCol = String.fromCharCode(65 + HEADERS.length - 1)
       ws["!autofilter"] = { ref: `A1:${lastCol}1` }
 
-      // Bold header row + RTL alignment for all cells
       const boldStyle = { font: { bold: true }, alignment: { horizontal: "right", readingOrder: 2 } }
       const cellStyle = { alignment: { horizontal: "right", readingOrder: 2, wrapText: true } }
 
@@ -880,16 +881,68 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         }
       }
 
+      // ---------------------------------------------------------
+      // Sheet 2: Roles and Castings (צוות ותפקידים)
+      // ---------------------------------------------------------
+      const CASTING_HEADERS = ["תפקיד", "כמות רפליקות", "סטטוס ליהוק", "שחקן מלוהק", "סטטוס מס הכנסה", "הערות הקלטה"]
+
+      const castingRows = rolesData.map(r => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mainCasting: any = Array.isArray(r.castings) ? r.castings.find((c: any) => c.status === "מלוהק") || r.castings[0] : r.casting;
+
+        return [
+          r.role_name,
+          r.replicas_count || r.replicas_needed || 0,
+          mainCasting?.status || "לא מלוהק",
+          mainCasting?.name || "",
+          // Only if VAT exists on actor (it doesn't in the summarized role view natively without extra query, we will gracefully fallback to "")
+          "",
+          mainCasting?.notes || ""
+        ]
+      })
+
+      const castingWs = XLSX.utils.aoa_to_sheet([CASTING_HEADERS, ...castingRows])
+      castingWs["!cols"] = [
+        { wch: 22 },  // תפקיד
+        { wch: 15 },  // כמות
+        { wch: 15 },  // סטטוס
+        { wch: 25 },  // שחקן
+        { wch: 15 },  // VAT (Empty initially)
+        { wch: 40 },  // הערות
+      ]
+
+      castingWs["!freeze"] = { xSplit: 0, ySplit: 1 }
+      const cLastCol = String.fromCharCode(65 + CASTING_HEADERS.length - 1)
+      castingWs["!autofilter"] = { ref: `A1:${cLastCol}1` }
+
+      for (let c = 0; c < CASTING_HEADERS.length; c++) {
+        const headerAddr = XLSX.utils.encode_cell({ r: 0, c })
+        if (!castingWs[headerAddr]) castingWs[headerAddr] = { v: CASTING_HEADERS[c], t: "s" }
+        castingWs[headerAddr].s = boldStyle
+      }
+      for (let r = 1; r <= castingRows.length; r++) {
+        for (let c = 0; c < CASTING_HEADERS.length; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c })
+          if (castingWs[addr]) castingWs[addr].s = cellStyle
+        }
+      }
+
+      // ---------------------------------------------------------
+      // Produce workbook
+      // ---------------------------------------------------------
       const wb = XLSX.utils.book_new()
-      // RTL sheet direction
       XLSX.utils.book_append_sheet(wb, ws, "סביבת עבודה")
+      XLSX.utils.book_append_sheet(wb, castingWs, "צוות ותפקידים")
+
       wb.Workbook = wb.Workbook ?? { Views: [], Sheets: [] }
       wb.Workbook.Sheets = wb.Workbook.Sheets ?? []
-      wb.Workbook.Sheets[0] = wb.Workbook.Sheets[0] ?? {};
-      (wb.Workbook.Sheets[0] as Record<string, unknown>).RTL = true
+      if (!wb.Workbook.Sheets[0]) wb.Workbook.Sheets[0] = {}
+      if (!wb.Workbook.Sheets[1]) wb.Workbook.Sheets[1] = {}
+        ; (wb.Workbook.Sheets[0] as Record<string, unknown>).RTL = true
+        ; (wb.Workbook.Sheets[1] as Record<string, unknown>).RTL = true
 
-      XLSX.writeFile(wb, `workspace-${projectId}.xlsx`)
-      toast({ title: "ייצוא הצליח", description: `${lines.length.toLocaleString()} שורות יוצאו` })
+      XLSX.writeFile(wb, `Master-Project-${projectId}.xlsx`)
+      toast({ title: "ייצוא פרוייקט שלם הצליח", description: `${lines.length.toLocaleString()} שורות ו-${rolesData.length} תפקידים מלוהקים יוצאו לקובץ Excel מרוכז.` })
     } catch {
       toast({ title: "שגיאה בייצוא", variant: "destructive" })
     }
@@ -1052,8 +1105,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         type="button"
                         onClick={() => setSelectedProgressActor(isSelected ? null : a.name)}
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${isSelected
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background border-muted hover:bg-muted/50"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background border-muted hover:bg-muted/50"
                           }`}
                       >
                         <span>{a.name}</span>
@@ -1322,8 +1375,8 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       >
                         <SelectTrigger
                           className={`h-7 w-full text-xs border-0 shadow-none px-1 ${line.rec_status
-                              ? REC_STATUS_CONFIG[line.rec_status].className
-                              : "text-muted-foreground"
+                            ? REC_STATUS_CONFIG[line.rec_status].className
+                            : "text-muted-foreground"
                             }`}
                           dir="rtl"
                         >
