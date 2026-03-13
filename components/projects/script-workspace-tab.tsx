@@ -26,10 +26,25 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp, Plus } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp, Plus, MoreHorizontal } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines, addScriptLine } from "@/lib/actions/script-line-actions"
+import {
+  saveScriptLines,
+  updateScriptLine,
+  getScriptLines,
+  deleteScriptLinesByIds,
+  syncActorsToScriptLines,
+  addScriptLine,
+  insertScriptLineRelative,
+  duplicateScriptLine,
+} from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
@@ -341,6 +356,43 @@ function RoleCombobox({
   )
 }
 
+function RowActionsMenu({
+  onInsertAbove,
+  onInsertBelow,
+  onDuplicate,
+}: {
+  onInsertAbove: () => Promise<void>
+  onInsertBelow: () => Promise<void>
+  onDuplicate: () => Promise<void>
+}): React.ReactElement {
+  return (
+    <DropdownMenu dir="rtl">
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">{"פעולות שורה"}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onInsertAbove() }}>
+          {"הוסף שורה מעל"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onInsertBelow() }}>
+          {"הוסף שורה מתחת"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onDuplicate() }}>
+          {"שכפל שורה"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 const PAGE_SIZE = 1000
 
 // Main component
@@ -393,6 +445,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       setLoadingMore(false)
     }
   }
+
+  const refreshVisibleLines = useCallback(
+    async (targetCount = lines.length) => {
+      const countToLoad = Math.max(targetCount, PAGE_SIZE)
+      const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: countToLoad - 1 })
+      setLines(freshLines)
+      setTotal(freshTotal)
+    },
+    [projectId, lines.length]
+  )
 
   const [filterRole, setFilterRole] = useState<string>("__all__")
   const [filterStatus, setFilterStatus] = useState<string>("__all__")
@@ -905,6 +967,65 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
+  const handleAddLineAtEnd = useCallback(
+    async () => {
+      const newLine: ScriptLineInput = {
+        line_number: 0,
+        role_name: "דמות חדשה",
+        source_text: "",
+        translation: "",
+        rec_status: null,
+      }
+      const result = await addScriptLine(projectId, newLine)
+      if (result.success && result.line) {
+        if (hasMore) {
+          await refreshVisibleLines(lines.length)
+          toast({
+            title: "שורה נוספה",
+            description: `שורה #${result.line.line_number} נוספה לסוף הפרויקט. טען עוד כדי לראות אותה.`,
+          })
+        } else {
+          await refreshVisibleLines(lines.length + 1)
+          toast({ title: "שורה נוספה", description: `שורה #${result.line.line_number} נוספה ומוכנה לעריכה.` })
+        }
+      } else {
+        toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
+      }
+    },
+    [projectId, toast, refreshVisibleLines, hasMore, lines.length]
+  )
+
+  const handleInsertRelativeLine = useCallback(
+    async (referenceLineId: string, position: "above" | "below") => {
+      const result = await insertScriptLineRelative(projectId, referenceLineId, position)
+      if (result.success && result.line) {
+        await refreshVisibleLines(lines.length + 1)
+        toast({
+          title: "שורה נוספה",
+          description: position === "above"
+            ? "שורה חדשה נוספה מעל השורה שנבחרה."
+            : "שורה חדשה נוספה מתחת לשורה שנבחרה.",
+        })
+      } else {
+        toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
+      }
+    },
+    [projectId, toast, refreshVisibleLines, lines.length]
+  )
+
+  const handleDuplicateLine = useCallback(
+    async (lineId: string) => {
+      const result = await duplicateScriptLine(projectId, lineId)
+      if (result.success && result.line) {
+        await refreshVisibleLines(lines.length + 1)
+        toast({ title: "שורה שוכפלה", description: `שורה #${result.line.line_number} נוצרה כהעתק לעריכה.` })
+      } else {
+        toast({ title: "שגיאה בשכפול שורה", description: result.error, variant: "destructive" })
+      }
+    },
+    [projectId, toast, refreshVisibleLines, lines.length]
+  )
+
   // Master Excel export — RTL, bold headers, multiple sheets (Agent 6)
   async function handleExport() {
     try {
@@ -1080,24 +1201,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           </Button>
         )}
 
-        <Button variant="outline" size="sm" onClick={async () => {
-          const maxLine = lines.reduce((max, l) => Math.max(max, l.line_number ?? 0), 0)
-          const newLine: ScriptLineInput = {
-            line_number: maxLine + 1,
-            role_name: "דמות חדשה",
-            source_text: "",
-            translation: "",
-            rec_status: null
-          }
-          const result = await addScriptLine(projectId, newLine)
-          if (result.success && result.line) {
-            setLines(prev => [...prev, result.line as ScriptLine])
-            setTotal(t => t + 1)
-            toast({ title: "שורה נוספה", description: `שורה # ${result.line.line_number} נוספה ומוכנה לעריכה.` })
-          } else {
-            toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
-          }
-        }} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={handleAddLineAtEnd} className="gap-1.5">
           <Plus className="h-4 w-4" />
           {"הוסף שורה חדשה"}
         </Button>
@@ -1365,16 +1469,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           {/*
             Grid-based virtual table — header + body share the same grid-template-columns
             so columns always align even with absolutely-positioned virtual rows.
-            Fixed cols: 38+34+90+140+120+110 = 532px. Remaining space split 50/50 for translation + source.
+            Fixed cols: 38+34+34+90+140+120+110 = 566px. Remaining space split 50/50 for translation + source.
           */}
-          <div style={{ minWidth: 1100, direction: "rtl" }}>
+          <div style={{ minWidth: 1140, direction: "rtl" }}>
             {/* Header */}
             <div
               className="sticky top-0 bg-background z-10 border-b"
               style={{
                 display: "grid",
-                gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
-                minWidth: 1100,
+                gridTemplateColumns: "38px 34px 34px 90px 140px 120px 110px 1fr 1fr",
+                minWidth: 1140,
               }}
             >
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">#</div>
@@ -1388,6 +1492,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                   aria-label="בחר הכל"
                 />
               </div>
+              <div className="px-1 h-10 flex items-center justify-center" />
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">TC</div>
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תפקיד</div>
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">שחקן</div>
@@ -1418,7 +1523,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       overflow: "hidden",
                       transform: `translateY(${virtualRow.start}px)`,
                       display: "grid",
-                      gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
+                      gridTemplateColumns: "38px 34px 34px 90px 140px 120px 110px 1fr 1fr",
                     }}
                     className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
@@ -1435,6 +1540,14 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         onClick={(e) => toggleRow(line.id, e.shiftKey)}
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
+                      />
+                    </div>
+                    {/* row actions */}
+                    <div className="px-1 flex items-center justify-center pointer-events-auto z-10">
+                      <RowActionsMenu
+                        onInsertAbove={() => handleInsertRelativeLine(line.id, "above")}
+                        onInsertBelow={() => handleInsertRelativeLine(line.id, "below")}
+                        onDuplicate={() => handleDuplicateLine(line.id)}
                       />
                     </div>
                     {/* TC */}
