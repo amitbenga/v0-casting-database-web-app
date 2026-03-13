@@ -1,0 +1,1432 @@
+diff --git a/.gitignore b/.gitignore
+index 625260d..e300fae 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -26,3 +26,10 @@ yarn-error.log*
+ *.tsbuildinfo
+ next-env.d.ts
+ package-lock.json
++
++# playwright
++/playwright-report/
++/blob-report/
++/e2e/test-results/
++/e2e/.auth/
++/test-results/
+diff --git a/PLAN.md b/PLAN.md
+new file mode 100644
+index 0000000..fa17e49
+--- /dev/null
++++ b/PLAN.md
+@@ -0,0 +1,118 @@
++# תוכנית עבודה — QA Findings Fix
++
++## סיכום שינויים מדוח QA המקורי
++- **TASK-002 (פרסור עברי) — נמחק**: תסריטים תמיד באנגלית. עברית = שפת ממשק בלבד.
++- **TASK-005 — מעודכן**: `/projects` הוא דף הבית. הבאג הוא שאחרי שמירת טיוטה צריך לנווט ל-`/actors`.
++- **TASK-008 — לוודא**: ייתכן שכבר עובד דרך SWR mutate.
++- **P3 (TASK-012-018) — backlog**: לא בסבב הזה.
++
++---
++
++## Sprint 1 — P0 + P1
++
++### TASK-001 · Stopwords לפרסר (P0)
++**קובץ:** `lib/parser/tokenizer.ts`
++**מה לעשות:**
++1. הוסף מערך STOPWORDS בראש הקובץ:
++   ```
++   SCENE, INT, EXT, CUT TO, FADE IN, FADE OUT, END OF,
++   CHARACTER LIST, CAST, ACT, EPISODE, PAGE, CHAPTER,
++   SCRIPT TITLE, CONTINUED, MORE, THE END
++   ```
++2. בפונקציית זיהוי bare character (שורות 169-201), הוסף בדיקה:
++   - אם השם נמצא ב-STOPWORDS → דלג
++   - אם השם מסתיים ב-`:` → דלג (זו כותרת)
++   - אם השם מתחיל במספר → דלג
++3. הוסף את אותם פילטרים גם ב-`extractDialogueLines()` ב-`structured-parser.ts`
++4. כתוב טסטים: קובץ עם 5 תפקידים + 5 כותרות → מזהה בדיוק 5
++
++### TASK-003 · תרגום Comments לעברית (P1)
++**קובץ:** `components/actor-comments.tsx`
++**מה לעשות:**
++1. החלף טקסטים קשוחים:
++   - "Comments" → "הערות"
++   - "Add a comment..." → "הוסף הערה..."
++   - "Add Comment" → "הוסף הערה"
++2. שנה פורמט תאריך מ-`en-US` ל-`he-IL`:
++   ```js
++   toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
++   ```
++   תוצאה: "23.06.2025, 16:39"
++3. לא לגעת ב-persistence (mock נשאר) — זה עתידי
++
++### TASK-004 · ולידציה בעברית בטפסים (P1)
++**קבצים:** `app/intake/page.tsx`, טפסי יצירת פרויקט
++**מה לעשות:**
++1. ב-intake form: החלף `required` attribute בולידציה custom עם הודעות עבריות
++2. בטופס יצירת פרויקט: אותו דבר — הסר `required` נייטיבי, הוסף custom validation
++3. הודעות לדוגמה: "שם הפרויקט הוא שדה חובה", "נא למלא שם מלא"
++
++### TASK-005 · Redirect אחרי שמירת טיוטה (P1)
++**קובץ:** `app/intake/page.tsx` שורה 236
++**מה לעשות:**
++1. שנה `router.push("/")` ל-`router.push("/actors")`
++2. תיקון פשוט של שורה אחת
++
++### TASK-006 · Toast feedback לייצוא ושיתוף (P1)
++**קבצים:** `app/actors/page.tsx` (handleBulkExport), דף פרויקט (export)
++**מה לעשות:**
++1. הוסף toast הצלחה אחרי ייצוא מוצלח: "הקובץ הורד בהצלחה"
++2. אם יש כפתור share — הוסף toast "הקישור הועתק ללוח"
++3. הוסף loading state בזמן ייצוא (disable כפתור + spinner)
++
++### TASK-007 · מונה שחקנים מתעדכן בסינון (P1)
++**קובץ:** `app/actors/page.tsx` שורות 646-650
++**מה לעשות:**
++1. שנה את הטאב label:
++   ```jsx
++   {hasActiveFilters
++     ? `תוצאות (${filteredActors.length})`
++     : `כל השחקנים (${nonDraftActors.length})`}
++   ```
++2. הגדר `hasActiveFilters` — true אם יש search text או פילטר פעיל
++
++### TASK-008 · מונה תסריטים — לוודא ולתקן (P1)
++**קבצים:** `components/projects/scripts-tab.tsx`, `app/projects/[id]/page.tsx`
++**מה לעשות:**
++1. בדוק אם `onScriptApplied` נקרא בכל מקרה אחרי עיבוד מוצלח
++2. אם לא — הוסף קריאה ל-callback אחרי העלאה/עיבוד מוצלח
++3. וודא שה-tab count מתעדכן דרך SWR mutate
++
++---
++
++## Sprint 2 — P2
++
++### TASK-009 · ולידציה לסיבת דחייה (P2)
++**קבצים:** `app/admin/page.tsx`, אולי migration חדשה
++**מה לעשות:**
++1. הוסף textarea לסיבת דחייה בדיאלוג (כרגע אין שדה כלל)
++2. ולידציה: מינימום 10 תווים
++3. placeholder: "לדוגמה: הקול לא מתאים לדמות..."
++4. שמור ב-DB — בדוק אם צריך migration (הוספת עמודה rejection_reason ל-actor_submissions)
++
++### TASK-010 · פורמט תאריך אחיד (P2)
++**קבצים:** `components/actor-comments.tsx`, כל מקום עם toLocaleString
++**מה לעשות:**
++1. צור utility function `formatDate(date: string | Date): string` ב-`lib/utils.ts`
++2. פורמט: `he-IL`, timezone `Asia/Jerusalem`
++3. החלף כל שימוש inline ב-utility
++
++### TASK-011 · סנכרון תפריט 3 נקודות (P2)
++**קבצים:** `app/projects/[id]/page.tsx` (header menu)
++**מה לעשות:**
++1. הוסף "ייצוא" לתפריט בדף פרויקט
++2. וודא שכל האפשרויות מסונכרנות עם כרטיס הפרויקט
++
++---
++
++## לא בסבב הזה (Backlog)
++- TASK-002: נמחק (תסריטים באנגלית בלבד)
++- TASK-012-018: P3, בדיקות QA עתידיות
++
++---
++
++## בדיקות לפני push
++```bash
++pnpm exec tsc --noEmit   # 0 errors
++pnpm test                # all tests pass
++```
+diff --git a/app/actors/page.tsx b/app/actors/page.tsx
+index 2095da8..522606c 100644
+--- a/app/actors/page.tsx
++++ b/app/actors/page.tsx
+@@ -361,6 +361,7 @@ function ActorsDatabaseContent() {
+     try {
+       const { exportActors } = await import("@/lib/export-utils")
+       exportActors(selectedActorObjects, format, "selected_actors")
++      toast({ title: "ייצוא הושלם", description: `הקובץ הורד בהצלחה (${selectedActorObjects.length} שחקנים)` })
+     } catch (error) {
+       console.error("[v0] Error exporting actors:", error)
+       toast({ title: "שגיאה", description: "שגיאה בייצוא השחקנים", variant: "destructive" })
+@@ -415,6 +416,20 @@ function ActorsDatabaseContent() {
+     return nonDraftActors
+   }, [activeTab, draftActors, nonDraftActors, favoriteIdsSet])
+ 
++  const hasActiveFilters = useMemo(() => {
++    return (
++      deferredSearchQuery.trim().length > 0 ||
++      filters.gender.length > 0 ||
++      filters.isSinger !== null ||
++      filters.isCourseGrad !== null ||
++      filters.skills.length > 0 ||
++      filters.languages.length > 0 ||
++      filters.vatStatus.length > 0 ||
++      (filters.dubbingExperience && filters.dubbingExperience.length > 0) ||
++      (filters.singingStyles && filters.singingStyles.length > 0)
++    )
++  }, [deferredSearchQuery, filters])
++
+   const filteredActors = useMemo(() => {
+     const currentYear = new Date().getFullYear()
+     const query = deferredSearchQuery.trim().toLowerCase()
+@@ -643,7 +658,11 @@ function ActorsDatabaseContent() {
+               className="w-full"
+             >
+               <TabsList className="mb-6">
+-                <TabsTrigger value="all">כל השחקנים ({nonDraftActors.length})</TabsTrigger>
++                <TabsTrigger value="all">
++                  {hasActiveFilters && activeTab === "all"
++                    ? `תוצאות (${filteredActors.length})`
++                    : `כל השחקנים (${nonDraftActors.length})`}
++                </TabsTrigger>
+                 <TabsTrigger value="favorites">מועדפים ({favorites.length})</TabsTrigger>
+                 {draftActors.length > 0 && (
+                   <TabsTrigger value="drafts" className="text-orange-600 data-[state=active]:text-orange-600">
+diff --git a/app/admin/page.tsx b/app/admin/page.tsx
+index 0dcab3e..8fd77eb 100644
+--- a/app/admin/page.tsx
++++ b/app/admin/page.tsx
+@@ -107,6 +107,7 @@ function AdminPageContent() {
+   const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
+   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
+   const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null)
++  const [rejectionReason, setRejectionReason] = useState("")
+ 
+   const [isPlaying, setIsPlaying] = useState<string | null>(null)
+   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
+@@ -648,7 +649,7 @@ function AdminPageContent() {
+       )}
+ 
+       {/* Review Dialog */}
+-      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
++      <Dialog open={isReviewDialogOpen} onOpenChange={(open) => { setIsReviewDialogOpen(open); if (!open) setRejectionReason("") }}>
+         <DialogContent className="sm:max-w-[500px]" dir="rtl">
+           <DialogHeader>
+             <DialogTitle>{reviewAction === "approve" ? "אישור בקשה" : "דחיית בקשה"}</DialogTitle>
+@@ -660,6 +661,21 @@ function AdminPageContent() {
+                 : `האם אתה בטוח שברצונך לדחות את הבקשה של ${selectedSubmission?.full_name}?`}
+             </p>
+ 
++            {reviewAction === "reject" && (
++              <div className="space-y-2">
++                <label className="text-sm font-medium">סיבת הדחייה *</label>
++                <textarea
++                  value={rejectionReason}
++                  onChange={(e) => setRejectionReason(e.target.value)}
++                  placeholder="לדוגמה: הקול לא מתאים לדמות, אין ניסיון מספיק..."
++                  className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
++                  dir="rtl"
++                />
++                {rejectionReason.length > 0 && rejectionReason.length < 10 && (
++                  <p className="text-xs text-destructive">סיבת הדחייה חייבת להכיל לפחות 10 תווים</p>
++                )}
++              </div>
++            )}
+           </div>
+           <DialogFooter className="gap-2">
+             <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
+@@ -671,11 +687,16 @@ function AdminPageContent() {
+                   if (reviewAction === "approve") {
+                     handleApprove(selectedSubmission)
+                   } else {
++                    if (rejectionReason.trim().length < 10) {
++                      toast({ title: "שגיאה", description: "סיבת הדחייה חייבת להכיל לפחות 10 תווים", variant: "destructive" })
++                      return
++                    }
+                     handleReject(selectedSubmission)
+                   }
+                 }
+               }}
+               variant={reviewAction === "approve" ? "default" : "destructive"}
++              disabled={reviewAction === "reject" && rejectionReason.trim().length < 10}
+             >
+               {reviewAction === "approve" ? "אשר" : "דחה"}
+             </Button>
+diff --git a/app/intake/page.tsx b/app/intake/page.tsx
+index 86921ac..8a2afa0 100644
+--- a/app/intake/page.tsx
++++ b/app/intake/page.tsx
+@@ -88,6 +88,21 @@ function ActorIntakePageContent() {
+ 
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault()
++
++    // Custom validation with Hebrew messages (replaces native browser validation)
++    if (!formData.full_name.trim()) {
++      toast({ title: "שדה חובה", description: "נא למלא שם מלא", variant: "destructive" })
++      return
++    }
++    if (!formData.gender) {
++      toast({ title: "שדה חובה", description: "נא לבחור מין", variant: "destructive" })
++      return
++    }
++    if (!formData.birth_year) {
++      toast({ title: "שדה חובה", description: "נא למלא שנת לידה", variant: "destructive" })
++      return
++    }
++
+     setLoading(true)
+ 
+     try {
+@@ -233,7 +248,7 @@ function ActorIntakePageContent() {
+       if (error) throw error
+ 
+       toast({ title: "טיוטה נשמרה", description: "השחקן נשמר כטיוטה." })
+-      router.push("/")
++      router.push("/actors")
+     } catch (error) {
+       console.error("[v0] Error saving draft:", error)
+       toast({ title: "שגיאה", description: "שגיאה בשמירת הטיוטה", variant: "destructive" })
+@@ -325,7 +340,6 @@ function ActorIntakePageContent() {
+                       value={formData.full_name}
+                       onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                       placeholder="ישראל ישראלי"
+-                      required
+                     />
+                   </div>
+ 
+@@ -368,7 +382,6 @@ function ActorIntakePageContent() {
+                         value={formData.birth_year}
+                         onChange={(e) => setFormData({ ...formData, birth_year: e.target.value })}
+                         placeholder="1990"
+-                        required
+                         dir="ltr"
+                         className="text-left"
+                       />
+diff --git a/app/projects/[id]/page.tsx b/app/projects/[id]/page.tsx
+index 5b75f0b..eda2f48 100644
+--- a/app/projects/[id]/page.tsx
++++ b/app/projects/[id]/page.tsx
+@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+ import dynamic from "next/dynamic"
+ import { EditProjectDialog } from "@/components/edit-project-dialog"
+ import { ProjectRecordingProgressSummary } from "@/components/projects/project-recording-progress-summary"
++import { formatDateOnlyHe } from "@/lib/format-date"
+ 
+ // Lazy-load heavy tab components — only downloaded when the tab becomes active
+ const CastingWorkspace = dynamic(
+@@ -268,8 +269,9 @@ function ProjectDetailPageContent() {
+                   <DropdownMenuItem className="md:hidden" onClick={() => setShowEditProjectDialog(true)}>
+                     ערוך פרויקט
+                   </DropdownMenuItem>
+-                  {/* ייצא פרויקט — temporarily hidden until feature is complete */}
+-                  {/* <DropdownMenuItem onClick={exportProject}>ייצא פרויקט</DropdownMenuItem> */}
++                  <DropdownMenuItem onClick={exportProject}>
++                    ייצא פרויקט
++                  </DropdownMenuItem>
+                   <DropdownMenuItem onClick={duplicateProject}>
+                     שכפל
+                   </DropdownMenuItem>
+@@ -319,7 +321,7 @@ function ProjectDetailPageContent() {
+                     <div className="flex-1">
+                       <p className="text-xs text-muted-foreground">תאריך פרויקט</p>
+                       <p className="text-sm font-medium">
+-                        {new Date(project.project_date + "T00:00:00").toLocaleDateString("he-IL")}
++                        {formatDateOnlyHe(project.project_date + "T00:00:00")}
+                       </p>
+                     </div>
+                   </div>
+diff --git a/app/projects/page.tsx b/app/projects/page.tsx
+index 913df08..c745fa3 100644
+--- a/app/projects/page.tsx
++++ b/app/projects/page.tsx
+@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast"
+ import { useDebounce } from "@/hooks/use-debounce"
+ import { swrKeys } from "@/lib/swr-keys"
+ import { ProtectedRoute } from "@/components/ProtectedRoute"
++import { formatDateOnlyHe } from "@/lib/format-date"
+ import {
+   PROJECT_STATUS_LIST,
+   PROJECT_STATUS_LABELS,
+@@ -300,7 +301,7 @@ function ProjectsPageContent() {
+                     <div className="flex items-center gap-2 text-xs md:text-sm">
+                       <Calendar className="h-4 w-4 text-muted-foreground" />
+                       <span className="text-muted-foreground">תאריך:</span>
+-                      <span className="font-medium">{new Date(project.project_date).toLocaleDateString("he-IL")}</span>
++                      <span className="font-medium">{formatDateOnlyHe(project.project_date)}</span>
+                     </div>
+                   )}
+                 </div>
+@@ -326,7 +327,7 @@ function ProjectsPageContent() {
+                     </div>
+                   )}
+                   <span className="mr-auto">
+-                    {new Date(project.created_at).toLocaleDateString("he-IL")}
++                    {formatDateOnlyHe(project.created_at)}
+                   </span>
+                 </div>
+               </div>
+diff --git a/components/actor-comments.tsx b/components/actor-comments.tsx
+index c6ae0c1..a208ee2 100644
+--- a/components/actor-comments.tsx
++++ b/components/actor-comments.tsx
+@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
+ import { Textarea } from "@/components/ui/textarea"
+ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+ import { Separator } from "@/components/ui/separator"
++import { formatDateHe } from "@/lib/format-date"
+ 
+ interface Comment {
+   id: string
+@@ -20,8 +21,8 @@ const mockComments: Comment[] = [
+     id: "1",
+     author: "Michaela S.",
+     authorInitials: "MS",
+-    content: "Good fit, let's book him",
+-    timestamp: "06-23-2025, 3:39 pm (PST)",
++    content: "מתאים, בואו נקבע",
++    timestamp: "2025-06-23T15:39:00Z",
+   },
+ ]
+ 
+@@ -34,18 +35,10 @@ export function ActorComments({ actorId }: { actorId: string }) {
+ 
+     const comment: Comment = {
+       id: Date.now().toString(),
+-      author: "You",
+-      authorInitials: "YO",
++      author: "את/ה",
++      authorInitials: "ME",
+       content: newComment,
+-      timestamp: new Date().toLocaleString("en-US", {
+-        month: "2-digit",
+-        day: "2-digit",
+-        year: "numeric",
+-        hour: "2-digit",
+-        minute: "2-digit",
+-        hour12: true,
+-        timeZoneName: "short",
+-      }),
++      timestamp: new Date().toISOString(),
+     }
+ 
+     setComments([...comments, comment])
+@@ -54,20 +47,20 @@ export function ActorComments({ actorId }: { actorId: string }) {
+ 
+   return (
+     <Card className="p-6">
+-      <h3 className="font-semibold mb-4">Comments</h3>
++      <h3 className="font-semibold mb-4">הערות</h3>
+ 
+       <div className="space-y-6">
+         {/* Add Comment Form */}
+         <div className="space-y-3">
+           <Textarea
+-            placeholder="Add a comment..."
++            placeholder="הוסף הערה..."
+             value={newComment}
+             onChange={(e) => setNewComment(e.target.value)}
+             className="min-h-[100px]"
+           />
+           <div className="flex justify-end">
+             <Button onClick={handleAddComment} disabled={!newComment.trim()}>
+-              Add Comment
++              הוסף הערה
+             </Button>
+           </div>
+         </div>
+@@ -84,7 +77,7 @@ export function ActorComments({ actorId }: { actorId: string }) {
+               <div className="flex-1 space-y-1">
+                 <div className="flex items-center gap-2">
+                   <span className="font-medium text-sm">{comment.author}</span>
+-                  <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
++                  <span className="text-xs text-muted-foreground">{formatDateHe(comment.timestamp)}</span>
+                 </div>
+                 <p className="text-sm text-muted-foreground">{comment.content}</p>
+               </div>
+diff --git a/components/create-project-dialog.tsx b/components/create-project-dialog.tsx
+index 19919e4..6fc0318 100644
+--- a/components/create-project-dialog.tsx
++++ b/components/create-project-dialog.tsx
+@@ -32,6 +32,12 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
+ 
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault()
++
++    if (!formData.name.trim()) {
++      toast({ title: "שדה חובה", description: "נא למלא שם פרויקט", variant: "destructive" })
++      return
++    }
++
+     setSubmitting(true)
+ 
+     try {
+@@ -86,7 +92,6 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
+                 value={formData.name}
+                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                 placeholder="לדוגמה: קמפיין קיץ 2025"
+-                required
+               />
+             </div>
+ 
+diff --git a/components/projects/script-workspace-tab.tsx b/components/projects/script-workspace-tab.tsx
+index 6852c27..6e8566a 100644
+--- a/components/projects/script-workspace-tab.tsx
++++ b/components/projects/script-workspace-tab.tsx
+@@ -26,10 +26,25 @@ import {
+   DialogTitle,
+   DialogFooter,
+ } from "@/components/ui/dialog"
+-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp } from "lucide-react"
++import {
++  DropdownMenu,
++  DropdownMenuContent,
++  DropdownMenuItem,
++  DropdownMenuTrigger,
++} from "@/components/ui/dropdown-menu"
++import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp, Plus, MoreHorizontal } from "lucide-react"
+ import { useToast } from "@/hooks/use-toast"
+ import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
+-import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
++import {
++  saveScriptLines,
++  updateScriptLine,
++  getScriptLines,
++  deleteScriptLinesByIds,
++  syncActorsToScriptLines,
++  addScriptLine,
++  insertScriptLineRelative,
++  duplicateScriptLine,
++} from "@/lib/actions/script-line-actions"
+ import { parseExcelFile } from "@/lib/parser/excel-parser"
+ import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
+ import type { ExcelParseResult } from "@/lib/parser/excel-parser"
+@@ -130,6 +145,62 @@ function TranslationCell({
+   )
+ }
+ 
++function SourceTextCell({
++  lineId,
++  value,
++  onChange,
++}: {
++  lineId: string
++  value: string | undefined
++  onChange: (lineId: string, newValue: string) => void
++}): React.ReactElement {
++  const [editing, setEditing] = useState(false)
++  const [draft, setDraft] = useState(value ?? "")
++
++  function startEdit() {
++    setDraft(value ?? "")
++    setEditing(true)
++  }
++
++  function commit() {
++    setEditing(false)
++    if (draft !== (value ?? "")) {
++      onChange(lineId, draft)
++    }
++  }
++
++  if (editing) {
++    return (
++      <textarea
++        autoFocus
++        value={draft}
++        onChange={(e) => setDraft(e.target.value)}
++        onBlur={commit}
++        onKeyDown={(e) => {
++          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit() }
++          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
++        }}
++        className="w-full h-8 p-1 text-xs border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
++        dir="ltr"
++      />
++    )
++  }
++
++  return (
++    <div
++      onClick={startEdit}
++      className="cursor-pointer h-8 flex items-center px-1 text-xs hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden text-muted-foreground"
++      dir="ltr"
++      title={value ?? ""}
++    >
++      {value
++        ? <span className="truncate">{value}</span>
++        : <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>
++      }
++    </div>
++  )
++}
++
+ function TimecodeCell({
+   lineId,
+   value,
+@@ -285,6 +356,43 @@ function RoleCombobox({
+   )
+ }
+ 
++function RowActionsMenu({
++  onInsertAbove,
++  onInsertBelow,
++  onDuplicate,
++}: {
++  onInsertAbove: () => Promise<void>
++  onInsertBelow: () => Promise<void>
++  onDuplicate: () => Promise<void>
++}): React.ReactElement {
++  return (
++    <DropdownMenu dir="rtl">
++      <DropdownMenuTrigger asChild>
++        <Button
++          variant="ghost"
++          size="icon"
++          className="h-7 w-7 text-muted-foreground hover:text-foreground"
++          onClick={(e) => e.stopPropagation()}
++        >
++          <MoreHorizontal className="h-4 w-4" />
++          <span className="sr-only">{"פעולות שורה"}</span>
++        </Button>
++      </DropdownMenuTrigger>
++      <DropdownMenuContent align="start">
++        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onInsertAbove() }}>
++          {"הוסף שורה מעל"}
++        </DropdownMenuItem>
++        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onInsertBelow() }}>
++          {"הוסף שורה מתחת"}
++        </DropdownMenuItem>
++        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onDuplicate() }}>
++          {"שכפל שורה"}
++        </DropdownMenuItem>
++      </DropdownMenuContent>
++    </DropdownMenu>
++  )
++}
++
+ const PAGE_SIZE = 1000
+ 
+ // Main component
+@@ -338,6 +446,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+     }
+   }
+ 
++  const refreshVisibleLines = useCallback(
++    async (targetCount = lines.length) => {
++      const countToLoad = Math.max(targetCount, PAGE_SIZE)
++      const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: countToLoad - 1 })
++      setLines(freshLines)
++      setTotal(freshTotal)
++    },
++    [projectId, lines.length]
++  )
++
+   const [filterRole, setFilterRole] = useState<string>("__all__")
+   const [filterStatus, setFilterStatus] = useState<string>("__all__")
+   const [isImporting, setIsImporting] = useState(false)
+@@ -771,6 +889,32 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+     [toast]
+   )
+ 
++  // Inline source text update
++  const handleSourceTextChange = useCallback(
++    async (lineId: string, newSourceText: string) => {
++      // Capture original before optimistic update
++      let originalSourceText: string | undefined
++      setLines((prev) => {
++        const line = prev.find((l) => l.id === lineId)
++        originalSourceText = line?.source_text
++        return prev.map((l) =>
++          l.id === lineId ? { ...l, source_text: newSourceText } : l
++        )
++      })
++      const result = await updateScriptLine(lineId, { source_text: newSourceText })
++      if (!result.success) {
++        toast({ title: "שגיאה", description: "שגיאה בשמירת טקסט מקור", variant: "destructive" })
++        // Revert to original
++        setLines((prev) =>
++          prev.map((l) =>
++            l.id === lineId ? { ...l, source_text: originalSourceText } : l
++          )
++        )
++      }
++    },
++    [toast]
++  )
++
+   // Inline rec_status update
+   const handleRecStatusChange = useCallback(
+     async (lineId: string, newStatus: RecStatus | null) => {
+@@ -823,6 +967,65 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+     [toast]
+   )
+ 
++  const handleAddLineAtEnd = useCallback(
++    async () => {
++      const newLine: ScriptLineInput = {
++        line_number: 0,
++        role_name: "דמות חדשה",
++        source_text: "",
++        translation: "",
++        rec_status: null,
++      }
++      const result = await addScriptLine(projectId, newLine)
++      if (result.success && result.line) {
++        if (hasMore) {
++          await refreshVisibleLines(lines.length)
++          toast({
++            title: "שורה נוספה",
++            description: `שורה #${result.line.line_number} נוספה לסוף הפרויקט. טען עוד כדי לראות אותה.`,
++          })
++        } else {
++          await refreshVisibleLines(lines.length + 1)
++          toast({ title: "שורה נוספה", description: `שורה #${result.line.line_number} נוספה ומוכנה לעריכה.` })
++        }
++      } else {
++        toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
++      }
++    },
++    [projectId, toast, refreshVisibleLines, hasMore, lines.length]
++  )
++
++  const handleInsertRelativeLine = useCallback(
++    async (referenceLineId: string, position: "above" | "below") => {
++      const result = await insertScriptLineRelative(projectId, referenceLineId, position)
++      if (result.success && result.line) {
++        await refreshVisibleLines(lines.length + 1)
++        toast({
++          title: "שורה נוספה",
++          description: position === "above"
++            ? "שורה חדשה נוספה מעל השורה שנבחרה."
++            : "שורה חדשה נוספה מתחת לשורה שנבחרה.",
++        })
++      } else {
++        toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
++      }
++    },
++    [projectId, toast, refreshVisibleLines, lines.length]
++  )
++
++  const handleDuplicateLine = useCallback(
++    async (lineId: string) => {
++      const result = await duplicateScriptLine(projectId, lineId)
++      if (result.success && result.line) {
++        await refreshVisibleLines(lines.length + 1)
++        toast({ title: "שורה שוכפלה", description: `שורה #${result.line.line_number} נוצרה כהעתק לעריכה.` })
++      } else {
++        toast({ title: "שגיאה בשכפול שורה", description: result.error, variant: "destructive" })
++      }
++    },
++    [projectId, toast, refreshVisibleLines, lines.length]
++  )
++
+   // Master Excel export — RTL, bold headers, multiple sheets (Agent 6)
+   async function handleExport() {
+     try {
+@@ -998,6 +1201,11 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+           </Button>
+         )}
+ 
++        <Button variant="outline" size="sm" onClick={handleAddLineAtEnd} className="gap-1.5">
++          <Plus className="h-4 w-4" />
++          {"הוסף שורה חדשה"}
++        </Button>
++
+         {hasLines && (
+           <Button variant="outline" size="sm" onClick={handleSyncActors} disabled={isSyncing} className="gap-1.5">
+             <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+@@ -1261,16 +1469,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+           {/*
+             Grid-based virtual table — header + body share the same grid-template-columns
+             so columns always align even with absolutely-positioned virtual rows.
+-            Fixed cols: 38+34+90+140+120+110 = 532px. Remaining space split 50/50 for translation + source.
++            Fixed cols: 38+34+34+90+140+120+110 = 566px. Remaining space split 50/50 for translation + source.
+           */}
+-          <div style={{ minWidth: 1100, direction: "rtl" }}>
++          <div style={{ minWidth: 1140, direction: "rtl" }}>
+             {/* Header */}
+             <div
+               className="sticky top-0 bg-background z-10 border-b"
+               style={{
+                 display: "grid",
+-                gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
+-                minWidth: 1100,
++                gridTemplateColumns: "38px 34px 34px 90px 140px 120px 110px 1fr 1fr",
++                minWidth: 1140,
+               }}
+             >
+               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">#</div>
+@@ -1284,6 +1492,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+                   aria-label="בחר הכל"
+                 />
+               </div>
++              <div className="px-1 h-10 flex items-center justify-center" />
+               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">TC</div>
+               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תפקיד</div>
+               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">שחקן</div>
+@@ -1314,7 +1523,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+                       overflow: "hidden",
+                       transform: `translateY(${virtualRow.start}px)`,
+                       display: "grid",
+-                      gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
++                      gridTemplateColumns: "38px 34px 34px 90px 140px 120px 110px 1fr 1fr",
+                     }}
+                     className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
+                   >
+@@ -1333,6 +1542,14 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
+                       />
+                     </div>
++                    {/* row actions */}
++                    <div className="px-1 flex items-center justify-center pointer-events-auto z-10">
++                      <RowActionsMenu
++                        onInsertAbove={() => handleInsertRelativeLine(line.id, "above")}
++                        onInsertBelow={() => handleInsertRelativeLine(line.id, "below")}
++                        onDuplicate={() => handleDuplicateLine(line.id)}
++                      />
++                    </div>
+                     {/* TC */}
+                     <div className="group text-right px-2 overflow-hidden whitespace-nowrap flex items-center min-w-0 pointer-events-auto z-10">
+                       <TimecodeCell lineId={line.id} value={line.timecode} onChange={handleTimecodeChange} />
+@@ -1416,9 +1633,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
+                       <TooltipProvider delayDuration={200}>
+                         <Tooltip>
+                           <TooltipTrigger asChild>
+-                            <p className="text-xs text-muted-foreground truncate whitespace-nowrap cursor-default">
+-                              {line.source_text ?? ""}
+-                            </p>
++                            <div className="truncate whitespace-nowrap w-full">
++                              <SourceTextCell lineId={line.id} value={line.source_text} onChange={handleSourceTextChange} />
++                            </div>
+                           </TooltipTrigger>
+                           {line.source_text && (
+                             <TooltipContent side="top" dir="ltr" className="max-w-sm text-xs whitespace-pre-wrap text-left break-words">
+diff --git a/lib/actions/script-line-actions.ts b/lib/actions/script-line-actions.ts
+index ecd0792..ab7d40b 100644
+--- a/lib/actions/script-line-actions.ts
++++ b/lib/actions/script-line-actions.ts
+@@ -10,6 +10,146 @@ interface ActionResult {
+   error?: string
+ }
+ 
++const SORT_INDEX_STEP = 1024
++
++type ManualInsertPosition = "above" | "below"
++
++type ScriptLineOrderRow = {
++  id: string
++  project_id: string
++  role_name: string
++  sort_index: number | null
++  line_number: number | null
++  created_at: string
++}
++
++function toNumberOrNull(value: unknown): number | null {
++  if (value == null) return null
++  const num = Number(value)
++  return Number.isFinite(num) ? num : null
++}
++
++function normalizeOrderRow(row: Record<string, unknown>): ScriptLineOrderRow {
++  return {
++    id: String(row.id),
++    project_id: String(row.project_id),
++    role_name: String(row.role_name ?? ""),
++    sort_index: toNumberOrNull(row.sort_index),
++    line_number: toNumberOrNull(row.line_number),
++    created_at: String(row.created_at ?? ""),
++  }
++}
++
++async function listProjectLineOrder(
++  projectId: string,
++  supabase: SupabaseClient
++): Promise<ScriptLineOrderRow[]> {
++  const { data, error } = await supabase
++    .from("script_lines")
++    .select("id, project_id, role_name, sort_index, line_number, created_at")
++    .eq("project_id", projectId)
++    .order("sort_index", { ascending: true, nullsFirst: false })
++    .order("line_number", { ascending: true, nullsFirst: false })
++    .order("created_at", { ascending: true })
++    .order("id", { ascending: true })
++
++  if (error) throw error
++  return (data ?? []).map((row: Record<string, unknown>) => normalizeOrderRow(row))
++}
++
++async function getCurrentMaxSortIndex(
++  projectId: string,
++  supabase: SupabaseClient
++): Promise<number> {
++  const orderedRows = await listProjectLineOrder(projectId, supabase)
++  return orderedRows.reduce((max, row) => Math.max(max, row.sort_index ?? 0), 0)
++}
++
++async function getNextManualLineNumber(
++  projectId: string,
++  supabase: SupabaseClient
++): Promise<number> {
++  const { data, error } = await supabase
++    .from("script_lines")
++    .select("line_number")
++    .eq("project_id", projectId)
++    .order("line_number", { ascending: false, nullsFirst: false })
++    .limit(1)
++
++  if (error) throw error
++  return (toNumberOrNull(data?.[0]?.line_number) ?? 0) + 1
++}
++
++async function rebalanceProjectLineSortIndexes(
++  projectId: string,
++  supabase: SupabaseClient,
++  orderedRows?: ScriptLineOrderRow[]
++): Promise<ScriptLineOrderRow[]> {
++  const rows = orderedRows ?? await listProjectLineOrder(projectId, supabase)
++  if (rows.length === 0) return []
++
++  const updates = rows
++    .map((row, index) => ({
++      id: row.id,
++      project_id: row.project_id,
++      role_name: row.role_name,
++      sort_index: (index + 1) * SORT_INDEX_STEP,
++    }))
++    .filter((update, index) => rows[index].sort_index !== update.sort_index)
++
++  if (updates.length > 0) {
++    const BATCH = 500
++    for (let i = 0; i < updates.length; i += BATCH) {
++      const batch = updates.slice(i, i + BATCH)
++      const { error } = await supabase
++        .from("script_lines")
++        .upsert(batch, { onConflict: "id", ignoreDuplicates: false })
++      if (error) throw error
++    }
++  }
++
++  return rows.map((row, index) => ({
++    ...row,
++    sort_index: (index + 1) * SORT_INDEX_STEP,
++  }))
++}
++
++function computeRelativeSortIndex(
++  orderedRows: ScriptLineOrderRow[],
++  referenceLineId: string,
++  position: ManualInsertPosition
++): number | null {
++  const refIndex = orderedRows.findIndex((row) => row.id === referenceLineId)
++  if (refIndex === -1) return null
++
++  const prevSortIndex = position === "above"
++    ? orderedRows[refIndex - 1]?.sort_index ?? null
++    : orderedRows[refIndex].sort_index ?? null
++  const nextSortIndex = position === "above"
++    ? orderedRows[refIndex].sort_index ?? null
++    : orderedRows[refIndex + 1]?.sort_index ?? null
++
++  if (prevSortIndex == null && nextSortIndex == null) {
++    return SORT_INDEX_STEP
++  }
++  if (prevSortIndex == null && nextSortIndex != null) {
++    return nextSortIndex - SORT_INDEX_STEP
++  }
++  if (prevSortIndex != null && nextSortIndex == null) {
++    return prevSortIndex + SORT_INDEX_STEP
++  }
++  if (prevSortIndex == null || nextSortIndex == null) {
++    return null
++  }
++
++  const gap = nextSortIndex - prevSortIndex
++  if (gap <= 1) {
++    return null
++  }
++
++  return prevSortIndex + Math.floor(gap / 2)
++}
++
+ /**
+  * Internal helper to backfill role_id on script_lines.
+  * Called automatically after saveScriptLines inserts new lines.
+@@ -104,9 +244,11 @@ export async function saveScriptLines(
+       return { success: true, linesCreated: 0 }
+     }
+ 
+-    const rows = lines.map((line) => ({
++    const baseSortIndex = await getCurrentMaxSortIndex(projectId, supabase)
++    const rows = lines.map((line, index) => ({
+       project_id: projectId,
+       script_id: options.scriptId ?? null,
++      sort_index: baseSortIndex + ((index + 1) * SORT_INDEX_STEP),
+       line_number: line.line_number,
+       timecode: line.timecode ?? null,
+       role_name: line.role_name,
+@@ -159,11 +301,12 @@ export async function getScriptLines(
+   let query = supabase
+     .from("script_lines")
+     .select(
+-      "id, project_id, script_id, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at",
++      "id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at",
+       { count: "exact" }
+     )
+     .eq("project_id", projectId)
+-    .order("line_number", { ascending: true })
++    .order("sort_index", { ascending: true, nullsFirst: false })
++    .order("line_number", { ascending: true, nullsFirst: false })
+     .range(from, to)
+ 
+   if (filters.roleName) {
+@@ -187,6 +330,7 @@ export async function getScriptLines(
+     const actorRel = row.actors as { full_name: string } | null
+     return {
+       ...row,
++      sort_index: toNumberOrNull(row.sort_index) ?? undefined,
+       actors: undefined,
+       actor_name: actorRel?.full_name ?? null,
+     } as unknown as ScriptLine
+@@ -200,7 +344,7 @@ export async function getScriptLines(
+  */
+ export async function updateScriptLine(
+   lineId: string,
+-  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode">>
++  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode" | "source_text">>
+ ): Promise<ActionResult> {
+   const supabase = await createClient()
+ 
+@@ -218,6 +362,192 @@ export async function updateScriptLine(
+   }
+ }
+ 
++/**
++ * Add a single new script line manually.
++ */
++export async function addScriptLine(
++  projectId: string,
++  line: ScriptLineInput
++): Promise<ActionResult & { line?: ScriptLine }> {
++  const supabase = await createClient()
++
++  try {
++    const nextSortIndex = await getCurrentMaxSortIndex(projectId, supabase) + SORT_INDEX_STEP
++    const nextLineNumber = line.line_number > 0
++      ? line.line_number
++      : await getNextManualLineNumber(projectId, supabase)
++
++    const { data, error } = await supabase
++      .from("script_lines")
++      .insert({
++        project_id: projectId,
++        sort_index: nextSortIndex,
++        line_number: nextLineNumber,
++        timecode: line.timecode ?? null,
++        role_name: line.role_name,
++        actor_id: line.actor_id ?? null,
++        source_text: line.source_text ?? null,
++        translation: line.translation ?? null,
++        rec_status: line.rec_status ?? null,
++        notes: line.notes ?? null,
++      })
++      .select("id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes, created_at")
++      .single()
++
++    if (error) throw error
++
++    revalidatePath(`/projects/${projectId}`)
++    return {
++      success: true,
++      line: {
++        ...(data as unknown as ScriptLine),
++        sort_index: toNumberOrNull((data as Record<string, unknown>).sort_index) ?? undefined,
++      },
++    }
++  } catch (err) {
++    console.error("addScriptLine error:", err)
++    return { success: false, error: String(err) }
++  }
++}
++
++/**
++ * Insert a blank script line relative to an existing row.
++ * Prefills role_name and actor_id from the reference row for faster editing.
++ */
++export async function insertScriptLineRelative(
++  projectId: string,
++  referenceLineId: string,
++  position: ManualInsertPosition
++): Promise<ActionResult & { line?: ScriptLine }> {
++  const supabase = await createClient()
++
++  try {
++    const { data: referenceRow, error: referenceError } = await supabase
++      .from("script_lines")
++      .select("id, project_id, script_id, role_name, actor_id")
++      .eq("project_id", projectId)
++      .eq("id", referenceLineId)
++      .single()
++
++    if (referenceError || !referenceRow) {
++      return { success: false, error: "Reference line not found" }
++    }
++
++    let orderedRows = await listProjectLineOrder(projectId, supabase)
++    let sortIndex = computeRelativeSortIndex(orderedRows, referenceLineId, position)
++
++    if (sortIndex == null) {
++      orderedRows = await rebalanceProjectLineSortIndexes(projectId, supabase, orderedRows)
++      sortIndex = computeRelativeSortIndex(orderedRows, referenceLineId, position)
++    }
++
++    if (sortIndex == null) {
++      throw new Error("Could not calculate insertion position")
++    }
++
++    const nextLineNumber = await getNextManualLineNumber(projectId, supabase)
++    const { data, error } = await supabase
++      .from("script_lines")
++      .insert({
++        project_id: projectId,
++        script_id: referenceRow.script_id ?? null,
++        sort_index: sortIndex,
++        line_number: nextLineNumber,
++        timecode: null,
++        role_name: referenceRow.role_name,
++        actor_id: referenceRow.actor_id ?? null,
++        source_text: null,
++        translation: null,
++        rec_status: null,
++        notes: null,
++      })
++      .select("id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes, created_at")
++      .single()
++
++    if (error) throw error
++
++    revalidatePath(`/projects/${projectId}`)
++    return {
++      success: true,
++      line: {
++        ...(data as unknown as ScriptLine),
++        sort_index: toNumberOrNull((data as Record<string, unknown>).sort_index) ?? undefined,
++      },
++    }
++  } catch (err) {
++    console.error("insertScriptLineRelative error:", err)
++    return { success: false, error: String(err) }
++  }
++}
++
++/**
++ * Duplicate an existing script line and place the copy directly below it.
++ */
++export async function duplicateScriptLine(
++  projectId: string,
++  sourceLineId: string
++): Promise<ActionResult & { line?: ScriptLine }> {
++  const supabase = await createClient()
++
++  try {
++    const { data: sourceLine, error: sourceError } = await supabase
++      .from("script_lines")
++      .select("id, project_id, script_id, role_name, actor_id, timecode, source_text, translation, rec_status, notes")
++      .eq("project_id", projectId)
++      .eq("id", sourceLineId)
++      .single()
++
++    if (sourceError || !sourceLine) {
++      return { success: false, error: "Source line not found" }
++    }
++
++    let orderedRows = await listProjectLineOrder(projectId, supabase)
++    let sortIndex = computeRelativeSortIndex(orderedRows, sourceLineId, "below")
++
++    if (sortIndex == null) {
++      orderedRows = await rebalanceProjectLineSortIndexes(projectId, supabase, orderedRows)
++      sortIndex = computeRelativeSortIndex(orderedRows, sourceLineId, "below")
++    }
++
++    if (sortIndex == null) {
++      throw new Error("Could not calculate duplication position")
++    }
++
++    const nextLineNumber = await getNextManualLineNumber(projectId, supabase)
++    const { data, error } = await supabase
++      .from("script_lines")
++      .insert({
++        project_id: projectId,
++        script_id: sourceLine.script_id ?? null,
++        sort_index: sortIndex,
++        line_number: nextLineNumber,
++        timecode: sourceLine.timecode ?? null,
++        role_name: sourceLine.role_name,
++        actor_id: sourceLine.actor_id ?? null,
++        source_text: sourceLine.source_text ?? null,
++        translation: sourceLine.translation ?? null,
++        rec_status: sourceLine.rec_status ?? null,
++        notes: sourceLine.notes ?? null,
++      })
++      .select("id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes, created_at")
++      .single()
++
++    if (error) throw error
++
++    revalidatePath(`/projects/${projectId}`)
++    return {
++      success: true,
++      line: {
++        ...(data as unknown as ScriptLine),
++        sort_index: toNumberOrNull((data as Record<string, unknown>).sort_index) ?? undefined,
++      },
++    }
++  } catch (err) {
++    console.error("duplicateScriptLine error:", err)
++    return { success: false, error: String(err) }
++  }
++}
++
+ /**
+  * Delete all script lines for a project (used before re-import).
+  */
+@@ -316,9 +646,8 @@ export async function syncActorsToScriptLines(
+     }
+ 
+     // 3. Partition lines into those that need actor_id set and those that need clearing
+-    const toSync: string[] = []   // line IDs to set actor_id
+-    const toClear: string[] = []  // line IDs to clear actor_id
+-    const syncActorMap = new Map<string, string[]>() // actor_id → line IDs
++    const toClear: string[] = []
++    const syncActorMap = new Map<string, string[]>()
+ 
+     for (const line of allLines) {
+       if (!line.role_name) continue
+@@ -326,18 +655,13 @@ export async function syncActorsToScriptLines(
+       const castActorId = roleActorMap.get(normalizedName)
+ 
+       if (castActorId) {
+-        // Role has a casting — set actor_id if different
+         if (line.actor_id !== castActorId) {
+-          toSync.push(line.id)
+           const existing = syncActorMap.get(castActorId) ?? []
+           existing.push(line.id)
+           syncActorMap.set(castActorId, existing)
+         }
+-      } else {
+-        // Role has no casting — clear actor_id if set
+-        if (line.actor_id) {
+-          toClear.push(line.id)
+-        }
++      } else if (line.actor_id) {
++        toClear.push(line.id)
+       }
+     }
+ 
+diff --git a/lib/format-date.ts b/lib/format-date.ts
+new file mode 100644
+index 0000000..72496c9
+--- /dev/null
++++ b/lib/format-date.ts
+@@ -0,0 +1,40 @@
++/**
++ * Centralized date formatting for the entire application.
++ * Always uses Hebrew-Israel locale and Asia/Jerusalem timezone.
++ */
++
++const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
++  day: "2-digit",
++  month: "2-digit",
++  year: "numeric",
++  hour: "2-digit",
++  minute: "2-digit",
++  timeZone: "Asia/Jerusalem",
++})
++
++const dateOnlyFormatter = new Intl.DateTimeFormat("he-IL", {
++  day: "2-digit",
++  month: "2-digit",
++  year: "numeric",
++  timeZone: "Asia/Jerusalem",
++})
++
++/**
++ * Format a date string or Date object to Hebrew-IL format with time.
++ * Output: "23.06.2025, 16:39"
++ */
++export function formatDateHe(date: string | Date): string {
++  const d = typeof date === "string" ? new Date(date) : date
++  if (isNaN(d.getTime())) return ""
++  return dateTimeFormatter.format(d)
++}
++
++/**
++ * Format a date string or Date object to Hebrew-IL format (date only, no time).
++ * Output: "23.06.2025"
++ */
++export function formatDateOnlyHe(date: string | Date): string {
++  const d = typeof date === "string" ? new Date(date) : date
++  if (isNaN(d.getTime())) return ""
++  return dateOnlyFormatter.format(d)
++}
+diff --git a/lib/parser/structured-parser.ts b/lib/parser/structured-parser.ts
+index aa5b361..ab890f8 100644
+--- a/lib/parser/structured-parser.ts
++++ b/lib/parser/structured-parser.ts
+@@ -16,6 +16,7 @@
+ import type { ScriptLineInput, RecStatus } from "@/lib/types"
+ import { validateScriptLines, validateColumnMapping } from "./schemas"
+ import type { ParseDiagnostic } from "./diagnostics"
++import { isCharacterStopword } from "./tokenizer"
+ 
+ // ─── Shared type ─────────────────────────────────────────────────────────────
+ 
+@@ -461,7 +462,7 @@ export function extractDialogueLines(text: string): ScriptLineInput[] {
+     const colonMatch = trimmed.match(
+       /^([A-Z\u05D0-\u05EA][A-Z0-9 \-'.\u05D0-\u05EA]{0,40}):\s+(.+)$/
+     )
+-    if (colonMatch) {
++    if (colonMatch && !isCharacterStopword(colonMatch[1].trim())) {
+       lines.push({
+         line_number: lineNumber++,
+         role_name: colonMatch[1].trim(),
+@@ -477,7 +478,8 @@ export function extractDialogueLines(text: string): ScriptLineInput[] {
+       /^[A-Z\u05D0-\u05EA]/.test(trimmed) &&
+       trimmed.length >= 2 &&
+       trimmed.length <= 50 &&
+-      !/[.!?]$/.test(trimmed) // doesn't look like end of sentence
++      !/[.!?]$/.test(trimmed) && // doesn't look like end of sentence
++      !isCharacterStopword(trimmed)
+ 
+     if (isAllCaps) {
+       let j = i + 1
+diff --git a/lib/parser/tokenizer.ts b/lib/parser/tokenizer.ts
+index 3aec2ba..2288d37 100644
+--- a/lib/parser/tokenizer.ts
++++ b/lib/parser/tokenizer.ts
+@@ -56,6 +56,38 @@ export interface TokenizeResult {
+   diagnostics: ParseDiagnostic[]
+ }
+ 
++// ─── Stopwords — strings that should never be detected as character names ────
++
++const CHARACTER_STOPWORDS = new Set([
++  "SCENE", "INT", "EXT", "CUT TO", "FADE IN", "FADE OUT", "FADE TO BLACK",
++  "DISSOLVE TO", "SMASH CUT TO", "MATCH CUT TO", "JUMP CUT TO", "WIPE TO",
++  "TIME CUT", "END OF", "THE END", "END",
++  "CHARACTER LIST", "CHARACTERS", "CAST", "CAST LIST",
++  "ACT", "ACT ONE", "ACT TWO", "ACT THREE",
++  "EPISODE", "PAGE", "CHAPTER", "PROLOGUE", "EPILOGUE",
++  "SCRIPT TITLE", "TITLE", "SCRIPT", "SCREENPLAY",
++  "CONTINUED", "MORE", "CONT'D",
++  "V.O.", "O.S.", "O.C.",
++  "SUPER", "TITLE CARD", "CHYRON", "INTERCUT", "MONTAGE",
++  "LATER", "MOMENTS LATER", "CONTINUOUS",
++  "OPENING CREDITS", "CLOSING CREDITS", "END CREDITS",
++  "BLACK SCREEN", "WHITE SCREEN", "FREEZE FRAME",
++])
++
++/**
++ * Check if a string matches a character stopword.
++ * Also rejects strings that start with a digit or end with `:`.
++ */
++function isCharacterStopword(name: string): boolean {
++  const upper = name.toUpperCase().trim()
++  if (CHARACTER_STOPWORDS.has(upper)) return true
++  // Starts with a digit (e.g. "1. HERO")
++  if (/^\d/.test(upper)) return true
++  // Ends with colon — this is a label/heading, not a character name
++  if (upper.endsWith(":")) return true
++  return false
++}
++
+ // ─── Patterns ────────────────────────────────────────────────────────────────
+ 
+ // Scene headings: INT., EXT., INT./EXT., I/E
+@@ -84,6 +116,8 @@ const SPEAKER_COLON_RE =
+ const BARE_CHARACTER_RE =
+   /^([A-Z\u05D0-\u05EA][A-Z0-9 \-'.\u05D0-\u05EA]{0,40})(\s*\(.*\))?\s*$/
+ 
++export { isCharacterStopword, CHARACTER_STOPWORDS }
++
+ // ─── Tokenizer ───────────────────────────────────────────────────────────────
+ 
+ /**
+@@ -156,14 +190,16 @@ export function tokenize(text: string): TokenizeResult {
+     const charMatch = raw.match(CHARACTER_RE)
+     if (charMatch) {
+       const name = charMatch[2].trim()
+-      tokens.push({
+-        type: "CHARACTER",
+-        text: raw,
+-        line: lineNum,
+-        indent,
+-        characterName: name,
+-      })
+-      continue
++      if (!isCharacterStopword(name)) {
++        tokens.push({
++          type: "CHARACTER",
++          text: raw,
++          line: lineNum,
++          indent,
++          characterName: name,
++        })
++        continue
++      }
+     }
+ 
+     // ── BARE CHARACTER (all-caps, no indent — for unformatted scripts) ────
+@@ -176,7 +212,8 @@ export function tokenize(text: string): TokenizeResult {
+         trimmed === trimmed.toUpperCase() &&
+         trimmed.length >= 2 &&
+         trimmed.length <= 40 &&
+-        !/[.!?]$/.test(trimmed)
++        !/[.!?]$/.test(trimmed) &&
++        !isCharacterStopword(trimmed)
+       ) {
+         // Lookahead: next non-blank line should be indented or a parenthetical
+         const nextIdx = rawLines.findIndex(
+diff --git a/lib/types.ts b/lib/types.ts
+index 9ca78e4..e566a65 100644
+--- a/lib/types.ts
++++ b/lib/types.ts
+@@ -293,6 +293,7 @@ export interface ScriptLine {
+   id: string
+   project_id: string
+   script_id?: string
++  sort_index?: number
+   line_number?: number
+   timecode?: string
+   role_name: string
+diff --git a/migrations/011_add_script_lines_sort_index.sql b/migrations/011_add_script_lines_sort_index.sql
+new file mode 100644
+index 0000000..bf49e8e
+--- /dev/null
++++ b/migrations/011_add_script_lines_sort_index.sql
+@@ -0,0 +1,33 @@
++-- Migration 011: Add editable sort_index to script_lines
++--
++-- Purpose:
++--   Separate source/display numbering (`line_number`) from editable row order.
++--   This enables insert-above, insert-below, duplicate, and future reorder flows
++--   without relying on line_number as the only ordering field.
++
++ALTER TABLE script_lines
++  ADD COLUMN IF NOT EXISTS sort_index INTEGER;
++
++WITH ordered AS (
++  SELECT
++    id,
++    ROW_NUMBER() OVER (
++      PARTITION BY project_id
++      ORDER BY line_number NULLS LAST, created_at, id
++    ) AS row_num
++  FROM script_lines
++)
++UPDATE script_lines sl
++SET sort_index = ordered.row_num * 1024
++FROM ordered
++WHERE sl.id = ordered.id
++  AND sl.sort_index IS NULL;
++
++ALTER TABLE script_lines
++  ALTER COLUMN sort_index SET NOT NULL;
++
++CREATE INDEX IF NOT EXISTS idx_script_lines_project_sort_index
++  ON script_lines (project_id, sort_index);
++
++COMMENT ON COLUMN script_lines.sort_index IS
++  'Editable workspace ordering key. line_number remains display/source metadata.';
