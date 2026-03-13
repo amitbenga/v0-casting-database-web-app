@@ -16,6 +16,7 @@
 import type { ScriptLineInput, RecStatus } from "@/lib/types"
 import { validateScriptLines, validateColumnMapping } from "./schemas"
 import type { ParseDiagnostic } from "./diagnostics"
+import { isCharacterStopword } from "./tokenizer"
 
 // ─── Shared type ─────────────────────────────────────────────────────────────
 
@@ -461,7 +462,7 @@ export function extractDialogueLines(text: string): ScriptLineInput[] {
     const colonMatch = trimmed.match(
       /^([A-Z\u05D0-\u05EA][A-Z0-9 \-'.\u05D0-\u05EA]{0,40}):\s+(.+)$/
     )
-    if (colonMatch) {
+    if (colonMatch && !isCharacterStopword(colonMatch[1].trim())) {
       lines.push({
         line_number: lineNumber++,
         role_name: colonMatch[1].trim(),
@@ -477,7 +478,8 @@ export function extractDialogueLines(text: string): ScriptLineInput[] {
       /^[A-Z\u05D0-\u05EA]/.test(trimmed) &&
       trimmed.length >= 2 &&
       trimmed.length <= 50 &&
-      !/[.!?]$/.test(trimmed) // doesn't look like end of sentence
+      !/[.!?]$/.test(trimmed) && // doesn't look like end of sentence
+      !isCharacterStopword(trimmed)
 
     if (isAllCaps) {
       let j = i + 1

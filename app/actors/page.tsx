@@ -361,6 +361,7 @@ function ActorsDatabaseContent() {
     try {
       const { exportActors } = await import("@/lib/export-utils")
       exportActors(selectedActorObjects, format, "selected_actors")
+      toast({ title: "ייצוא הושלם", description: `הקובץ הורד בהצלחה (${selectedActorObjects.length} שחקנים)` })
     } catch (error) {
       console.error("[v0] Error exporting actors:", error)
       toast({ title: "שגיאה", description: "שגיאה בייצוא השחקנים", variant: "destructive" })
@@ -414,6 +415,20 @@ function ActorsDatabaseContent() {
     }
     return nonDraftActors
   }, [activeTab, draftActors, nonDraftActors, favoriteIdsSet])
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      deferredSearchQuery.trim().length > 0 ||
+      filters.gender.length > 0 ||
+      filters.isSinger !== null ||
+      filters.isCourseGrad !== null ||
+      filters.skills.length > 0 ||
+      filters.languages.length > 0 ||
+      filters.vatStatus.length > 0 ||
+      (filters.dubbingExperience && filters.dubbingExperience.length > 0) ||
+      (filters.singingStyles && filters.singingStyles.length > 0)
+    )
+  }, [deferredSearchQuery, filters])
 
   const filteredActors = useMemo(() => {
     const currentYear = new Date().getFullYear()
@@ -643,7 +658,11 @@ function ActorsDatabaseContent() {
               className="w-full"
             >
               <TabsList className="mb-6">
-                <TabsTrigger value="all">כל השחקנים ({nonDraftActors.length})</TabsTrigger>
+                <TabsTrigger value="all">
+                  {hasActiveFilters && activeTab === "all"
+                    ? `תוצאות (${filteredActors.length})`
+                    : `כל השחקנים (${nonDraftActors.length})`}
+                </TabsTrigger>
                 <TabsTrigger value="favorites">מועדפים ({favorites.length})</TabsTrigger>
                 {draftActors.length > 0 && (
                   <TabsTrigger value="drafts" className="text-orange-600 data-[state=active]:text-orange-600">

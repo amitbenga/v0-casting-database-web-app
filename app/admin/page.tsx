@@ -107,6 +107,7 @@ function AdminPageContent() {
   const [selectedSubmission, setSelectedSubmission] = useState<ActorSubmission | null>(null)
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
   const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null)
+  const [rejectionReason, setRejectionReason] = useState("")
 
   const [isPlaying, setIsPlaying] = useState<string | null>(null)
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
@@ -648,7 +649,7 @@ function AdminPageContent() {
       )}
 
       {/* Review Dialog */}
-      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+      <Dialog open={isReviewDialogOpen} onOpenChange={(open) => { setIsReviewDialogOpen(open); if (!open) setRejectionReason("") }}>
         <DialogContent className="sm:max-w-[500px]" dir="rtl">
           <DialogHeader>
             <DialogTitle>{reviewAction === "approve" ? "אישור בקשה" : "דחיית בקשה"}</DialogTitle>
@@ -660,6 +661,21 @@ function AdminPageContent() {
                 : `האם אתה בטוח שברצונך לדחות את הבקשה של ${selectedSubmission?.full_name}?`}
             </p>
 
+            {reviewAction === "reject" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">סיבת הדחייה *</label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="לדוגמה: הקול לא מתאים לדמות, אין ניסיון מספיק..."
+                  className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  dir="rtl"
+                />
+                {rejectionReason.length > 0 && rejectionReason.length < 10 && (
+                  <p className="text-xs text-destructive">סיבת הדחייה חייבת להכיל לפחות 10 תווים</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
@@ -671,11 +687,16 @@ function AdminPageContent() {
                   if (reviewAction === "approve") {
                     handleApprove(selectedSubmission)
                   } else {
+                    if (rejectionReason.trim().length < 10) {
+                      toast({ title: "שגיאה", description: "סיבת הדחייה חייבת להכיל לפחות 10 תווים", variant: "destructive" })
+                      return
+                    }
                     handleReject(selectedSubmission)
                   }
                 }
               }}
               variant={reviewAction === "approve" ? "default" : "destructive"}
+              disabled={reviewAction === "reject" && rejectionReason.trim().length < 10}
             >
               {reviewAction === "approve" ? "אשר" : "דחה"}
             </Button>

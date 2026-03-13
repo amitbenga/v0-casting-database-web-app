@@ -88,6 +88,21 @@ function ActorIntakePageContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Custom validation with Hebrew messages (replaces native browser validation)
+    if (!formData.full_name.trim()) {
+      toast({ title: "שדה חובה", description: "נא למלא שם מלא", variant: "destructive" })
+      return
+    }
+    if (!formData.gender) {
+      toast({ title: "שדה חובה", description: "נא לבחור מין", variant: "destructive" })
+      return
+    }
+    if (!formData.birth_year) {
+      toast({ title: "שדה חובה", description: "נא למלא שנת לידה", variant: "destructive" })
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -233,7 +248,7 @@ function ActorIntakePageContent() {
       if (error) throw error
 
       toast({ title: "טיוטה נשמרה", description: "השחקן נשמר כטיוטה." })
-      router.push("/")
+      router.push("/actors")
     } catch (error) {
       console.error("[v0] Error saving draft:", error)
       toast({ title: "שגיאה", description: "שגיאה בשמירת הטיוטה", variant: "destructive" })
@@ -325,7 +340,6 @@ function ActorIntakePageContent() {
                       value={formData.full_name}
                       onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                       placeholder="ישראל ישראלי"
-                      required
                     />
                   </div>
 
@@ -368,7 +382,6 @@ function ActorIntakePageContent() {
                         value={formData.birth_year}
                         onChange={(e) => setFormData({ ...formData, birth_year: e.target.value })}
                         placeholder="1990"
-                        required
                         dir="ltr"
                         className="text-left"
                       />

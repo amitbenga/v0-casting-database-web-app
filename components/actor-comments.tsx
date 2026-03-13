@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
+import { formatDateHe } from "@/lib/format-date"
 
 interface Comment {
   id: string
@@ -20,8 +21,8 @@ const mockComments: Comment[] = [
     id: "1",
     author: "Michaela S.",
     authorInitials: "MS",
-    content: "Good fit, let's book him",
-    timestamp: "06-23-2025, 3:39 pm (PST)",
+    content: "מתאים, בואו נקבע",
+    timestamp: "2025-06-23T15:39:00Z",
   },
 ]
 
@@ -34,18 +35,10 @@ export function ActorComments({ actorId }: { actorId: string }) {
 
     const comment: Comment = {
       id: Date.now().toString(),
-      author: "You",
-      authorInitials: "YO",
+      author: "את/ה",
+      authorInitials: "ME",
       content: newComment,
-      timestamp: new Date().toLocaleString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-        timeZoneName: "short",
-      }),
+      timestamp: new Date().toISOString(),
     }
 
     setComments([...comments, comment])
@@ -54,20 +47,20 @@ export function ActorComments({ actorId }: { actorId: string }) {
 
   return (
     <Card className="p-6">
-      <h3 className="font-semibold mb-4">Comments</h3>
+      <h3 className="font-semibold mb-4">הערות</h3>
 
       <div className="space-y-6">
         {/* Add Comment Form */}
         <div className="space-y-3">
           <Textarea
-            placeholder="Add a comment..."
+            placeholder="הוסף הערה..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             className="min-h-[100px]"
           />
           <div className="flex justify-end">
             <Button onClick={handleAddComment} disabled={!newComment.trim()}>
-              Add Comment
+              הוסף הערה
             </Button>
           </div>
         </div>
@@ -84,7 +77,7 @@ export function ActorComments({ actorId }: { actorId: string }) {
               <div className="flex-1 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{comment.author}</span>
-                  <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
+                  <span className="text-xs text-muted-foreground">{formatDateHe(comment.timestamp)}</span>
                 </div>
                 <p className="text-sm text-muted-foreground">{comment.content}</p>
               </div>

@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
 import { swrKeys } from "@/lib/swr-keys"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { formatDateOnlyHe } from "@/lib/format-date"
 import {
   PROJECT_STATUS_LIST,
   PROJECT_STATUS_LABELS,
@@ -300,7 +301,7 @@ function ProjectsPageContent() {
                     <div className="flex items-center gap-2 text-xs md:text-sm">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">תאריך:</span>
-                      <span className="font-medium">{new Date(project.project_date).toLocaleDateString("he-IL")}</span>
+                      <span className="font-medium">{formatDateOnlyHe(project.project_date)}</span>
                     </div>
                   )}
                 </div>
@@ -326,7 +327,7 @@ function ProjectsPageContent() {
                     </div>
                   )}
                   <span className="mr-auto">
-                    {new Date(project.created_at).toLocaleDateString("he-IL")}
+                    {formatDateOnlyHe(project.created_at)}
                   </span>
                 </div>
               </div>

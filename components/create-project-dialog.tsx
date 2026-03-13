@@ -32,6 +32,12 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!formData.name.trim()) {
+      toast({ title: "שדה חובה", description: "נא למלא שם פרויקט", variant: "destructive" })
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -86,7 +92,6 @@ export function CreateProjectDialog({ open, onOpenChange, onProjectCreated }: Cr
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="לדוגמה: קמפיין קיץ 2025"
-                required
               />
             </div>
 
