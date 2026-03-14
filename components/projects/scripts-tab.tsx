@@ -96,6 +96,9 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
   const [showStructuredImport, setShowStructuredImport] = useState(false)
   const [isImportingStructured, setIsImportingStructured] = useState(false)
 
+  // Drag-and-drop state
+  const [isDragOver, setIsDragOver] = useState(false)
+
   // AI import flow
   const aiFileInputRef = useRef<HTMLInputElement>(null)
   const [aiImports, setAiImports] = useState<ScriptImport[]>([])
@@ -495,8 +498,46 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
         <CardContent className="space-y-4">
           {/* Single upload area — PDF, DOCX, TXT */}
           <div
-            className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer"
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+              isDragOver
+                ? "border-primary bg-primary/10"
+                : "hover:border-primary/50 hover:bg-muted/50"
+            }`}
             onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDragOver(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDragOver(false)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDragOver(false)
+              const files = e.dataTransfer.files
+              if (!files || files.length === 0) return
+              const newPendingFiles: PendingFile[] = Array.from(files)
+                .filter((f) => /\.(pdf|docx|txt)$/i.test(f.name))
+                .map((file) => ({
+                  file,
+                  id: `${file.name}-${Date.now()}-${Math.random()}`,
+                  status: "pending" as const,
+                }))
+              if (newPendingFiles.length === 0) {
+                toast({
+                  title: "פורמט לא נתמך",
+                  description: "ניתן לגרור קבצי PDF, DOCX או TXT בלבד",
+                  variant: "destructive",
+                })
+                return
+              }
+              setPendingFiles((prev) => [...prev, ...newPendingFiles])
+              setParseResult(null)
+            }}
           >
             <input
               ref={fileInputRef}
@@ -506,8 +547,8 @@ export function ScriptsTab({ projectId, onScriptApplied }: ScriptsTabProps) {
               onChange={handleFilesSelected}
               className="hidden"
             />
-            <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm font-medium">לחץ לבחירת קבצים או גרור לכאן</p>
+            <FileText className={`h-10 w-10 mx-auto mb-3 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
+            <p className="text-sm font-medium">{isDragOver ? "שחרר כאן להעלאה" : "לחץ לבחירת קבצים או גרור לכאן"}</p>
             <p className="text-xs text-muted-foreground mt-1">
               פורמטים נתמכים: PDF, DOCX, TXT
             </p>

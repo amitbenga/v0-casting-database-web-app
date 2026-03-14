@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { AlertCircle, FileSpreadsheet, CheckCircle } from "lucide-react"
+import { AlertCircle, FileSpreadsheet, CheckCircle, Users, Loader2 } from "lucide-react"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
 import {
   autoDetectScriptLineColumns,
@@ -84,8 +84,14 @@ interface NormalisedSheet {
 function normaliseSheetsFromStructured(structuredData: StructuredParseResult[]): NormalisedSheet[] {
   return structuredData.map((sd, i) => ({
     name: sd.sheetName ?? `Table ${i + 1}`,
-    headers: sd.headers,
-    rows: sd.rows,
+    headers: sd.headers.map((h) => (typeof h === "string" ? h : String(h))),
+    rows: sd.rows.map((row) => {
+      const normalized: Record<string, string | number | null> = {}
+      for (const [k, v] of Object.entries(row)) {
+        normalized[k] = v != null && typeof v === "object" ? String(v) : v
+      }
+      return normalized
+    }),
     totalRows: sd.totalRows,
   }))
 }
@@ -99,6 +105,20 @@ function autoDetectForHeaders(headers: string[], isExcel: boolean): Omit<FileMap
     notesCol: detected.notesColumn ?? NONE,
   }
 }
+
+// ─── Role color palette ──────────────────────────────────────────────────────
+const ROLE_COLORS = [
+  "bg-blue-100 text-blue-800",
+  "bg-green-100 text-green-800",
+  "bg-purple-100 text-purple-800",
+  "bg-orange-100 text-orange-800",
+  "bg-pink-100 text-pink-800",
+  "bg-cyan-100 text-cyan-800",
+  "bg-yellow-100 text-yellow-800",
+  "bg-red-100 text-red-800",
+  "bg-indigo-100 text-indigo-800",
+  "bg-teal-100 text-teal-800",
+]
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -196,7 +216,9 @@ export function ScriptLinesImportDialog({
   const timecodeCol = isExcelMode ? (activeMapping?.timecodeCol ?? NONE) : sTimecodeCol
   const sourceCol = isExcelMode ? (activeMapping?.sourceCol ?? NONE) : sSourceCol
   const notesCol = isExcelMode ? (activeMapping?.notesCol ?? NONE) : sNotesCol
-  const displayHeaders = isExcelMode ? activeSheetHeaders : (structuredSheets[structuredSheet]?.headers ?? [])
+  const displayHeaders = isExcelMode
+    ? activeSheetHeaders.map((h) => (typeof h === "string" ? h : String(h)))
+    : (structuredSheets[structuredSheet]?.headers ?? []).map((h) => (typeof h === "string" ? h : String(h)))
 
   function setRoleCol(v: string) { isExcelMode ? updateFileField(activeFile, "roleCol", v) : setSRoleCol(v) }
   function setTimecodeCol(v: string) { isExcelMode ? updateFileField(activeFile, "timecodeCol", v) : setSTimecodeCol(v) }
@@ -257,7 +279,6 @@ export function ScriptLinesImportDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fileMappings, activeFile, sRoleCol, sTimecodeCol, sSourceCol, sNotesCol, structuredSheet]
   )
-  const previewLines = activeLines.slice(0, 8)
 
   // Total lines across ALL files (shown in footer)
   const totalAll = useMemo(
@@ -268,6 +289,30 @@ export function ScriptLinesImportDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fileMappings, sRoleCol, sTimecodeCol, sSourceCol, sNotesCol, structuredSheet]
   )
+
+  // Role summary — unique roles + count per role
+  const roleSummary = useMemo(() => {
+    const allLines = isExcelMode
+      ? allFiles.flatMap((_, i) => parseLinesForFile(i))
+      : parseStructuredLines()
+
+    const counts = new Map<string, number>()
+    for (const line of allLines) {
+      counts.set(line.role_name, (counts.get(line.role_name) ?? 0) + 1)
+    }
+
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileMappings, sRoleCol, sTimecodeCol, sSourceCol, sNotesCol, structuredSheet])
+
+  // Role color map
+  const roleColorMap = useMemo(() => {
+    const map = new Map<string, string>()
+    roleSummary.forEach((r, i) => map.set(r.name, ROLE_COLORS[i % ROLE_COLORS.length]))
+    return map
+  }, [roleSummary])
 
   function handleImport() {
     if (totalAll === 0) return
@@ -318,117 +363,145 @@ export function ScriptLinesImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5 text-primary" />
-            <DialogTitle>{"ייבוא שורות תסריט — סביבת עבודה"}</DialogTitle>
-          </div>
-          <p className="text-sm text-muted-foreground">{headerLabel}</p>
-        </DialogHeader>
+      <DialogContent className="max-w-6xl w-[95vw] h-[90vh] flex flex-col p-0" dir="rtl">
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex-shrink-0 px-6 pt-6 pb-3 border-b">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              <DialogTitle>{"ייבוא שורות תסריט — סביבת עבודה"}</DialogTitle>
+            </div>
+            <p className="text-sm text-muted-foreground">{headerLabel}</p>
+          </DialogHeader>
 
-        {/* ── File tabs (multi-file Excel only) ────────────────────────── */}
-        {isMultiFile && (
-          <div className="flex gap-1 flex-wrap border-b pb-1 -mb-1">
-            {allFiles.map((f, i) => {
-              const count = fileMappings[i]?.roleCol ? parseLinesForFile(i).length : null
-              return (
-                <button
-                  key={i}
-                  onClick={() => setActiveFile(i)}
-                  className={`px-3 py-1.5 text-sm rounded-t-md border-b-2 transition-colors ${
-                    activeFile === i
-                      ? "border-primary text-primary font-medium bg-primary/5"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <span className="max-w-[160px] truncate inline-block align-bottom">
-                    {f.fileName}
-                  </span>
-                  {count !== null && count > 0 && (
-                    <Badge variant="secondary" className="mr-1.5 text-xs px-1.5 py-0">
-                      {count}
-                    </Badge>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        )}
+          {/* ── File tabs (multi-file Excel only) ────────────────────────── */}
+          {isMultiFile && (
+            <div className="flex gap-1 flex-wrap mt-3">
+              {allFiles.map((f, i) => {
+                const count = fileMappings[i]?.roleCol ? parseLinesForFile(i).length : null
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setActiveFile(i)}
+                    className={`px-3 py-1.5 text-sm rounded-t-md border-b-2 transition-colors ${
+                      activeFile === i
+                        ? "border-primary text-primary font-medium bg-primary/5"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <span className="max-w-[160px] truncate inline-block align-bottom">
+                      {f.fileName}
+                    </span>
+                    {count !== null && count > 0 && (
+                      <Badge variant="secondary" className="mr-1.5 text-xs px-1.5 py-0">
+                        {count}
+                      </Badge>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
-        {/* ── Sheet selector ────────────────────────────────────────────── */}
-        {currentSheets.length > 1 && (
-          <div className="flex items-center gap-2">
-            <Label className="text-sm">{"גיליון"}</Label>
-            <Select
-              value={String(currentSelectedSheet)}
-              onValueChange={(v) => handleCurrentSheetChange(Number(v))}
-            >
-              <SelectTrigger className="h-8 w-64 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {currentSheets.map((s) => (
-                  <SelectItem key={s.index} value={String(s.index)}>
-                    {s.name} ({s.totalRows} {"שורות"})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        {/* ── Settings row: sheet selector + column mapping ───────────────── */}
+        <div className="flex-shrink-0 px-6 py-3 space-y-3 border-b bg-muted/20">
+          {/* Sheet selector */}
+          {currentSheets.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">{"גיליון"}</Label>
+              <Select
+                value={String(currentSelectedSheet)}
+                onValueChange={(v) => handleCurrentSheetChange(Number(v))}
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentSheets.map((s) => (
+                    <SelectItem key={s.index} value={String(s.index)}>
+                      {s.name} ({s.totalRows} {"שורות"})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
-        {/* ── Column mapping grid ───────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3 p-3 bg-muted/40 rounded-lg">
-          <div>
-            <Label className="text-xs">{"תפקיד"} *</Label>
-            <ColSelect value={roleCol} onChange={setRoleCol} required />
-          </div>
-          <div>
-            <Label className="text-xs">Timecode</Label>
-            <ColSelect value={timecodeCol} onChange={setTimecodeCol} />
-          </div>
-          <div>
-            <Label className="text-xs">{"טקסט מקור (אנגלית)"}</Label>
-            <ColSelect value={sourceCol} onChange={setSourceCol} />
-          </div>
-          <div>
-            <Label className="text-xs">{"הערות"}</Label>
-            <ColSelect value={notesCol} onChange={setNotesCol} />
+          {/* Column mapping grid */}
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <Label className="text-xs">{"תפקיד"} *</Label>
+              <ColSelect value={roleCol} onChange={setRoleCol} required />
+            </div>
+            <div>
+              <Label className="text-xs">Timecode</Label>
+              <ColSelect value={timecodeCol} onChange={setTimecodeCol} />
+            </div>
+            <div>
+              <Label className="text-xs">{"טקסט מקור (אנגלית)"}</Label>
+              <ColSelect value={sourceCol} onChange={setSourceCol} />
+            </div>
+            <div>
+              <Label className="text-xs">{"הערות"}</Label>
+              <ColSelect value={notesCol} onChange={setNotesCol} />
+            </div>
           </div>
         </div>
 
-        {/* ── Preview (active file) ─────────────────────────────────────── */}
-        <div className="space-y-2">
-          {roleCol && previewLines.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
+        {/* ── Main content: roles summary + preview table ──────────────── */}
+        <div className="flex-1 min-h-0 flex flex-col px-6 py-3 overflow-hidden">
+          {roleCol && activeLines.length > 0 ? (
+            <>
+              {/* Roles summary */}
+              <div className="flex-shrink-0 mb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">
+                    {roleSummary.length} {"תפקידים"} · {totalAll} {"רפליקות"}
+                  </span>
+                </div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {roleSummary.map((role) => (
+                    <Badge key={role.name} variant="outline" className={`text-xs ${roleColorMap.get(role.name) ?? ""}`}>
+                      {role.name} ({role.count})
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview table — scrollable */}
+              <div className="flex items-center gap-2 mb-2 flex-shrink-0">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <span className="text-sm font-medium">
                   {"תצוגה מקדימה"} ({activeLines.length} {"שורות"}
                   {isMultiFile && " בקובץ זה"})
                 </span>
               </div>
-              <div className="border rounded-lg overflow-auto max-h-64">
+              <div className="flex-1 min-h-0 border rounded-lg overflow-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
-                      <TableHead className="w-10">{"#"}</TableHead>
-                      {timecodeCol !== NONE && <TableHead className="w-20">TC</TableHead>}
-                      <TableHead>{"תפקיד"}</TableHead>
+                      <TableHead className="w-12 text-center">{"#"}</TableHead>
+                      {timecodeCol !== NONE && <TableHead className="w-28">TC</TableHead>}
+                      <TableHead className="w-32">{"תפקיד"}</TableHead>
                       {sourceCol !== NONE && <TableHead>{"טקסט מקור"}</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {previewLines.map((line, i) => (
+                    {activeLines.map((line, i) => (
                       <TableRow key={i}>
-                        <TableCell className="text-xs text-muted-foreground">{line.line_number}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground text-center">{line.line_number}</TableCell>
                         {timecodeCol !== NONE && (
                           <TableCell className="text-xs font-mono">{line.timecode ?? "\u2014"}</TableCell>
                         )}
-                        <TableCell className="font-medium text-sm">{line.role_name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`text-xs font-medium ${roleColorMap.get(line.role_name) ?? ""}`}>
+                            {line.role_name}
+                          </Badge>
+                        </TableCell>
                         {sourceCol !== NONE && (
-                          <TableCell className="text-sm max-w-[300px] truncate" dir="ltr">
+                          <TableCell className="text-sm" dir="ltr">
                             {line.source_text ?? "\u2014"}
                           </TableCell>
                         )}
@@ -437,41 +510,43 @@ export function ScriptLinesImportDialog({
                   </TableBody>
                 </Table>
               </div>
-              {activeLines.length > 8 && (
-                <p className="text-xs text-muted-foreground text-center">
-                  {"מציג 8 מתוך"} {activeLines.length} {"שורות"}
-                </p>
-              )}
-            </div>
+            </>
           ) : roleCol ? (
-            <div className="flex items-center gap-2 text-amber-600 p-3">
-              <AlertCircle className="h-4 w-4" />
+            <div className="flex items-center justify-center flex-1 gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
               <span className="text-sm">{"לא נמצאו שורות בעמודת התפקיד שנבחרה"}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-muted-foreground p-3">
-              <AlertCircle className="h-4 w-4" />
+            <div className="flex items-center justify-center flex-1 gap-2 text-muted-foreground">
+              <AlertCircle className="h-5 w-5" />
               <span className="text-sm">{"בחר עמודת תפקיד כדי לראות תצוגה מקדימה"}</span>
             </div>
           )}
         </div>
 
         {/* ── Footer ───────────────────────────────────────────────────── */}
-        <div className="flex justify-between items-center pt-2 border-t">
-          {isMultiFile && totalAll > 0 ? (
-            <span className="text-sm text-muted-foreground">
-              {"סה״כ מכל הקבצים:"}{" "}
-              <strong>{totalAll}</strong> {"שורות"}
-            </span>
-          ) : (
-            <span />
-          )}
+        <div className="flex-shrink-0 flex justify-between items-center px-6 py-3 border-t bg-muted/10">
+          <div className="flex items-center gap-4">
+            {totalAll > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {"סה״כ:"}{" "}
+                <strong>{totalAll}</strong> {"שורות"} · <strong>{roleSummary.length}</strong> {"תפקידים"}
+              </span>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               {"ביטול"}
             </Button>
-            <Button onClick={handleImport} disabled={totalAll === 0 || isImporting}>
-              {isImporting ? "מייבא..." : `ייבא ${totalAll} שורות`}
+            <Button onClick={handleImport} disabled={totalAll === 0 || isImporting} size="lg">
+              {isImporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                  {"מייבא..."}
+                </>
+              ) : (
+                `ייבא ${totalAll} שורות`
+              )}
             </Button>
           </div>
         </div>

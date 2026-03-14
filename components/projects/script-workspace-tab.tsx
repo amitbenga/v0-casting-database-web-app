@@ -45,6 +45,7 @@ import {
   insertScriptLineRelative,
   duplicateScriptLine,
   getScriptLineCountsByRole,
+  syncRoleReplicaCounts,
 } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
@@ -794,8 +795,11 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         setShowImportDialog(false)
         setExcelResults(null)
 
-        // Auto-sync actors from existing castings
-        const syncResult = await syncActorsToScriptLines(projectId)
+        // Auto-sync actors from existing castings + update role replica counts
+        const [syncResult] = await Promise.all([
+          syncActorsToScriptLines(projectId),
+          syncRoleReplicaCounts(projectId),
+        ])
 
         const [{ lines: freshLines, total: freshTotal }] = await Promise.all([
           getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 }),
@@ -813,7 +817,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         })
       } catch (err) {
         console.error(err)
-        toast({ title: "שגיאת ייבוא", description: String(err), variant: "destructive" })
+        toast({ title: "שגיאת ייבוא", description: err instanceof Error ? err.message : String(err), variant: "destructive" })
       } finally {
         setIsImporting(false)
       }

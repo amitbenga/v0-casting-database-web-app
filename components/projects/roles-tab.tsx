@@ -13,6 +13,7 @@ import {
 import { Search, ChevronDown, ChevronLeft, ArrowUpDown, Loader2, Plus, Trash2 } from "lucide-react"
 import { RoleCastingCard } from "./role-casting-card"
 import { getProjectRolesWithCasting, createManualRole, deleteRole } from "@/lib/actions/casting-actions"
+import { getScriptLineCountsByRole } from "@/lib/actions/script-line-actions"
 import type { ProjectRoleWithCasting, RoleConflict } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
@@ -46,14 +47,35 @@ export function RolesTab({ projectId }: RolesTabProps) {
     sortByReplicas: null,
   })
 
+  const [scriptLineCounts, setScriptLineCounts] = useState<Record<string, number>>({})
+
   const loadRoles = async (silent = false) => {
     try {
       if (!silent) {
         setLoading(true)
         setError(null)
       }
-      const response = await getProjectRolesWithCasting(projectId)
-      setRoles(response.roles)
+      const [response, lineCounts] = await Promise.all([
+        getProjectRolesWithCasting(projectId),
+        getScriptLineCountsByRole(projectId),
+      ])
+      setScriptLineCounts(lineCounts)
+
+      // Merge script_lines counts into roles — overrides project_roles.replicas_count
+      const mergeCount = (role: ProjectRoleWithCasting): ProjectRoleWithCasting => {
+        const countFromLines = lineCounts[role.role_name]
+          ?? Object.entries(lineCounts).find(
+            ([k]) => k.trim().toLowerCase() === role.role_name.trim().toLowerCase()
+          )?.[1]
+          ?? 0
+        return {
+          ...role,
+          replicas_count: countFromLines > 0 ? countFromLines : role.replicas_count,
+          children: role.children?.map(mergeCount),
+        }
+      }
+
+      setRoles(response.roles.map(mergeCount))
       setConflicts(response.conflicts)
 
       // Expand all parent roles by default (only on initial load)

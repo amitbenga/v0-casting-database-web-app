@@ -13,6 +13,13 @@ interface ActionResult {
 
 const SORT_INDEX_STEP = 1024
 
+function serializeError(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === "object" && err !== null && "message" in err) return String((err as { message: unknown }).message)
+  if (typeof err === "string") return err
+  return JSON.stringify(err)
+}
+
 type ManualInsertPosition = "above" | "below"
 
 type ScriptLineOrderRow = {
@@ -281,7 +288,7 @@ export async function saveScriptLines(
     return { success: true, linesCreated: total }
   } catch (err) {
     console.error("saveScriptLines error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -362,7 +369,7 @@ export async function updateScriptLine(
     return { success: true }
   } catch (err) {
     console.error("updateScriptLine error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -411,7 +418,7 @@ export async function addScriptLine(
     }
   } catch (err) {
     console.error("addScriptLine error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -482,7 +489,7 @@ export async function insertScriptLineRelative(
     }
   } catch (err) {
     console.error("insertScriptLineRelative error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -551,7 +558,7 @@ export async function duplicateScriptLine(
     }
   } catch (err) {
     console.error("duplicateScriptLine error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -573,7 +580,7 @@ export async function deleteAllScriptLines(projectId: string): Promise<ActionRes
     return { success: true }
   } catch (err) {
     console.error("deleteAllScriptLines error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -610,7 +617,7 @@ export async function deleteScriptLinesByIds(
     return { success: true, deletedCount: deleted }
   } catch (err) {
     console.error("deleteScriptLinesByIds error:", err)
-    return { success: false, error: String(err) }
+    return { success: false, error: serializeError(err) }
   }
 }
 
@@ -706,7 +713,7 @@ export async function syncActorsToScriptLines(
     return { success: true, synced, cleared }
   } catch (err) {
     console.error("syncActorsToScriptLines error:", err)
-    return { success: false, synced: 0, cleared: 0, error: String(err) }
+    return { success: false, synced: 0, cleared: 0, error: serializeError(err) }
   }
 }
 
@@ -725,7 +732,7 @@ export async function backfillScriptLinesRoleIds(
     return { success: true, updated }
   } catch (err) {
     console.error("backfillScriptLinesRoleIds error:", err)
-    return { success: false, updated: 0, error: String(err) }
+    return { success: false, updated: 0, error: serializeError(err) }
   }
 }
 
@@ -772,4 +779,52 @@ export async function getScriptLineCountsByRole(
     counts[row.role_name] = (counts[row.role_name] ?? 0) + 1
   }
   return counts
+}
+
+/**
+ * Sync project_roles.replicas_count from actual script_lines counts.
+ * Call after importing script lines to keep roles tab up-to-date.
+ */
+export async function syncRoleReplicaCounts(
+  projectId: string
+): Promise<{ success: boolean; updated: number; error?: string }> {
+  const supabase = await createClient()
+  try {
+    await requireAuth()
+
+    // 1. Count lines per role_name from script_lines
+    const counts = await getScriptLineCountsByRole(projectId)
+
+    // 2. Get all project_roles for this project
+    const { data: roles, error: rolesError } = await supabase
+      .from("project_roles")
+      .select("id, role_name")
+      .eq("project_id", projectId)
+    if (rolesError) throw rolesError
+
+    // 3. Update each role's replicas_count
+    let updated = 0
+    for (const role of roles ?? []) {
+      const count = counts[role.role_name] ?? counts[role.role_name.trim()] ?? 0
+      // Also try case-insensitive match
+      const ciKey = Object.keys(counts).find(
+        (k) => k.trim().toLowerCase() === role.role_name.trim().toLowerCase()
+      )
+      const finalCount = count || (ciKey ? counts[ciKey] : 0)
+
+      if (finalCount > 0) {
+        const { error } = await supabase
+          .from("project_roles")
+          .update({ replicas_count: finalCount, replicas_needed: finalCount })
+          .eq("id", role.id)
+        if (!error) updated++
+      }
+    }
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true, updated }
+  } catch (err) {
+    console.error("syncRoleReplicaCounts error:", err)
+    return { success: false, updated: 0, error: serializeError(err) }
+  }
 }
