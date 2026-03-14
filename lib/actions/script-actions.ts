@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import type { CastingActionResult } from "@/lib/types"
 import type { RoleForDatabase, ConflictForDatabase } from "@/lib/parser"
 import { backfillScriptLinesRoleIds } from "@/lib/actions/script-line-role-linking"
+import { requireAuth } from "@/lib/auth-guard"
 
 /**
  * Apply parsed roles to a project
@@ -18,6 +19,7 @@ export async function applyParsedRoles(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     // Map to track role names to their created IDs
     const roleNameToId = new Map<string, string>()
     let rolesCreated = 0
@@ -214,6 +216,7 @@ export async function saveScriptRecord(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { data, error } = await supabase
       .from("project_scripts")
       .insert({
@@ -246,6 +249,7 @@ export async function getProjectRolesForPreview(projectId: string) {
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { data: roles, error: rolesError } = await supabase
       .from("project_roles")
       .select("*")
@@ -278,6 +282,7 @@ export async function deleteRoles(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { error } = await supabase
       .from("project_roles")
       .delete()
@@ -307,6 +312,7 @@ export async function mergeRoles(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     // Get primary role
     const { data: primaryRole, error: primaryError } = await supabase
       .from("project_roles")

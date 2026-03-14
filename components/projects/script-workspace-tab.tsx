@@ -44,6 +44,7 @@ import {
   addScriptLine,
   insertScriptLineRelative,
   duplicateScriptLine,
+  getScriptLineCountsByRole,
 } from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
@@ -446,14 +447,29 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }
 
+  // Replica count per role — fetched from DB so it's correct regardless of pagination
+  const [replicaCounts, setReplicaCounts] = useState<Map<string, number>>(new Map())
+
+  const refreshReplicaCounts = useCallback(async () => {
+    const counts = await getScriptLineCountsByRole(projectId)
+    setReplicaCounts(new Map(Object.entries(counts)))
+  }, [projectId])
+
+  useEffect(() => {
+    refreshReplicaCounts()
+  }, [refreshReplicaCounts])
+
   const refreshVisibleLines = useCallback(
     async (targetCount = lines.length) => {
       const countToLoad = Math.max(targetCount, PAGE_SIZE)
-      const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: countToLoad - 1 })
+      const [{ lines: freshLines, total: freshTotal }] = await Promise.all([
+        getScriptLines(projectId, {}, { from: 0, to: countToLoad - 1 }),
+        refreshReplicaCounts(),
+      ])
       setLines(freshLines)
       setTotal(freshTotal)
     },
-    [projectId, lines.length]
+    [projectId, lines.length, refreshReplicaCounts]
   )
 
   const [filterRole, setFilterRole] = useState<string>("__all__")
@@ -500,13 +516,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const uniqueRoles = useMemo(() => {
     return Array.from<string>(roleIndex.keys()).sort((a, b) => a.localeCompare(b, "he"))
   }, [roleIndex])
-
-  // Replica count per role
-  const replicaCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    lines.forEach((l) => counts.set(l.role_name, (counts.get(l.role_name) ?? 0) + 1))
-    return counts
-  }, [lines])
 
   // Filtered lines
   const filteredLines = useMemo(() => {
@@ -605,6 +614,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       setTotal((prev) => prev - ids.length)
       setSelectedIds(new Set())
       setShowDeleteConfirm(false)
+      refreshReplicaCounts()
       toast({
         title: "נמחקו בהצלחה",
         description: `${result.deletedCount} שורות נמחקו`,
@@ -787,7 +797,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         // Auto-sync actors from existing castings
         const syncResult = await syncActorsToScriptLines(projectId)
 
-        const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+        const [{ lines: freshLines, total: freshTotal }] = await Promise.all([
+          getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 }),
+          refreshReplicaCounts(),
+        ])
         setLines(freshLines)
         setTotal(freshTotal)
 
@@ -805,7 +818,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         setIsImporting(false)
       }
     },
-    [projectId, toast]
+    [projectId, toast, refreshReplicaCounts]
   )
 
   // Sync actors from castings to script lines

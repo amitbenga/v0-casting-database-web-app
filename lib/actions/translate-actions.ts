@@ -3,6 +3,7 @@
 import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 import { AI_TRANSLATE_MODEL, AI_MODELS, type AIModelId } from "@/lib/ai-config"
+import { requireAuth } from "@/lib/auth-guard"
 
 interface TranslateResult {
   success: boolean
@@ -22,6 +23,7 @@ export async function translateScriptLines(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     // Fetch lines that need translation
     let query = supabase
       .from("script_lines")

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import type { ScriptLine, ScriptLineInput } from "@/lib/types"
+import { requireAuth } from "@/lib/auth-guard"
 
 interface ActionResult {
   success: boolean
@@ -225,6 +226,7 @@ export async function saveScriptLines(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     if (options.replaceAll) {
       let deleteQuery = supabase
         .from("script_lines")
@@ -295,6 +297,7 @@ export async function getScriptLines(
 ): Promise<{ lines: ScriptLine[]; total: number }> {
   const supabase = await createClient()
 
+  await requireAuth()
   const from = pagination.from ?? 0
   const to = pagination.to ?? 9999
 
@@ -349,6 +352,7 @@ export async function updateScriptLine(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { error } = await supabase
       .from("script_lines")
       .update(updates)
@@ -372,6 +376,7 @@ export async function addScriptLine(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const nextSortIndex = await getCurrentMaxSortIndex(projectId, supabase) + SORT_INDEX_STEP
     const nextLineNumber = line.line_number > 0
       ? line.line_number
@@ -422,6 +427,7 @@ export async function insertScriptLineRelative(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { data: referenceRow, error: referenceError } = await supabase
       .from("script_lines")
       .select("id, project_id, script_id, role_name, actor_id")
@@ -490,6 +496,7 @@ export async function duplicateScriptLine(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { data: sourceLine, error: sourceError } = await supabase
       .from("script_lines")
       .select("id, project_id, script_id, role_name, actor_id, timecode, source_text, translation, rec_status, notes")
@@ -555,6 +562,7 @@ export async function deleteAllScriptLines(projectId: string): Promise<ActionRes
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { error } = await supabase
       .from("script_lines")
       .delete()
@@ -580,6 +588,7 @@ export async function deleteScriptLinesByIds(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     if (ids.length === 0) return { success: true, deletedCount: 0 }
 
     // Process in batches to avoid URL length limits
@@ -617,6 +626,7 @@ export async function syncActorsToScriptLines(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     // 1. Get all castings with status "מלוהק" for this project, joined with role name
     const { data: castings, error: castingsError } = await supabase
       .from("role_castings")
@@ -710,6 +720,7 @@ export async function backfillScriptLinesRoleIds(
 ): Promise<{ success: boolean; updated: number; error?: string }> {
   const supabase = await createClient()
   try {
+    await requireAuth()
     const updated = await backfillScriptLinesRoleIdsInternal(projectId, supabase)
     return { success: true, updated }
   } catch (err) {
@@ -722,6 +733,7 @@ export async function backfillScriptLinesRoleIds(
  * Get unique role names for a project (for filter dropdown).
  */
 export async function getScriptRoles(projectId: string): Promise<string[]> {
+  await requireAuth()
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -736,4 +748,28 @@ export async function getScriptRoles(projectId: string): Promise<string[]> {
     new Set(data.map((r: { role_name: string }) => r.role_name))
   )
   return unique.sort((a: string, b: string) => a.localeCompare(b, "he"))
+}
+
+/**
+ * Get replica (line) counts per role from DB — not affected by pagination.
+ * Returns a record of { role_name: count }.
+ */
+export async function getScriptLineCountsByRole(
+  projectId: string
+): Promise<Record<string, number>> {
+  await requireAuth()
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("script_lines")
+    .select("role_name")
+    .eq("project_id", projectId)
+
+  if (error || !data) return {}
+
+  const counts: Record<string, number> = {}
+  for (const row of data) {
+    counts[row.role_name] = (counts[row.role_name] ?? 0) + 1
+  }
+  return counts
 }

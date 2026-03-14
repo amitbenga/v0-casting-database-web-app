@@ -9,6 +9,7 @@ import type {
   RoleConflict 
 } from "@/lib/types"
 import { backfillScriptLinesRoleIds } from "@/lib/actions/script-line-role-linking"
+import { requireAuth } from "@/lib/auth-guard"
 
 function normalizeRoleKey(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase()
@@ -22,6 +23,8 @@ export async function applyParsedScript(projectId: string, scriptId: string): Pr
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     // 1. Get raw extracted roles
     const { data: rawRoles, error: rolesError } = await supabase
       .from("script_extracted_roles")
@@ -178,13 +181,15 @@ export async function assignActorToRole(roleId: string, actorId: string): Promis
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     // Get role to find project_id
     const { data: role, error: roleError } = await supabase
       .from("project_roles")
       .select("project_id")
       .eq("id", roleId)
       .single()
-    
+
     if (roleError || !role) throw new Error("Role not found")
     const projectId = role.project_id
 
@@ -287,6 +292,8 @@ export async function unassignActorFromRole(roleId: string, actorId: string): Pr
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     const { data: role } = await supabase
       .from("project_roles")
       .select("project_id")
@@ -342,6 +349,8 @@ export async function updateCastingStatus(roleId: string, actorId: string, statu
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     // Fetch current casting row for this role + actor
     const { data: casting, error: castingFetchErr } = await supabase
       .from("role_castings")
@@ -427,6 +436,8 @@ export async function updateCastingDetails(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     const { error } = await supabase
       .from("role_castings")
       .update({
@@ -453,6 +464,8 @@ export async function deleteRole(roleId: string): Promise<CastingActionResult> {
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     const { data: role, error: roleError } = await supabase.from("project_roles").select("project_id").eq("id", roleId).single()
     if (roleError || !role) throw new Error("תפקיד לא נמצא")
 
@@ -524,6 +537,8 @@ export async function getProjectRolesWithCasting(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     // Fetch roles + conflicts in parallel — saves one round-trip
     const [rolesResult, conflictsResult] = await Promise.all([
       supabase
@@ -620,6 +635,8 @@ export async function createManualRole(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     const { error } = await supabase
       .from("project_roles")
       .insert({
@@ -646,6 +663,7 @@ export async function createManualRole(
  * Compute total replicas for a project (sum of replicas_count across all roles).
  */
 export async function getProjectTotalReplicas(projectId: string): Promise<number> {
+  await requireAuth()
   const supabase = await createClient()
   const { data: roles } = await supabase
     .from("project_roles")
@@ -663,8 +681,9 @@ export async function getProjectTotalReplicas(projectId: string): Promise<number
 export async function getActorReplicasInProject(
   projectId: string
 ): Promise<{ actor_id: string; total_replicas: number }[]> {
+  await requireAuth()
   const supabase = await createClient()
-  
+
   // Get all roles for this project
   const { data: roles } = await supabase
     .from("project_roles")
@@ -701,10 +720,12 @@ export async function getProjectActorsFromCastings(projectId: string) {
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     // 1. Get all roles for this project
     const { data: roles } = await supabase
       .from("project_roles")
-      .select("id, role_name, replicas_needed")
+      .select("id, role_name, replicas_count, replicas_needed")
       .eq("project_id", projectId)
 
     if (!roles || roles.length === 0) return []
@@ -731,10 +752,10 @@ export async function getProjectActorsFromCastings(projectId: string) {
     if (error) throw error
     if (!castings) return []
 
-    // 3. Group by actor - use replicas_needed from project_roles as fallback
+    // 3. Group by actor - use replicas_count (updated by script import), fallback to replicas_needed
     const actorMap = new Map<string, any>()
     const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]))
-    const roleIdToReplicas = new Map(roles.map(r => [r.id, r.replicas_needed || 0]))
+    const roleIdToReplicas = new Map(roles.map(r => [r.id, r.replicas_count ?? r.replicas_needed ?? 0]))
 
     for (const c of castings) {
       const actor = c.actors as any
@@ -779,6 +800,8 @@ export async function searchActors(query: string) {
   const supabase = await createClient()
 
   try {
+    await requireAuth()
+
     const { data, error } = await supabase
       .from("actors")
       .select("id, full_name, image_url")

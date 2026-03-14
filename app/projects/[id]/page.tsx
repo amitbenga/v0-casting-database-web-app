@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import dynamic from "next/dynamic"
 import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { ProjectRecordingProgressSummary } from "@/components/projects/project-recording-progress-summary"
+import { formatDateOnlyHe } from "@/lib/format-date"
 
 // Lazy-load heavy tab components — only downloaded when the tab becomes active
 const CastingWorkspace = dynamic(
@@ -268,8 +269,9 @@ function ProjectDetailPageContent() {
                   <DropdownMenuItem className="md:hidden" onClick={() => setShowEditProjectDialog(true)}>
                     ערוך פרויקט
                   </DropdownMenuItem>
-                  {/* ייצא פרויקט — temporarily hidden until feature is complete */}
-                  {/* <DropdownMenuItem onClick={exportProject}>ייצא פרויקט</DropdownMenuItem> */}
+                  <DropdownMenuItem onClick={exportProject}>
+                    ייצא פרויקט
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={duplicateProject}>
                     שכפל
                   </DropdownMenuItem>
@@ -319,7 +321,7 @@ function ProjectDetailPageContent() {
                     <div className="flex-1">
                       <p className="text-xs text-muted-foreground">תאריך פרויקט</p>
                       <p className="text-sm font-medium">
-                        {new Date(project.project_date + "T00:00:00").toLocaleDateString("he-IL")}
+                        {formatDateOnlyHe(project.project_date + "T00:00:00")}
                       </p>
                     </div>
                   </div>

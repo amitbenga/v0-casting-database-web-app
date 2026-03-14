@@ -56,6 +56,38 @@ export interface TokenizeResult {
   diagnostics: ParseDiagnostic[]
 }
 
+// ─── Stopwords — strings that should never be detected as character names ────
+
+const CHARACTER_STOPWORDS = new Set([
+  "SCENE", "INT", "EXT", "CUT TO", "FADE IN", "FADE OUT", "FADE TO BLACK",
+  "DISSOLVE TO", "SMASH CUT TO", "MATCH CUT TO", "JUMP CUT TO", "WIPE TO",
+  "TIME CUT", "END OF", "THE END", "END",
+  "CHARACTER LIST", "CHARACTERS", "CAST", "CAST LIST",
+  "ACT", "ACT ONE", "ACT TWO", "ACT THREE",
+  "EPISODE", "PAGE", "CHAPTER", "PROLOGUE", "EPILOGUE",
+  "SCRIPT TITLE", "TITLE", "SCRIPT", "SCREENPLAY",
+  "CONTINUED", "MORE", "CONT'D",
+  "V.O.", "O.S.", "O.C.",
+  "SUPER", "TITLE CARD", "CHYRON", "INTERCUT", "MONTAGE",
+  "LATER", "MOMENTS LATER", "CONTINUOUS",
+  "OPENING CREDITS", "CLOSING CREDITS", "END CREDITS",
+  "BLACK SCREEN", "WHITE SCREEN", "FREEZE FRAME",
+])
+
+/**
+ * Check if a string matches a character stopword.
+ * Also rejects strings that start with a digit or end with `:`.
+ */
+function isCharacterStopword(name: string): boolean {
+  const upper = name.toUpperCase().trim()
+  if (CHARACTER_STOPWORDS.has(upper)) return true
+  // Starts with a digit (e.g. "1. HERO")
+  if (/^\d/.test(upper)) return true
+  // Ends with colon — this is a label/heading, not a character name
+  if (upper.endsWith(":")) return true
+  return false
+}
+
 // ─── Patterns ────────────────────────────────────────────────────────────────
 
 // Scene headings: INT., EXT., INT./EXT., I/E
@@ -83,6 +115,8 @@ const SPEAKER_COLON_RE =
 // Standalone ALL-CAPS name (no indent required, shorter — for unformatted scripts)
 const BARE_CHARACTER_RE =
   /^([A-Z\u05D0-\u05EA][A-Z0-9 \-'.\u05D0-\u05EA]{0,40})(\s*\(.*\))?\s*$/
+
+export { isCharacterStopword, CHARACTER_STOPWORDS }
 
 // ─── Tokenizer ───────────────────────────────────────────────────────────────
 
@@ -156,14 +190,16 @@ export function tokenize(text: string): TokenizeResult {
     const charMatch = raw.match(CHARACTER_RE)
     if (charMatch) {
       const name = charMatch[2].trim()
-      tokens.push({
-        type: "CHARACTER",
-        text: raw,
-        line: lineNum,
-        indent,
-        characterName: name,
-      })
-      continue
+      if (!isCharacterStopword(name)) {
+        tokens.push({
+          type: "CHARACTER",
+          text: raw,
+          line: lineNum,
+          indent,
+          characterName: name,
+        })
+        continue
+      }
     }
 
     // ── BARE CHARACTER (all-caps, no indent — for unformatted scripts) ────
@@ -176,7 +212,8 @@ export function tokenize(text: string): TokenizeResult {
         trimmed === trimmed.toUpperCase() &&
         trimmed.length >= 2 &&
         trimmed.length <= 40 &&
-        !/[.!?]$/.test(trimmed)
+        !/[.!?]$/.test(trimmed) &&
+        !isCharacterStopword(trimmed)
       ) {
         // Lookahead: next non-blank line should be indented or a parenthetical
         const nextIdx = rawLines.findIndex(
