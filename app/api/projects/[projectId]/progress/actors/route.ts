@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAuth } from "@/lib/auth-guard"
 import { createClient } from "@/lib/supabase/server"
 import {
   calculatePercentRecorded,
@@ -52,6 +53,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
+    await requireAuth()
+
     const { rows } = await fetchScriptLinesForProgress(normalizedProjectId)
     const groupedByActor = groupByActor(rows)
     const actorIds = Array.from(groupedByActor.keys())

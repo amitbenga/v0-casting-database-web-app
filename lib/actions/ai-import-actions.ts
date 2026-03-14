@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { applyParsedRoles } from "@/lib/actions/script-actions"
 import { saveScriptLines } from "@/lib/actions/script-line-actions"
 import type { ScriptLineInput } from "@/lib/types"
+import { requireAuth } from "@/lib/auth-guard"
 
 // ─────────────────────────────────────────────
 // Types matching migration 007 draft_json schema
@@ -59,6 +60,7 @@ export async function createScriptImport(
   sourceType: ScriptImport["source_type"],
   rawText: string
 ): Promise<{ success: boolean; importId?: string; error?: string }> {
+  await requireAuth()
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -85,6 +87,7 @@ export async function createScriptImport(
 // 2. Get all imports for a project
 // ─────────────────────────────────────────────
 export async function getScriptImports(projectId: string): Promise<ScriptImport[]> {
+  await requireAuth()
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -112,6 +115,7 @@ export async function getScriptImports(projectId: string): Promise<ScriptImport[
 export async function applyScriptImport(
   importId: string
 ): Promise<{ success: boolean; rolesCreated?: number; linesCreated?: number; error?: string }> {
+  await requireAuth()
   const supabase = await createClient()
 
   // Load the import
@@ -198,6 +202,7 @@ export async function applyScriptImport(
 // ─────────────────────────────────────────────
 export async function deleteScriptImport(importId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAuth()
     const supabase = await createClient()
     const { error } = await supabase
       .from("script_imports")
@@ -218,6 +223,7 @@ export async function deleteScriptImport(importId: string): Promise<{ success: b
 // ─────────────────────────────────────────────
 export async function wipeProjectWorkspaceData(projectId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAuth()
     const supabase = await createClient()
 
     // Delete all script lines for the project
@@ -251,6 +257,7 @@ export async function wipeProjectWorkspaceData(projectId: string): Promise<{ suc
 // ─────────────────────────────────────────────
 export async function resetScriptImportStatus(importId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAuth()
     const supabase = await createClient()
     const { error } = await supabase
       .from("script_imports")

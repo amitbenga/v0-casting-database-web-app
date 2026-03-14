@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/auth-guard"
 
 /**
  * Merge report structure saved to actor_submissions.merge_report
@@ -32,6 +33,7 @@ export async function mergeSubmissionIntoActor(
   fieldChoices: MergeFieldChoices
 ): Promise<{ success: boolean; error?: string; mergeReport?: MergeReport }> {
   try {
+    await requireAuth()
     const supabase = await createClient()
 
     // Fetch the submission
@@ -253,6 +255,7 @@ export async function softDeleteSubmissions(
   submissionIds: string[]
 ): Promise<{ success: boolean; error?: string; deletedCount?: number }> {
   try {
+    await requireAuth()
     const supabase = await createClient()
 
     const { error, count } = await supabase
@@ -286,6 +289,7 @@ export async function deleteSubmissions(
   }
 
   try {
+    await requireAuth()
     const supabase = await createClient()
 
     const { error } = await supabase
@@ -315,6 +319,7 @@ export async function clearSubmissionsByStatus(
   status: "approved" | "rejected"
 ): Promise<{ success: boolean; error?: string; deletedCount?: number }> {
   try {
+    await requireAuth()
     const supabase = await createClient()
 
     // First fetch the IDs so we know how many were deleted

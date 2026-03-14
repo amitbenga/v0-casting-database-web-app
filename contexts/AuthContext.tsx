@@ -35,7 +35,7 @@ function makeDefaultProfile(userId: string, email?: string): UserProfile {
     id: userId,
     email: email || "",
     full_name: email?.split("@")[0] || "User",
-    role: "admin",
+    role: "viewer",
   }
 }
 

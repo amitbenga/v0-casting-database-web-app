@@ -3,6 +3,7 @@
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/auth-guard"
 
 // Schema for extracted roles from script
 const extractedRolesSchema = z.object({
@@ -48,6 +49,7 @@ export async function processScriptWithAI(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     // Update status to processing
     await supabase
       .from("project_scripts")
@@ -177,6 +179,7 @@ export async function processScriptWithAI(
  */
 export async function fetchScriptContent(fileUrl: string): Promise<string> {
   try {
+    await requireAuth()
     const response = await fetch(fileUrl)
     if (!response.ok) {
       throw new Error(`Failed to fetch file: ${response.status}`)
@@ -208,6 +211,7 @@ export async function fetchScriptContent(fileUrl: string): Promise<string> {
 export async function triggerScriptProcessing(
   scriptId: string
 ): Promise<ProcessScriptResult> {
+  await requireAuth()
   const supabase = await createClient()
 
   // Get script details
