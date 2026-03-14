@@ -26,10 +26,26 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Upload, Download, Search, X, FileSpreadsheet, Loader2, Hash, Trash2, RefreshCw, Languages, Sparkles, ChevronDown, ChevronUp, Plus, MoreHorizontal } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ScriptLine, ScriptLineInput, RecStatus } from "@/lib/types"
-import { saveScriptLines, updateScriptLine, getScriptLines, deleteScriptLinesByIds, syncActorsToScriptLines } from "@/lib/actions/script-line-actions"
+import {
+  saveScriptLines,
+  updateScriptLine,
+  getScriptLines,
+  deleteScriptLinesByIds,
+  syncActorsToScriptLines,
+  addScriptLine,
+  insertScriptLineRelative,
+  duplicateScriptLine,
+  getScriptLineCountsByRole,
+} from "@/lib/actions/script-line-actions"
 import { parseExcelFile } from "@/lib/parser/excel-parser"
 import { ScriptLinesImportDialog } from "./script-lines-import-dialog"
 import type { ExcelParseResult } from "@/lib/parser/excel-parser"
@@ -120,6 +136,62 @@ function TranslationCell({
       onClick={startEdit}
       className="cursor-pointer h-8 flex items-center px-1 text-sm hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden"
       dir="rtl"
+      title={value ?? ""}
+    >
+      {value
+        ? <span className="truncate">{value}</span>
+        : <span className="text-muted-foreground italic text-xs">{"לחץ לעריכה..."}</span>
+      }
+    </div>
+  )
+}
+
+function SourceTextCell({
+  lineId,
+  value,
+  onChange,
+}: {
+  lineId: string
+  value: string | undefined
+  onChange: (lineId: string, newValue: string) => void
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? "")
+
+  function startEdit() {
+    setDraft(value ?? "")
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value ?? "")) {
+      onChange(lineId, draft)
+    }
+  }
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit() }
+          if (e.key === "Escape") { setEditing(false); setDraft(value ?? "") }
+        }}
+        className="w-full h-8 p-1 text-xs border rounded resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        dir="ltr"
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={startEdit}
+      className="cursor-pointer h-8 flex items-center px-1 text-xs hover:bg-muted/50 rounded transition-colors truncate whitespace-nowrap overflow-hidden text-muted-foreground"
+      dir="ltr"
       title={value ?? ""}
     >
       {value
@@ -285,6 +357,43 @@ function RoleCombobox({
   )
 }
 
+function RowActionsMenu({
+  onInsertAbove,
+  onInsertBelow,
+  onDuplicate,
+}: {
+  onInsertAbove: () => Promise<void>
+  onInsertBelow: () => Promise<void>
+  onDuplicate: () => Promise<void>
+}): React.ReactElement {
+  return (
+    <DropdownMenu dir="rtl">
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">{"פעולות שורה"}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onInsertAbove() }}>
+          {"הוסף שורה מעל"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onInsertBelow() }}>
+          {"הוסף שורה מתחת"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void onDuplicate() }}>
+          {"שכפל שורה"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 const PAGE_SIZE = 1000
 
 // Main component
@@ -338,6 +447,31 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     }
   }
 
+  // Replica count per role — fetched from DB so it's correct regardless of pagination
+  const [replicaCounts, setReplicaCounts] = useState<Map<string, number>>(new Map())
+
+  const refreshReplicaCounts = useCallback(async () => {
+    const counts = await getScriptLineCountsByRole(projectId)
+    setReplicaCounts(new Map(Object.entries(counts)))
+  }, [projectId])
+
+  useEffect(() => {
+    refreshReplicaCounts()
+  }, [refreshReplicaCounts])
+
+  const refreshVisibleLines = useCallback(
+    async (targetCount = lines.length) => {
+      const countToLoad = Math.max(targetCount, PAGE_SIZE)
+      const [{ lines: freshLines, total: freshTotal }] = await Promise.all([
+        getScriptLines(projectId, {}, { from: 0, to: countToLoad - 1 }),
+        refreshReplicaCounts(),
+      ])
+      setLines(freshLines)
+      setTotal(freshTotal)
+    },
+    [projectId, lines.length, refreshReplicaCounts]
+  )
+
   const [filterRole, setFilterRole] = useState<string>("__all__")
   const [filterStatus, setFilterStatus] = useState<string>("__all__")
   const [isImporting, setIsImporting] = useState(false)
@@ -382,13 +516,6 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
   const uniqueRoles = useMemo(() => {
     return Array.from<string>(roleIndex.keys()).sort((a, b) => a.localeCompare(b, "he"))
   }, [roleIndex])
-
-  // Replica count per role
-  const replicaCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    lines.forEach((l) => counts.set(l.role_name, (counts.get(l.role_name) ?? 0) + 1))
-    return counts
-  }, [lines])
 
   // Filtered lines
   const filteredLines = useMemo(() => {
@@ -487,6 +614,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       setTotal((prev) => prev - ids.length)
       setSelectedIds(new Set())
       setShowDeleteConfirm(false)
+      refreshReplicaCounts()
       toast({
         title: "נמחקו בהצלחה",
         description: `${result.deletedCount} שורות נמחקו`,
@@ -669,7 +797,10 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         // Auto-sync actors from existing castings
         const syncResult = await syncActorsToScriptLines(projectId)
 
-        const { lines: freshLines, total: freshTotal } = await getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 })
+        const [{ lines: freshLines, total: freshTotal }] = await Promise.all([
+          getScriptLines(projectId, {}, { from: 0, to: PAGE_SIZE - 1 }),
+          refreshReplicaCounts(),
+        ])
         setLines(freshLines)
         setTotal(freshTotal)
 
@@ -687,7 +818,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
         setIsImporting(false)
       }
     },
-    [projectId, toast]
+    [projectId, toast, refreshReplicaCounts]
   )
 
   // Sync actors from castings to script lines
@@ -771,6 +902,32 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
     [toast]
   )
 
+  // Inline source text update
+  const handleSourceTextChange = useCallback(
+    async (lineId: string, newSourceText: string) => {
+      // Capture original before optimistic update
+      let originalSourceText: string | undefined
+      setLines((prev) => {
+        const line = prev.find((l) => l.id === lineId)
+        originalSourceText = line?.source_text
+        return prev.map((l) =>
+          l.id === lineId ? { ...l, source_text: newSourceText } : l
+        )
+      })
+      const result = await updateScriptLine(lineId, { source_text: newSourceText })
+      if (!result.success) {
+        toast({ title: "שגיאה", description: "שגיאה בשמירת טקסט מקור", variant: "destructive" })
+        // Revert to original
+        setLines((prev) =>
+          prev.map((l) =>
+            l.id === lineId ? { ...l, source_text: originalSourceText } : l
+          )
+        )
+      }
+    },
+    [toast]
+  )
+
   // Inline rec_status update
   const handleRecStatusChange = useCallback(
     async (lineId: string, newStatus: RecStatus | null) => {
@@ -821,6 +978,65 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
       }
     },
     [toast]
+  )
+
+  const handleAddLineAtEnd = useCallback(
+    async () => {
+      const newLine: ScriptLineInput = {
+        line_number: 0,
+        role_name: "דמות חדשה",
+        source_text: "",
+        translation: "",
+        rec_status: null,
+      }
+      const result = await addScriptLine(projectId, newLine)
+      if (result.success && result.line) {
+        if (hasMore) {
+          await refreshVisibleLines(lines.length)
+          toast({
+            title: "שורה נוספה",
+            description: `שורה #${result.line.line_number} נוספה לסוף הפרויקט. טען עוד כדי לראות אותה.`,
+          })
+        } else {
+          await refreshVisibleLines(lines.length + 1)
+          toast({ title: "שורה נוספה", description: `שורה #${result.line.line_number} נוספה ומוכנה לעריכה.` })
+        }
+      } else {
+        toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
+      }
+    },
+    [projectId, toast, refreshVisibleLines, hasMore, lines.length]
+  )
+
+  const handleInsertRelativeLine = useCallback(
+    async (referenceLineId: string, position: "above" | "below") => {
+      const result = await insertScriptLineRelative(projectId, referenceLineId, position)
+      if (result.success && result.line) {
+        await refreshVisibleLines(lines.length + 1)
+        toast({
+          title: "שורה נוספה",
+          description: position === "above"
+            ? "שורה חדשה נוספה מעל השורה שנבחרה."
+            : "שורה חדשה נוספה מתחת לשורה שנבחרה.",
+        })
+      } else {
+        toast({ title: "שגיאה בהוספת שורה", description: result.error, variant: "destructive" })
+      }
+    },
+    [projectId, toast, refreshVisibleLines, lines.length]
+  )
+
+  const handleDuplicateLine = useCallback(
+    async (lineId: string) => {
+      const result = await duplicateScriptLine(projectId, lineId)
+      if (result.success && result.line) {
+        await refreshVisibleLines(lines.length + 1)
+        toast({ title: "שורה שוכפלה", description: `שורה #${result.line.line_number} נוצרה כהעתק לעריכה.` })
+      } else {
+        toast({ title: "שגיאה בשכפול שורה", description: result.error, variant: "destructive" })
+      }
+    },
+    [projectId, toast, refreshVisibleLines, lines.length]
   )
 
   // Master Excel export — RTL, bold headers, multiple sheets (Agent 6)
@@ -997,6 +1213,11 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
             {"ייצא Excel"}
           </Button>
         )}
+
+        <Button variant="outline" size="sm" onClick={handleAddLineAtEnd} className="gap-1.5">
+          <Plus className="h-4 w-4" />
+          {"הוסף שורה חדשה"}
+        </Button>
 
         {hasLines && (
           <Button variant="outline" size="sm" onClick={handleSyncActors} disabled={isSyncing} className="gap-1.5">
@@ -1261,16 +1482,16 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
           {/*
             Grid-based virtual table — header + body share the same grid-template-columns
             so columns always align even with absolutely-positioned virtual rows.
-            Fixed cols: 38+34+90+140+120+110 = 532px. Remaining space split 50/50 for translation + source.
+            Fixed cols: 38+34+34+90+140+120+110 = 566px. Remaining space split 50/50 for translation + source.
           */}
-          <div style={{ minWidth: 1100, direction: "rtl" }}>
+          <div style={{ minWidth: 1140, direction: "rtl" }}>
             {/* Header */}
             <div
               className="sticky top-0 bg-background z-10 border-b"
               style={{
                 display: "grid",
-                gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
-                minWidth: 1100,
+                gridTemplateColumns: "38px 34px 34px 90px 140px 120px 110px 1fr 1fr",
+                minWidth: 1140,
               }}
             >
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">#</div>
@@ -1284,6 +1505,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                   aria-label="בחר הכל"
                 />
               </div>
+              <div className="px-1 h-10 flex items-center justify-center" />
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">TC</div>
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">תפקיד</div>
               <div className="text-right text-xs px-2 font-medium h-10 flex items-center text-foreground">שחקן</div>
@@ -1314,7 +1536,7 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       overflow: "hidden",
                       transform: `translateY(${virtualRow.start}px)`,
                       display: "grid",
-                      gridTemplateColumns: "38px 34px 90px 140px 120px 110px 1fr 1fr",
+                      gridTemplateColumns: "38px 34px 34px 90px 140px 120px 110px 1fr 1fr",
                     }}
                     className={`hover:bg-muted/30 border-b ${selectedIds.has(line.id) ? "bg-primary/5" : ""}`}
                   >
@@ -1331,6 +1553,14 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                         onClick={(e) => toggleRow(line.id, e.shiftKey)}
                         className="cursor-pointer accent-primary h-4 w-4"
                         aria-label={`בחר שורה ${line.line_number ?? ""}`}
+                      />
+                    </div>
+                    {/* row actions */}
+                    <div className="px-1 flex items-center justify-center pointer-events-auto z-10">
+                      <RowActionsMenu
+                        onInsertAbove={() => handleInsertRelativeLine(line.id, "above")}
+                        onInsertBelow={() => handleInsertRelativeLine(line.id, "below")}
+                        onDuplicate={() => handleDuplicateLine(line.id)}
                       />
                     </div>
                     {/* TC */}
@@ -1416,9 +1646,9 @@ export function ScriptWorkspaceTab({ projectId }: ScriptWorkspaceTabProps) {
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <p className="text-xs text-muted-foreground truncate whitespace-nowrap cursor-default">
-                              {line.source_text ?? ""}
-                            </p>
+                            <div className="truncate whitespace-nowrap w-full">
+                              <SourceTextCell lineId={line.id} value={line.source_text} onChange={handleSourceTextChange} />
+                            </div>
                           </TooltipTrigger>
                           {line.source_text && (
                             <TooltipContent side="top" dir="ltr" className="max-w-sm text-xs whitespace-pre-wrap text-left break-words">

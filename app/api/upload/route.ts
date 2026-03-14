@@ -1,5 +1,18 @@
 import { NextResponse } from "next/server";
 
+const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/mp4",
+    "audio/ogg",
+    "video/mp4",
+    "video/webm",
+])
+
 export async function POST(req: Request) {
     try {
         const { folder, submissionId, filename, contentType } = await req.json();
@@ -7,6 +20,25 @@ export async function POST(req: Request) {
         if (!folder || !submissionId || !filename || !contentType) {
             return NextResponse.json(
                 { error: "Missing required parameters (folder, submissionId, filename, contentType)" },
+                { status: 400 }
+            );
+        }
+
+        // Validate inputs to prevent path traversal
+        if (/[\/\\\.]{2}/.test(folder) || /[\/\\]/.test(folder)) {
+            return NextResponse.json({ error: "Invalid folder name" }, { status: 400 });
+        }
+        if (/[\/\\\.]{2}/.test(submissionId)) {
+            return NextResponse.json({ error: "Invalid submissionId" }, { status: 400 });
+        }
+        if (/[\/\\\.]{2}/.test(filename)) {
+            return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
+        }
+
+        // Validate content type against allowlist
+        if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+            return NextResponse.json(
+                { error: `Content type not allowed: ${contentType}` },
                 { status: 400 }
             );
         }

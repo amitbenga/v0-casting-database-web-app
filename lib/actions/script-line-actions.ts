@@ -4,10 +4,151 @@ import { createClient } from "@/lib/supabase/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import type { ScriptLine, ScriptLineInput } from "@/lib/types"
+import { requireAuth } from "@/lib/auth-guard"
 
 interface ActionResult {
   success: boolean
   error?: string
+}
+
+const SORT_INDEX_STEP = 1024
+
+type ManualInsertPosition = "above" | "below"
+
+type ScriptLineOrderRow = {
+  id: string
+  project_id: string
+  role_name: string
+  sort_index: number | null
+  line_number: number | null
+  created_at: string
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null) return null
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
+}
+
+function normalizeOrderRow(row: Record<string, unknown>): ScriptLineOrderRow {
+  return {
+    id: String(row.id),
+    project_id: String(row.project_id),
+    role_name: String(row.role_name ?? ""),
+    sort_index: toNumberOrNull(row.sort_index),
+    line_number: toNumberOrNull(row.line_number),
+    created_at: String(row.created_at ?? ""),
+  }
+}
+
+async function listProjectLineOrder(
+  projectId: string,
+  supabase: SupabaseClient
+): Promise<ScriptLineOrderRow[]> {
+  const { data, error } = await supabase
+    .from("script_lines")
+    .select("id, project_id, role_name, sort_index, line_number, created_at")
+    .eq("project_id", projectId)
+    .order("sort_index", { ascending: true, nullsFirst: false })
+    .order("line_number", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+
+  if (error) throw error
+  return (data ?? []).map((row: Record<string, unknown>) => normalizeOrderRow(row))
+}
+
+async function getCurrentMaxSortIndex(
+  projectId: string,
+  supabase: SupabaseClient
+): Promise<number> {
+  const orderedRows = await listProjectLineOrder(projectId, supabase)
+  return orderedRows.reduce((max, row) => Math.max(max, row.sort_index ?? 0), 0)
+}
+
+async function getNextManualLineNumber(
+  projectId: string,
+  supabase: SupabaseClient
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("script_lines")
+    .select("line_number")
+    .eq("project_id", projectId)
+    .order("line_number", { ascending: false, nullsFirst: false })
+    .limit(1)
+
+  if (error) throw error
+  return (toNumberOrNull(data?.[0]?.line_number) ?? 0) + 1
+}
+
+async function rebalanceProjectLineSortIndexes(
+  projectId: string,
+  supabase: SupabaseClient,
+  orderedRows?: ScriptLineOrderRow[]
+): Promise<ScriptLineOrderRow[]> {
+  const rows = orderedRows ?? await listProjectLineOrder(projectId, supabase)
+  if (rows.length === 0) return []
+
+  const updates = rows
+    .map((row, index) => ({
+      id: row.id,
+      project_id: row.project_id,
+      role_name: row.role_name,
+      sort_index: (index + 1) * SORT_INDEX_STEP,
+    }))
+    .filter((update, index) => rows[index].sort_index !== update.sort_index)
+
+  if (updates.length > 0) {
+    const BATCH = 500
+    for (let i = 0; i < updates.length; i += BATCH) {
+      const batch = updates.slice(i, i + BATCH)
+      const { error } = await supabase
+        .from("script_lines")
+        .upsert(batch, { onConflict: "id", ignoreDuplicates: false })
+      if (error) throw error
+    }
+  }
+
+  return rows.map((row, index) => ({
+    ...row,
+    sort_index: (index + 1) * SORT_INDEX_STEP,
+  }))
+}
+
+function computeRelativeSortIndex(
+  orderedRows: ScriptLineOrderRow[],
+  referenceLineId: string,
+  position: ManualInsertPosition
+): number | null {
+  const refIndex = orderedRows.findIndex((row) => row.id === referenceLineId)
+  if (refIndex === -1) return null
+
+  const prevSortIndex = position === "above"
+    ? orderedRows[refIndex - 1]?.sort_index ?? null
+    : orderedRows[refIndex].sort_index ?? null
+  const nextSortIndex = position === "above"
+    ? orderedRows[refIndex].sort_index ?? null
+    : orderedRows[refIndex + 1]?.sort_index ?? null
+
+  if (prevSortIndex == null && nextSortIndex == null) {
+    return SORT_INDEX_STEP
+  }
+  if (prevSortIndex == null && nextSortIndex != null) {
+    return nextSortIndex - SORT_INDEX_STEP
+  }
+  if (prevSortIndex != null && nextSortIndex == null) {
+    return prevSortIndex + SORT_INDEX_STEP
+  }
+  if (prevSortIndex == null || nextSortIndex == null) {
+    return null
+  }
+
+  const gap = nextSortIndex - prevSortIndex
+  if (gap <= 1) {
+    return null
+  }
+
+  return prevSortIndex + Math.floor(gap / 2)
 }
 
 /**
@@ -85,6 +226,7 @@ export async function saveScriptLines(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     if (options.replaceAll) {
       let deleteQuery = supabase
         .from("script_lines")
@@ -104,9 +246,11 @@ export async function saveScriptLines(
       return { success: true, linesCreated: 0 }
     }
 
-    const rows = lines.map((line) => ({
+    const baseSortIndex = await getCurrentMaxSortIndex(projectId, supabase)
+    const rows = lines.map((line, index) => ({
       project_id: projectId,
       script_id: options.scriptId ?? null,
+      sort_index: baseSortIndex + ((index + 1) * SORT_INDEX_STEP),
       line_number: line.line_number,
       timecode: line.timecode ?? null,
       role_name: line.role_name,
@@ -153,17 +297,19 @@ export async function getScriptLines(
 ): Promise<{ lines: ScriptLine[]; total: number }> {
   const supabase = await createClient()
 
+  await requireAuth()
   const from = pagination.from ?? 0
   const to = pagination.to ?? 9999
 
   let query = supabase
     .from("script_lines")
     .select(
-      "id, project_id, script_id, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at",
+      "id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, actors(full_name), source_text, translation, rec_status, notes, created_at",
       { count: "exact" }
     )
     .eq("project_id", projectId)
-    .order("line_number", { ascending: true })
+    .order("sort_index", { ascending: true, nullsFirst: false })
+    .order("line_number", { ascending: true, nullsFirst: false })
     .range(from, to)
 
   if (filters.roleName) {
@@ -187,6 +333,7 @@ export async function getScriptLines(
     const actorRel = row.actors as { full_name: string } | null
     return {
       ...row,
+      sort_index: toNumberOrNull(row.sort_index) ?? undefined,
       actors: undefined,
       actor_name: actorRel?.full_name ?? null,
     } as unknown as ScriptLine
@@ -200,11 +347,12 @@ export async function getScriptLines(
  */
 export async function updateScriptLine(
   lineId: string,
-  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode">>
+  updates: Partial<Pick<ScriptLine, "translation" | "rec_status" | "notes" | "timecode" | "source_text">>
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { error } = await supabase
       .from("script_lines")
       .update(updates)
@@ -219,12 +367,202 @@ export async function updateScriptLine(
 }
 
 /**
+ * Add a single new script line manually.
+ */
+export async function addScriptLine(
+  projectId: string,
+  line: ScriptLineInput
+): Promise<ActionResult & { line?: ScriptLine }> {
+  const supabase = await createClient()
+
+  try {
+    await requireAuth()
+    const nextSortIndex = await getCurrentMaxSortIndex(projectId, supabase) + SORT_INDEX_STEP
+    const nextLineNumber = line.line_number > 0
+      ? line.line_number
+      : await getNextManualLineNumber(projectId, supabase)
+
+    const { data, error } = await supabase
+      .from("script_lines")
+      .insert({
+        project_id: projectId,
+        sort_index: nextSortIndex,
+        line_number: nextLineNumber,
+        timecode: line.timecode ?? null,
+        role_name: line.role_name,
+        actor_id: line.actor_id ?? null,
+        source_text: line.source_text ?? null,
+        translation: line.translation ?? null,
+        rec_status: line.rec_status ?? null,
+        notes: line.notes ?? null,
+      })
+      .select("id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes, created_at")
+      .single()
+
+    if (error) throw error
+
+    revalidatePath(`/projects/${projectId}`)
+    return {
+      success: true,
+      line: {
+        ...(data as unknown as ScriptLine),
+        sort_index: toNumberOrNull((data as Record<string, unknown>).sort_index) ?? undefined,
+      },
+    }
+  } catch (err) {
+    console.error("addScriptLine error:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+/**
+ * Insert a blank script line relative to an existing row.
+ * Prefills role_name and actor_id from the reference row for faster editing.
+ */
+export async function insertScriptLineRelative(
+  projectId: string,
+  referenceLineId: string,
+  position: ManualInsertPosition
+): Promise<ActionResult & { line?: ScriptLine }> {
+  const supabase = await createClient()
+
+  try {
+    await requireAuth()
+    const { data: referenceRow, error: referenceError } = await supabase
+      .from("script_lines")
+      .select("id, project_id, script_id, role_name, actor_id")
+      .eq("project_id", projectId)
+      .eq("id", referenceLineId)
+      .single()
+
+    if (referenceError || !referenceRow) {
+      return { success: false, error: "Reference line not found" }
+    }
+
+    let orderedRows = await listProjectLineOrder(projectId, supabase)
+    let sortIndex = computeRelativeSortIndex(orderedRows, referenceLineId, position)
+
+    if (sortIndex == null) {
+      orderedRows = await rebalanceProjectLineSortIndexes(projectId, supabase, orderedRows)
+      sortIndex = computeRelativeSortIndex(orderedRows, referenceLineId, position)
+    }
+
+    if (sortIndex == null) {
+      throw new Error("Could not calculate insertion position")
+    }
+
+    const nextLineNumber = await getNextManualLineNumber(projectId, supabase)
+    const { data, error } = await supabase
+      .from("script_lines")
+      .insert({
+        project_id: projectId,
+        script_id: referenceRow.script_id ?? null,
+        sort_index: sortIndex,
+        line_number: nextLineNumber,
+        timecode: null,
+        role_name: referenceRow.role_name,
+        actor_id: referenceRow.actor_id ?? null,
+        source_text: null,
+        translation: null,
+        rec_status: null,
+        notes: null,
+      })
+      .select("id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes, created_at")
+      .single()
+
+    if (error) throw error
+
+    revalidatePath(`/projects/${projectId}`)
+    return {
+      success: true,
+      line: {
+        ...(data as unknown as ScriptLine),
+        sort_index: toNumberOrNull((data as Record<string, unknown>).sort_index) ?? undefined,
+      },
+    }
+  } catch (err) {
+    console.error("insertScriptLineRelative error:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+/**
+ * Duplicate an existing script line and place the copy directly below it.
+ */
+export async function duplicateScriptLine(
+  projectId: string,
+  sourceLineId: string
+): Promise<ActionResult & { line?: ScriptLine }> {
+  const supabase = await createClient()
+
+  try {
+    await requireAuth()
+    const { data: sourceLine, error: sourceError } = await supabase
+      .from("script_lines")
+      .select("id, project_id, script_id, role_name, actor_id, timecode, source_text, translation, rec_status, notes")
+      .eq("project_id", projectId)
+      .eq("id", sourceLineId)
+      .single()
+
+    if (sourceError || !sourceLine) {
+      return { success: false, error: "Source line not found" }
+    }
+
+    let orderedRows = await listProjectLineOrder(projectId, supabase)
+    let sortIndex = computeRelativeSortIndex(orderedRows, sourceLineId, "below")
+
+    if (sortIndex == null) {
+      orderedRows = await rebalanceProjectLineSortIndexes(projectId, supabase, orderedRows)
+      sortIndex = computeRelativeSortIndex(orderedRows, sourceLineId, "below")
+    }
+
+    if (sortIndex == null) {
+      throw new Error("Could not calculate duplication position")
+    }
+
+    const nextLineNumber = await getNextManualLineNumber(projectId, supabase)
+    const { data, error } = await supabase
+      .from("script_lines")
+      .insert({
+        project_id: projectId,
+        script_id: sourceLine.script_id ?? null,
+        sort_index: sortIndex,
+        line_number: nextLineNumber,
+        timecode: sourceLine.timecode ?? null,
+        role_name: sourceLine.role_name,
+        actor_id: sourceLine.actor_id ?? null,
+        source_text: sourceLine.source_text ?? null,
+        translation: sourceLine.translation ?? null,
+        rec_status: sourceLine.rec_status ?? null,
+        notes: sourceLine.notes ?? null,
+      })
+      .select("id, project_id, script_id, sort_index, line_number, timecode, role_name, actor_id, source_text, translation, rec_status, notes, created_at")
+      .single()
+
+    if (error) throw error
+
+    revalidatePath(`/projects/${projectId}`)
+    return {
+      success: true,
+      line: {
+        ...(data as unknown as ScriptLine),
+        sort_index: toNumberOrNull((data as Record<string, unknown>).sort_index) ?? undefined,
+      },
+    }
+  } catch (err) {
+    console.error("duplicateScriptLine error:", err)
+    return { success: false, error: String(err) }
+  }
+}
+
+/**
  * Delete all script lines for a project (used before re-import).
  */
 export async function deleteAllScriptLines(projectId: string): Promise<ActionResult> {
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { error } = await supabase
       .from("script_lines")
       .delete()
@@ -250,6 +588,7 @@ export async function deleteScriptLinesByIds(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     if (ids.length === 0) return { success: true, deletedCount: 0 }
 
     // Process in batches to avoid URL length limits
@@ -287,6 +626,7 @@ export async function syncActorsToScriptLines(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     // 1. Get all castings with status "מלוהק" for this project, joined with role name
     const { data: castings, error: castingsError } = await supabase
       .from("role_castings")
@@ -316,9 +656,8 @@ export async function syncActorsToScriptLines(
     }
 
     // 3. Partition lines into those that need actor_id set and those that need clearing
-    const toSync: string[] = []   // line IDs to set actor_id
-    const toClear: string[] = []  // line IDs to clear actor_id
-    const syncActorMap = new Map<string, string[]>() // actor_id → line IDs
+    const toClear: string[] = []
+    const syncActorMap = new Map<string, string[]>()
 
     for (const line of allLines) {
       if (!line.role_name) continue
@@ -326,18 +665,13 @@ export async function syncActorsToScriptLines(
       const castActorId = roleActorMap.get(normalizedName)
 
       if (castActorId) {
-        // Role has a casting — set actor_id if different
         if (line.actor_id !== castActorId) {
-          toSync.push(line.id)
           const existing = syncActorMap.get(castActorId) ?? []
           existing.push(line.id)
           syncActorMap.set(castActorId, existing)
         }
-      } else {
-        // Role has no casting — clear actor_id if set
-        if (line.actor_id) {
-          toClear.push(line.id)
-        }
+      } else if (line.actor_id) {
+        toClear.push(line.id)
       }
     }
 
@@ -386,6 +720,7 @@ export async function backfillScriptLinesRoleIds(
 ): Promise<{ success: boolean; updated: number; error?: string }> {
   const supabase = await createClient()
   try {
+    await requireAuth()
     const updated = await backfillScriptLinesRoleIdsInternal(projectId, supabase)
     return { success: true, updated }
   } catch (err) {
@@ -398,6 +733,7 @@ export async function backfillScriptLinesRoleIds(
  * Get unique role names for a project (for filter dropdown).
  */
 export async function getScriptRoles(projectId: string): Promise<string[]> {
+  await requireAuth()
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -412,4 +748,28 @@ export async function getScriptRoles(projectId: string): Promise<string[]> {
     new Set(data.map((r: { role_name: string }) => r.role_name))
   )
   return unique.sort((a: string, b: string) => a.localeCompare(b, "he"))
+}
+
+/**
+ * Get replica (line) counts per role from DB — not affected by pagination.
+ * Returns a record of { role_name: count }.
+ */
+export async function getScriptLineCountsByRole(
+  projectId: string
+): Promise<Record<string, number>> {
+  await requireAuth()
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("script_lines")
+    .select("role_name")
+    .eq("project_id", projectId)
+
+  if (error || !data) return {}
+
+  const counts: Record<string, number> = {}
+  for (const row of data) {
+    counts[row.role_name] = (counts[row.role_name] ?? 0) + 1
+  }
+  return counts
 }

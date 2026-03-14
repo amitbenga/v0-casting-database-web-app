@@ -26,3 +26,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 package-lock.json
+
+# playwright
+/playwright-report/
+/blob-report/
+/e2e/test-results/
+/e2e/.auth/
+/test-results/

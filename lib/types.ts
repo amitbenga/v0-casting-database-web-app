@@ -293,6 +293,7 @@ export interface ScriptLine {
   id: string
   project_id: string
   script_id?: string
+  sort_index?: number
   line_number?: number
   timecode?: string
   role_name: string

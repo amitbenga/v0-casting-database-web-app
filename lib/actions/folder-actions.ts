@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { Folder } from "@/lib/types"
+import { requireAuth } from "@/lib/auth-guard"
 
 export interface FolderActionResult {
   success: boolean
@@ -18,6 +19,7 @@ export async function createFolder(
   const supabase = await createClient()
 
   try {
+    await requireAuth()
     const { data, error } = await supabase
       .from("folders")
       .insert({

@@ -4,6 +4,7 @@
 import { ToolLoopAgent, tool, stepCountIs } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/auth-guard"
 import { AI_PARSE_MODEL, AI_MODELS, type AIModelId } from "@/lib/ai-config"
 
 export const maxDuration = 300 // 5 minutes max on Vercel Pro
@@ -50,6 +51,8 @@ function truncateAtLineBreak(text: string, maxLen: number): string {
 // ─────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
+    await requireAuth()
+
     const { importId, model: requestedModel } = await req.json()
     if (!importId) return Response.json({ error: "importId required" }, { status: 400 })
 

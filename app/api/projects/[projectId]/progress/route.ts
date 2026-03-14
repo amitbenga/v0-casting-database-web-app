@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAuth } from "@/lib/auth-guard"
 import { calculatePercentRecorded, calculateTotals, fetchScriptLinesForProgress, hasLinkedRoleId, isValidProjectId } from "@/lib/progress/server"
 import type { ProjectProgressResponse } from "@/lib/progress/types"
 
@@ -26,6 +27,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
+    await requireAuth()
+
     const { rows, hasRoleIdColumn } = await fetchScriptLinesForProgress(normalizedProjectId)
     const matchedRows = hasRoleIdColumn ? rows.filter((row) => hasLinkedRoleId(row.role_id)) : rows
     const unmatched = hasRoleIdColumn ? rows.filter((row) => !hasLinkedRoleId(row.role_id)).length : 0

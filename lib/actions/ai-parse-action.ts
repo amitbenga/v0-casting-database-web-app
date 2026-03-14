@@ -1,6 +1,7 @@
 "use server"
 
 import { generateText } from "ai"
+import { requireAuth } from "@/lib/auth-guard"
 import type { ScriptLineInput } from "@/lib/types"
 
 interface AiParseParams {
@@ -27,6 +28,8 @@ interface AiParseResult {
  *   - Rule-based dialogue extraction finds 0 lines
  */
 export async function parseScriptWithAI(params: AiParseParams): Promise<AiParseResult> {
+  await requireAuth()
+
   const { fileBase64, fileName, mimeType } = params
 
   try {
