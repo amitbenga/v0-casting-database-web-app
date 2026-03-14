@@ -704,7 +704,7 @@ export async function getProjectActorsFromCastings(projectId: string) {
     // 1. Get all roles for this project
     const { data: roles } = await supabase
       .from("project_roles")
-      .select("id, role_name, replicas_needed")
+      .select("id, role_name, replicas_count, replicas_needed")
       .eq("project_id", projectId)
 
     if (!roles || roles.length === 0) return []
@@ -731,10 +731,10 @@ export async function getProjectActorsFromCastings(projectId: string) {
     if (error) throw error
     if (!castings) return []
 
-    // 3. Group by actor - use replicas_needed from project_roles as fallback
+    // 3. Group by actor - use replicas_count (updated by script import), fallback to replicas_needed
     const actorMap = new Map<string, any>()
     const roleIdToName = new Map(roles.map(r => [r.id, r.role_name]))
-    const roleIdToReplicas = new Map(roles.map(r => [r.id, r.replicas_needed || 0]))
+    const roleIdToReplicas = new Map(roles.map(r => [r.id, r.replicas_count ?? r.replicas_needed ?? 0]))
 
     for (const c of castings) {
       const actor = c.actors as any

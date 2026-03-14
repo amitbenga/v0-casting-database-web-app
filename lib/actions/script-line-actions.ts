@@ -737,3 +737,26 @@ export async function getScriptRoles(projectId: string): Promise<string[]> {
   )
   return unique.sort((a: string, b: string) => a.localeCompare(b, "he"))
 }
+
+/**
+ * Get replica (line) counts per role from DB — not affected by pagination.
+ * Returns a record of { role_name: count }.
+ */
+export async function getScriptLineCountsByRole(
+  projectId: string
+): Promise<Record<string, number>> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("script_lines")
+    .select("role_name")
+    .eq("project_id", projectId)
+
+  if (error || !data) return {}
+
+  const counts: Record<string, number> = {}
+  for (const row of data) {
+    counts[row.role_name] = (counts[row.role_name] ?? 0) + 1
+  }
+  return counts
+}
